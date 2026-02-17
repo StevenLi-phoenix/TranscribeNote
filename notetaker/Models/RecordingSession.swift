@@ -13,6 +13,12 @@ final class RecordingSession {
     @Relationship(deleteRule: .cascade)
     var segments: [TranscriptSegment]
 
+    var audioFileURL: URL? {
+        guard let audioFilePath else { return nil }
+        guard let dir = try? AudioCaptureService.recordingsDirectory() else { return nil }
+        return dir.appendingPathComponent(audioFilePath)
+    }
+
     var totalDuration: TimeInterval {
         guard let endedAt else { return 0 }
         return endedAt.timeIntervalSince(startedAt)

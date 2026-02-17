@@ -25,6 +25,7 @@ struct TranscriptSegmentRow: View {
                 .font(.body)
         }
         .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
     }
 
 }

@@ -38,7 +38,9 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - SpeechAnalyzerEngine uses `SpeechAnalyzer` + `SpeechTranscriber` (macOS 26+) — no time limit, native volatile/final results
 - Slider seek: use `onEditingChanged` to defer `seek(to:)` — direct binding causes audio glitching
 - `ASREngine` protocol includes `appendAudioBuffer(_:)` — never downcast to concrete engine type
-- `SpeechAnalyzerEngine` uses serial `DispatchQueue` for thread safety — all mutable state access goes through `queue`
+- `SpeechAnalyzerEngine` uses serial `DispatchQueue` for thread safety — all mutable state (including `onResult`/`onError` callbacks) accessed through `queue`
+- `AudioCaptureService` uses `OSAllocatedUnfairLock<State>` protecting `audioFile`, `onAudioBuffer`, `onWriteError` from data races between main thread and audio render thread
+- `RecordingSession.audioFilePath` stores relative filename only — use `audioFileURL` computed property to reconstruct full path
 - Timer callbacks on `@Observable` classes already run on main thread — do NOT wrap in `Task { @MainActor }`
 
 ## Architecture
@@ -53,7 +55,7 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
   - `Extensions/` — `TimeInterval+Formatting` (`.mmss`, `.compactDuration`, `.hhmmss`)
 - **`notetakerTests/`** — Unit tests using Swift Testing (`@Test`, `#expect`)
   - `Mocks/` — `MockASREngine`
-  - `Helpers/` — `BufferFactory` (synthetic PCM buffers), `FileAudioSource` (offline file-to-buffer rendering)
+  - `Helpers/` — `BufferFactory` (synthetic PCM buffers), `FileAudioSource` (offline file-to-buffer rendering), `AudioFileReader` (shared audio file → buffer conversion)
   - `Resources/` — `sample_speech.mp3` test fixture
   - `TestHelpers.swift` — shared `sampleSpeechURL()`, `TestBundleAnchor`, `TestError`
 - **`notetakerUITests/`** — UI tests using XCTest (`XCUIApplication`)
@@ -61,6 +63,7 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 ## Testing Gotchas
 
 - ASR integration tests need `.serialized` — `SpeechAnalyzer` may have concurrent recognition constraints
+- Speech-dependent tests use `.enabled(if: SFSpeechRecognizer.authorizationStatus() == .authorized)` trait — properly skipped (not silently passing) when speech authorization unavailable
 - Test bundle resources: `Bundle(for: TestBundleAnchor.self).url(forResource:withExtension:)`
 - xcodebuild doesn't pipe test process stdout — write to `NSTemporaryDirectory()` (sandbox: `~/Library/Containers/<bundle-id>/Data/tmp/`)
 - Use `mdfind -name "filename"` to locate files written by sandboxed test processes
@@ -69,5 +72,5 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 
 ## Known Limitations (flag for M2)
 
-- `fatalError` on `ModelContainer` init — needs schema migration plan for recovery
-- Quit during active recording doesn't call `stopRecording`
+- `ModelContainer` init failure now logged and surfaced in UI, but needs schema migration plan for recovery
+- Quit during active recording calls `stopRecording` via `AppDelegate.applicationWillTerminate` but needs more robust cleanup

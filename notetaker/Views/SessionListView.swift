@@ -68,5 +68,14 @@ private struct SessionRowView: View {
             }
         }
         .padding(.vertical, 2)
+        .accessibilityLabel(accessibilityDescription)
+    }
+
+    private var accessibilityDescription: String {
+        var parts = [session.title, session.startedAt.formatted(date: .omitted, time: .shortened)]
+        if session.totalDuration > 0 {
+            parts.append(session.totalDuration.compactDuration)
+        }
+        return parts.joined(separator: ", ")
     }
 }

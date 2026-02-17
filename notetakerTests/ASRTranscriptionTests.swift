@@ -12,47 +12,18 @@ struct ASRTranscriptionTests {
         from url: URL,
         format targetFormat: AVAudioFormat
     ) throws -> AsyncStream<AnalyzerInput> {
-        let file = try AVAudioFile(forReading: url)
-        let sourceFormat = file.processingFormat
-        let frameCount = AVAudioFrameCount(file.length)
-
-        guard let sourceBuffer = AVAudioPCMBuffer(pcmFormat: sourceFormat, frameCapacity: frameCount) else {
-            throw TestError("Failed to create source buffer")
-        }
-        try file.read(into: sourceBuffer)
-
+        let buffer = try AudioFileReader.readFileAsBuffer(url: url, targetFormat: targetFormat)
         return AsyncStream { continuation in
-            if sourceFormat == targetFormat {
-                continuation.yield(AnalyzerInput(buffer: sourceBuffer))
-            } else if let converter = AVAudioConverter(from: sourceFormat, to: targetFormat) {
-                let ratio = targetFormat.sampleRate / sourceFormat.sampleRate
-                let capacity = AVAudioFrameCount(Double(frameCount) * ratio) + 1
-                if let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: capacity) {
-                    var error: NSError?
-                    var hasProvided = false
-                    converter.convert(to: outputBuffer, error: &error) { _, outStatus in
-                        if hasProvided {
-                            outStatus.pointee = .noDataNow
-                            return nil
-                        }
-                        hasProvided = true
-                        outStatus.pointee = .haveData
-                        return sourceBuffer
-                    }
-                    if error == nil {
-                        continuation.yield(AnalyzerInput(buffer: outputBuffer))
-                    }
-                }
-            }
+            continuation.yield(AnalyzerInput(buffer: buffer))
             continuation.finish()
         }
     }
 
     /// Integration test: transcribes sample_speech.mp3 using SpeechAnalyzer.
     /// Requires Speech Recognition permission on the host machine.
-    @Test(.timeLimit(.minutes(2)))
+    @Test(.enabled(if: SFSpeechRecognizer.authorizationStatus() == .authorized, "Requires speech recognition authorization"),
+          .timeLimit(.minutes(2)))
     func transcribeAudioFileProducesResults() async throws {
-        guard SFSpeechRecognizer.authorizationStatus() == .authorized else { return }
 
         let locale = Locale(identifier: "en-US")
         let transcriber = SpeechTranscriber(
@@ -89,9 +60,9 @@ struct ASRTranscriptionTests {
     }
 
     /// Verify our TranscriptResult model can be constructed from SpeechTranscriber data.
-    @Test(.timeLimit(.minutes(2)))
+    @Test(.enabled(if: SFSpeechRecognizer.authorizationStatus() == .authorized, "Requires speech recognition authorization"),
+          .timeLimit(.minutes(2)))
     func transcriptResultFromSpeechTranscriber() async throws {
-        guard SFSpeechRecognizer.authorizationStatus() == .authorized else { return }
 
         let locale = Locale(identifier: "en-US")
         let transcriber = SpeechTranscriber(
@@ -137,9 +108,9 @@ struct ASRTranscriptionTests {
     }
 
     /// Verify volatile (partial) results are emitted with reportingOptions: [.volatileResults].
-    @Test(.timeLimit(.minutes(2)))
+    @Test(.enabled(if: SFSpeechRecognizer.authorizationStatus() == .authorized, "Requires speech recognition authorization"),
+          .timeLimit(.minutes(2)))
     func volatileResultsEmitted() async throws {
-        guard SFSpeechRecognizer.authorizationStatus() == .authorized else { return }
 
         let locale = Locale(identifier: "en-US")
         let transcriber = SpeechTranscriber(

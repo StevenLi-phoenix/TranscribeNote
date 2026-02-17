@@ -1,16 +1,29 @@
 import AVFoundation
+import os
 
 nonisolated final class AudioCaptureService: @unchecked Sendable {
-    let audioEngine = AVAudioEngine()
+    private(set) var audioEngine = AVAudioEngine()
     private let ringBuffer: RingBuffer
-    private var audioFile: AVAudioFile?
     private let config: AudioConfig
+    private let lock: OSAllocatedUnfairLock<State>
+
+    private struct State: Sendable {
+        var audioFile: AVAudioFile?
+        var onAudioBuffer: (@Sendable (AVAudioPCMBuffer) -> Void)?
+        var onWriteError: (@Sendable (Error) -> Void)?
+    }
 
     /// External subscribers receive audio buffers (e.g., ASR engine).
-    var onAudioBuffer: (@Sendable (AVAudioPCMBuffer) -> Void)?
+    var onAudioBuffer: (@Sendable (AVAudioPCMBuffer) -> Void)? {
+        get { lock.withLock { $0.onAudioBuffer } }
+        set { lock.withLock { $0.onAudioBuffer = newValue } }
+    }
 
     /// Called when a WAV file write error occurs during recording.
-    var onWriteError: (@Sendable (Error) -> Void)?
+    var onWriteError: (@Sendable (Error) -> Void)? {
+        get { lock.withLock { $0.onWriteError } }
+        set { lock.withLock { $0.onWriteError = newValue } }
+    }
 
     enum AudioCaptureError: Error {
         case microphonePermissionDenied
@@ -21,6 +34,7 @@ nonisolated final class AudioCaptureService: @unchecked Sendable {
     init(config: AudioConfig = .default) {
         self.config = config
         self.ringBuffer = RingBuffer(capacity: config.bufferCapacity)
+        self.lock = OSAllocatedUnfairLock(initialState: State())
     }
 
     func requestPermission() async -> Bool {
@@ -42,7 +56,8 @@ nonisolated final class AudioCaptureService: @unchecked Sendable {
         let inputNode = audioEngine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
 
-        audioFile = try AVAudioFile(forWriting: fileURL, settings: inputFormat.settings)
+        let file = try AVAudioFile(forWriting: fileURL, settings: inputFormat.settings)
+        lock.withLock { $0.audioFile = file }
         ringBuffer.reset()
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
@@ -55,15 +70,20 @@ nonisolated final class AudioCaptureService: @unchecked Sendable {
                 self.ringBuffer.write(samples)
             }
 
+            // Snapshot shared state under lock
+            let (file, bufferCallback, errorCallback) = self.lock.withLock { state in
+                (state.audioFile, state.onAudioBuffer, state.onWriteError)
+            }
+
             // Write WAV archive
             do {
-                try self.audioFile?.write(from: buffer)
+                try file?.write(from: buffer)
             } catch {
-                self.onWriteError?(error)
+                errorCallback?(error)
             }
 
             // Forward to subscribers (ASR engine)
-            self.onAudioBuffer?(buffer)
+            bufferCallback?(buffer)
         }
 
         try audioEngine.start()
@@ -73,8 +93,11 @@ nonisolated final class AudioCaptureService: @unchecked Sendable {
     func stopCapture() -> URL? {
         audioEngine.inputNode.removeTap(onBus: 0)
         audioEngine.stop()
-        let url = audioFile?.url
-        audioFile = nil
+        let url = lock.withLock { state -> URL? in
+            let fileURL = state.audioFile?.url
+            state.audioFile = nil
+            return fileURL
+        }
         ringBuffer.reset()
         return url
     }

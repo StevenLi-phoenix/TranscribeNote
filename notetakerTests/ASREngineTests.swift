@@ -7,10 +7,11 @@ import Speech
 struct ASREngineTests {
 
     /// Verify the engine starts recognition and stops cleanly without crashing.
-    @Test(.timeLimit(.minutes(1)))
+    @Test(
+        .timeLimit(.minutes(1)),
+        .enabled(if: SFSpeechRecognizer.authorizationStatus() == .authorized)
+    )
     func engineStartsAndStopsCleanly() async throws {
-        guard SFSpeechRecognizer.authorizationStatus() == .authorized else { return }
-
         let engine: SpeechAnalyzerEngine
         do {
             engine = try SpeechAnalyzerEngine(locale: Locale(identifier: "en-US"))

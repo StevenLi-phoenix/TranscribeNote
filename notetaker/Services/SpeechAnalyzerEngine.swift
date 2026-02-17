@@ -8,8 +8,18 @@ nonisolated final class SpeechAnalyzerEngine: @unchecked Sendable {
         case speechAnalyzerUnavailable
     }
 
-    var onResult: (@Sendable (TranscriptResult) -> Void)?
-    var onError: (@Sendable (Error) -> Void)?
+    private var _onResult: (@Sendable (TranscriptResult) -> Void)?
+    private var _onError: (@Sendable (Error) -> Void)?
+
+    var onResult: (@Sendable (TranscriptResult) -> Void)? {
+        get { queue.sync { _onResult } }
+        set { queue.sync { _onResult = newValue } }
+    }
+
+    var onError: (@Sendable (Error) -> Void)? {
+        get { queue.sync { _onError } }
+        set { queue.sync { _onError = newValue } }
+    }
 
     private let transcriber: SpeechTranscriber
     private let locale: Locale
@@ -98,11 +108,12 @@ extension SpeechAnalyzerEngine: ASREngine {
 
                         let (startTime, endTime) = self.extractTimeRange(from: result.text)
 
+                        // SpeechTranscriber does not expose per-segment confidence
                         let transcriptResult = TranscriptResult(
                             text: text,
                             startTime: startTime,
                             endTime: endTime,
-                            confidence: 1.0,
+                            confidence: 0.0,
                             language: locale,
                             isFinal: result.isFinal
                         )

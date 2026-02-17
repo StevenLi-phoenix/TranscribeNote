@@ -14,6 +14,7 @@ nonisolated final class RingBuffer: @unchecked Sendable {
     }
 
     init(capacity: Int) {
+        precondition(capacity > 0, "RingBuffer capacity must be greater than 0")
         self.capacity = capacity
         self.buffer = .allocate(capacity: capacity)
         self.buffer.initialize(repeating: 0)

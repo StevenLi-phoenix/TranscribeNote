@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import os
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var viewModel: RecordingViewModel?
@@ -16,26 +17,33 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 @main
 struct notetakerApp: App {
+    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "notetaker", category: "App")
+
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var viewModel = RecordingViewModel()
 
-    private let sharedModelContainer: ModelContainer? = {
+    private let sharedModelContainer: ModelContainer?
+    private let containerError: String?
+
+    init() {
         let schema = Schema([RecordingSession.self, TranscriptSegment.self])
         let configuration = ModelConfiguration()
         do {
-            return try ModelContainer(for: schema, configurations: [configuration])
+            sharedModelContainer = try ModelContainer(for: schema, configurations: [configuration])
+            containerError = nil
         } catch {
-            return nil
+            Self.logger.error("Failed to create ModelContainer: \(error.localizedDescription)")
+            sharedModelContainer = nil
+            containerError = error.localizedDescription
         }
-    }()
 
-    var body: some Scene {
         // Wire AppDelegate refs eagerly so applicationWillTerminate works
         // even if the main window never appeared (e.g. MenuBarExtra-only usage).
-        let _ = {
-            appDelegate.viewModel = viewModel
-            appDelegate.modelContainer = sharedModelContainer
-        }()
+        appDelegate.viewModel = viewModel
+        appDelegate.modelContainer = sharedModelContainer
+    }
+
+    var body: some Scene {
 
         WindowGroup(id: "main") {
             if let sharedModelContainer {
@@ -48,7 +56,7 @@ struct notetakerApp: App {
                         .foregroundStyle(.yellow)
                     Text("Failed to initialize database")
                         .font(.headline)
-                    Text("The app's data store could not be created. Try relaunching the app.")
+                    Text(containerError ?? "The app's data store could not be created. Try relaunching the app.")
                         .font(.body)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)

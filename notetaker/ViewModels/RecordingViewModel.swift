@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 import Speech
+import os
 
 enum RecordingState {
     case idle
@@ -10,6 +11,8 @@ enum RecordingState {
 
 @Observable
 final class RecordingViewModel {
+    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "notetaker", category: "RecordingViewModel")
+
     private(set) var state: RecordingState = .idle
     private(set) var segments: [TranscriptSegment] = []
     private(set) var partialText: String = ""
@@ -45,9 +48,13 @@ final class RecordingViewModel {
         do {
             engine = try SpeechAnalyzerEngine()
         } catch {
+            Self.logger.warning("SpeechAnalyzerEngine unavailable (\(error.localizedDescription)), falling back to NoopASREngine")
             engine = NoopASREngine()
         }
         self.init(audioCaptureService: audioCaptureService, asrEngine: engine)
+        if engine is NoopASREngine {
+            self.errorMessage = "Speech recognition is unavailable. Transcription is disabled."
+        }
     }
 
     deinit {
@@ -125,7 +132,7 @@ final class RecordingViewModel {
         let session = RecordingSession(
             title: "Recording \(Date().formatted(date: .abbreviated, time: .shortened))"
         )
-        session.audioFilePath = fileURL.path
+        session.audioFilePath = fileURL.lastPathComponent
         currentSession = session
 
         recordingStartTime = Date()
@@ -152,7 +159,11 @@ final class RecordingViewModel {
         asrEngine.stopRecognition()
         audioCaptureService.onAudioBuffer = nil
 
-        _ = audioCaptureService.stopCapture()
+        if let savedURL = audioCaptureService.stopCapture() {
+            Self.logger.info("Audio saved to \(savedURL.path)")
+        } else {
+            Self.logger.warning("stopCapture returned nil — no audio file was saved")
+        }
 
         if let session = currentSession {
             session.endedAt = Date()

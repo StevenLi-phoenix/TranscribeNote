@@ -1,6 +1,6 @@
 import Foundation
 
-nonisolated struct AudioConfig {
+nonisolated struct AudioConfig: Sendable {
     let sampleRate: Double
     let channels: UInt32
     let bufferDurationSeconds: Int
