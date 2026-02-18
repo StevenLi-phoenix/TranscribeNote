@@ -1,17 +1,20 @@
-import Foundation
 @preconcurrency import AVFoundation
 import Speech
 import CoreMedia
+import os
 
 nonisolated final class SpeechAnalyzerEngine: @unchecked Sendable {
+    private static let log = Logger(subsystem: "com.notetaker", category: "SpeechAnalyzerEngine")
+
     enum EngineError: Error {
         case speechAnalyzerUnavailable
     }
 
-    private var _onResult: (@Sendable (TranscriptResult) -> Void)?
+    private var _onResult: (@Sendable (TranscriptResult) async -> Void)?
     private var _onError: (@Sendable (Error) -> Void)?
+    private var sessionID: UUID?
 
-    var onResult: (@Sendable (TranscriptResult) -> Void)? {
+    var onResult: (@Sendable (TranscriptResult) async -> Void)? {
         get { queue.sync { _onResult } }
         set { queue.sync { _onResult = newValue } }
     }
@@ -21,7 +24,8 @@ nonisolated final class SpeechAnalyzerEngine: @unchecked Sendable {
         set { queue.sync { _onError = newValue } }
     }
 
-    private let transcriber: SpeechTranscriber
+    /// Per-session transcriber — created fresh in `startRecognition()`, nilled in `stopRecognitionLocked()`.
+    private var transcriber: SpeechTranscriber?
     private let locale: Locale
 
     /// Serial queue protecting all mutable state.
@@ -38,7 +42,20 @@ nonisolated final class SpeechAnalyzerEngine: @unchecked Sendable {
 
     init(locale: Locale = .current) throws {
         self.locale = locale
-        self.transcriber = SpeechTranscriber(
+        // Validate SpeechTranscriber can be created with this locale (fail-fast).
+        // The instance is intentionally discarded — a fresh one is created per session.
+        _ = SpeechTranscriber(
+            locale: locale,
+            transcriptionOptions: [],
+            reportingOptions: [.volatileResults],
+            attributeOptions: [.audioTimeRange]
+        )
+        Self.log.info("Engine initialized for locale \(locale.identifier)")
+    }
+
+    /// Creates a fresh `SpeechTranscriber` for a new recognition session.
+    private func makeTranscriber() -> SpeechTranscriber {
+        SpeechTranscriber(
             locale: locale,
             transcriptionOptions: [],
             reportingOptions: [.volatileResults],
@@ -48,20 +65,24 @@ nonisolated final class SpeechAnalyzerEngine: @unchecked Sendable {
 }
 
 extension SpeechAnalyzerEngine: ASREngine {
-    nonisolated var supportsOnDevice: Bool { true }
-
     nonisolated func startRecognition(audioEngine: AVAudioEngine) throws {
         queue.sync {
             stopRecognitionLocked()
+
+            // Fresh transcriber per session — SpeechTranscriber is single-use.
+            let newSessionID = UUID()
+            self.sessionID = newSessionID
+            let sessionTranscriber = makeTranscriber()
+            self.transcriber = sessionTranscriber
+            Self.log.info("Created new SpeechTranscriber for session \(newSessionID.uuidString)")
 
             let sourceFormat = audioEngine.inputNode.outputFormat(forBus: 0)
             let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
             inputContinuation = continuation
 
-            let speechAnalyzer = SpeechAnalyzer(modules: [transcriber])
+            let speechAnalyzer = SpeechAnalyzer(modules: [sessionTranscriber])
             analyzer = speechAnalyzer
 
-            let transcriber = self.transcriber
             let locale = self.locale.identifier
 
             // Task 1: Set up format conversion and start analyzer
@@ -70,7 +91,7 @@ extension SpeechAnalyzerEngine: ASREngine {
 
                 do {
                     guard let targetFormat = await SpeechAnalyzer.bestAvailableAudioFormat(
-                        compatibleWith: [transcriber]
+                        compatibleWith: [sessionTranscriber]
                     ) else {
                         self.onError?(EngineError.speechAnalyzerUnavailable)
                         return
@@ -100,7 +121,7 @@ extension SpeechAnalyzerEngine: ASREngine {
                 guard let self else { return }
 
                 do {
-                    for try await result in transcriber.results {
+                    for try await result in sessionTranscriber.results {
                         guard !Task.isCancelled else { break }
 
                         let text = String(result.text.characters)
@@ -117,8 +138,10 @@ extension SpeechAnalyzerEngine: ASREngine {
                             language: locale,
                             isFinal: result.isFinal
                         )
-                        self.onResult?(transcriptResult)
+                        // await ensures callback fully completes before loop continues
+                        await self.onResult?(transcriptResult)
                     }
+                    Self.log.info("Result loop ended naturally")
                 } catch {
                     if !Task.isCancelled {
                         self.onError?(error)
@@ -128,9 +151,74 @@ extension SpeechAnalyzerEngine: ASREngine {
         }
     }
 
-    nonisolated func stopRecognition() {
+    nonisolated func stopRecognition() async {
+        // Phase 1: Finish input stream, capture references
+        let (capturedAnalyzer, capturedResultTask, currentSessionID) = queue.sync { () -> (SpeechAnalyzer?, Task<Void, Never>?, UUID?) in
+            Self.log.info("stopRecognition Phase 1: finishing input")
+            inputContinuation?.finish()
+            inputContinuation = nil
+
+            let analyzer = self.analyzer
+            let task = resultTask
+            resultTask = nil
+            let sid = sessionID
+            return (analyzer, task, sid)
+        }
+
+        // Phase 2: Finalize analyzer — processes remaining audio, converts volatile→final,
+        // terminates transcriber.results stream. This is the key Apple API call.
+        // Without this, the results stream never terminates and drain hangs forever.
+        if let capturedAnalyzer {
+            Self.log.info("stopRecognition Phase 2: finalizing analyzer")
+            try? await capturedAnalyzer.finalizeAndFinishThroughEndOfInput()
+            Self.log.info("stopRecognition Phase 2: analyzer finalized")
+        }
+
+        // Phase 3: Drain resultTask (should complete quickly after finalize).
+        // Timeout is safety net only — normal path completes fast.
+        if let capturedResultTask {
+            Self.log.info("stopRecognition Phase 3: draining results")
+            await withUnsafeContinuation { (continuation: UnsafeContinuation<Void, Never>) in
+                let resumed = OSAllocatedUnfairLock(initialState: false)
+                let handles = OSAllocatedUnfairLock<(drain: Task<Void, Never>?, timeout: Task<Void, Never>?)>(initialState: (nil, nil))
+
+                let drainHandle = Task {
+                    await capturedResultTask.value
+                    if resumed.withLock({ let old = $0; $0 = true; return !old }) {
+                        handles.withLock { $0.timeout?.cancel() }
+                        continuation.resume()
+                    }
+                }
+                handles.withLock { $0.drain = drainHandle }
+
+                let timeoutHandle = Task {
+                    try? await Task.sleep(for: .seconds(2))
+                    if resumed.withLock({ let old = $0; $0 = true; return !old }) {
+                        handles.withLock { $0.drain?.cancel() }
+                        Self.log.warning("stopRecognition Phase 3: drain timed out")
+                        continuation.resume()
+                    }
+                }
+                handles.withLock { $0.timeout = timeoutHandle }
+            }
+            Self.log.info("stopRecognition Phase 3: drain complete")
+        }
+
+        // Phase 4: Clean up remaining state (only if session hasn't changed)
         queue.sync {
-            stopRecognitionLocked()
+            guard sessionID == currentSessionID else {
+                Self.log.info("stopRecognition Phase 4: skipped — session changed")
+                return
+            }
+            Self.log.info("stopRecognition Phase 4: cleaning up")
+            analyzerTask?.cancel()
+            analyzerTask = nil
+            analyzer = nil
+            transcriber = nil
+            converter = nil
+            analyzerFormat = nil
+            isReady = false
+            sessionID = nil
         }
     }
 
@@ -149,7 +237,7 @@ extension SpeechAnalyzerEngine: ASREngine {
 
     // MARK: - Private
 
-    /// Must be called while holding `queue`.
+    /// Must be called while holding `queue`. Aggressive force-stop used by `startRecognition()` to clean up prior session.
     private func stopRecognitionLocked() {
         inputContinuation?.finish()
         inputContinuation = nil
@@ -161,9 +249,12 @@ extension SpeechAnalyzerEngine: ASREngine {
         resultTask = nil
 
         analyzer = nil
+        transcriber = nil
         converter = nil
         analyzerFormat = nil
         isReady = false
+        sessionID = nil
+        Self.log.info("Session force-stopped, transcriber released")
     }
 
     /// Extract the full audio time span from all attributed runs.

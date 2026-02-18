@@ -1,4 +1,3 @@
-import Foundation
 import os
 
 /// Thread-safe circular buffer for audio samples.
@@ -29,13 +28,37 @@ nonisolated final class RingBuffer: @unchecked Sendable {
         lock.withLock { $0.availableCount }
     }
 
-    func write(_ samples: [Float]) {
+    /// Bulk write from a raw pointer using memcpy with wrap-around handling.
+    func write(_ pointer: UnsafePointer<Float>, count: Int) {
+        guard count > 0 else { return }
         lock.withLock { state in
-            for sample in samples {
-                buffer[state.writeIndex] = sample
-                state.writeIndex = (state.writeIndex + 1) % capacity
-                state.availableCount = min(state.availableCount + 1, capacity)
+            let basePtr = buffer.baseAddress!
+
+            if count >= capacity {
+                // Only the last `capacity` samples matter — single memcpy
+                let offset = count - capacity
+                memcpy(basePtr, pointer.advanced(by: offset), capacity * MemoryLayout<Float>.size)
+                state.writeIndex = 0
+                state.availableCount = capacity
+            } else {
+                let firstChunk = min(count, capacity - state.writeIndex)
+                let secondChunk = count - firstChunk
+
+                memcpy(basePtr.advanced(by: state.writeIndex), pointer, firstChunk * MemoryLayout<Float>.size)
+                if secondChunk > 0 {
+                    memcpy(basePtr, pointer.advanced(by: firstChunk), secondChunk * MemoryLayout<Float>.size)
+                }
+
+                state.writeIndex = (state.writeIndex + count) % capacity
+                state.availableCount = min(state.availableCount + count, capacity)
             }
+        }
+    }
+
+    func write(_ samples: [Float]) {
+        samples.withUnsafeBufferPointer { bufferPointer in
+            guard let baseAddress = bufferPointer.baseAddress else { return }
+            write(baseAddress, count: bufferPointer.count)
         }
     }
 

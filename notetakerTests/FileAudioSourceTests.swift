@@ -2,7 +2,7 @@ import Testing
 import Foundation
 import AVFoundation
 
-@Suite("FileAudioSource", .serialized)
+@Suite("FileAudioSource")
 struct FileAudioSourceTests {
 
     @Test(.timeLimit(.minutes(1)))

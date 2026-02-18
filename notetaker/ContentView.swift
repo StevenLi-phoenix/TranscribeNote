@@ -15,21 +15,25 @@ struct ContentView: View {
                         Button {
                             selectedSessionID = nil
                             Task {
-                                await viewModel.startRecording()
+                                await viewModel.startRecording(modelContext: modelContext)
                             }
                         } label: {
-                            Image(systemName: "plus")
+                            Image(systemName: "record.circle")
+                                .foregroundStyle(.red)
                         }
-                        .disabled(viewModel.isRecording)
+                        .disabled(viewModel.isRecording || viewModel.state == .stopping)
                         .keyboardShortcut("n", modifiers: [.command])
                         .accessibilityLabel("New recording")
                     }
                 }
         } detail: {
             if viewModel.isRecording || viewModel.state == .stopping {
-                LiveRecordingView(viewModel: viewModel) {
-                    viewModel.stopRecording(modelContext: modelContext)
-                }
+                LiveRecordingView(
+                    viewModel: viewModel,
+                    onStop: {
+                        viewModel.stopRecording(modelContext: modelContext)
+                    }
+                )
             } else if let sessionID = selectedSessionID {
                 SessionDetailView(sessionID: sessionID)
             } else {
@@ -41,11 +45,13 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 600, minHeight: 400)
-        .onChange(of: viewModel.state) { oldValue, newValue in
-            if oldValue == .stopping && newValue == .idle {
+        .onChange(of: viewModel.state) { _, newState in
+            if newState == .completed {
+                viewModel.persistSession(modelContext: modelContext)
                 if let session = viewModel.currentSession {
                     selectedSessionID = session.id
                 }
+                viewModel.dismissCompletedRecording(modelContext: modelContext)
             }
         }
     }

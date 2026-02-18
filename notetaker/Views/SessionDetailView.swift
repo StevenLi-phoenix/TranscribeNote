@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 import os
 
 struct SessionDetailView: View {
@@ -37,6 +38,48 @@ struct SessionDetailView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
+                .toolbar {
+                    ToolbarItemGroup {
+                        Button {
+                            TranscriptExporter.copyToClipboard(
+                                segments: sortedSegments,
+                                title: session.title
+                            )
+                        } label: {
+                            Label("Copy Transcript", systemImage: "doc.on.doc")
+                        }
+                        .disabled(sortedSegments.isEmpty)
+
+                        ShareLink(
+                            item: TranscriptExporter.formatAsText(
+                                segments: sortedSegments,
+                                title: session.title
+                            )
+                        ) {
+                            Label("Share Transcript", systemImage: "square.and.arrow.up")
+                        }
+                        .disabled(sortedSegments.isEmpty)
+
+                        if let audioURL = session.audioFileURL,
+                           FileManager.default.fileExists(atPath: audioURL.path) {
+                            Button {
+                                let panel = NSSavePanel()
+                                panel.allowedContentTypes = [audioURL.pathExtension == "m4a" ? .mpeg4Audio : .wav]
+                                panel.nameFieldStringValue = audioURL.lastPathComponent
+                                if panel.runModal() == .OK, let destURL = panel.url {
+                                    do {
+                                        try FileManager.default.copyItem(at: audioURL, to: destURL)
+                                    } catch {
+                                        Self.logger.error("Failed to save audio: \(error.localizedDescription)")
+                                        fetchError = "Failed to save audio: \(error.localizedDescription)"
+                                    }
+                                }
+                            } label: {
+                                Label("Save Audio", systemImage: "square.and.arrow.down")
+                            }
+                        }
+                    }
+                }
 
                 // Playback controls
                 if session.audioFileURL != nil {
@@ -53,6 +96,7 @@ struct SessionDetailView: View {
                         systemImage: "text.bubble",
                         description: Text("This session has no transcript segments")
                     )
+                    .frame(maxHeight: .infinity)
                 } else {
                     TranscriptView(segments: sortedSegments, partialText: "")
                 }

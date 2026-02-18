@@ -1,40 +1,9 @@
 import Testing
 import Foundation
-import Speech
 @testable import notetaker
 
 @Suite("ASREngine – Incremental Finalization", .serialized)
 struct ASREngineTests {
-
-    /// Verify the engine starts recognition and stops cleanly without crashing.
-    @Test(
-        .timeLimit(.minutes(1)),
-        .enabled(if: SFSpeechRecognizer.authorizationStatus() == .authorized)
-    )
-    func engineStartsAndStopsCleanly() async throws {
-        let engine: SpeechAnalyzerEngine
-        do {
-            engine = try SpeechAnalyzerEngine(locale: Locale(identifier: "en-US"))
-        } catch {
-            // SpeechAnalyzer unavailable on this machine
-            return
-        }
-
-        var allResults: [TranscriptResult] = []
-        let resultsLock = NSLock()
-
-        engine.onResult = { result in
-            resultsLock.lock()
-            allResults.append(result)
-            resultsLock.unlock()
-        }
-
-        let audioEngine = AVAudioEngine()
-        try engine.startRecognition(audioEngine: audioEngine)
-
-        try await Task.sleep(for: .milliseconds(100))
-        engine.stopRecognition()
-    }
 
     /// Verify RecordingViewModel correctly handles incremental finals from MockASREngine.
     @Test
@@ -51,7 +20,7 @@ struct ASREngineTests {
             language: "en-US",
             isFinal: true
         )
-        mockEngine.simulateResult(final1)
+        await mockEngine.simulateResult(final1)
 
         try await waitForCondition { await vm.segments.count == 1 }
 
@@ -68,7 +37,7 @@ struct ASREngineTests {
             language: "en-US",
             isFinal: false
         )
-        mockEngine.simulateResult(partial)
+        await mockEngine.simulateResult(partial)
 
         try await waitForCondition { await vm.partialText == "how are" }
 
@@ -84,7 +53,7 @@ struct ASREngineTests {
             language: "en-US",
             isFinal: true
         )
-        mockEngine.simulateResult(final2)
+        await mockEngine.simulateResult(final2)
 
         try await waitForCondition { await vm.segments.count == 2 }
 
@@ -111,7 +80,7 @@ struct ASREngineTests {
             language: "en-US",
             isFinal: true
         )
-        mockEngine.simulateResult(final1)
+        await mockEngine.simulateResult(final1)
         try await waitForCondition { await vm.segments.count == 1 }
 
         // Simulate hypothesis reset: Apple re-commits the same text
@@ -123,7 +92,7 @@ struct ASREngineTests {
             language: "en-US",
             isFinal: true
         )
-        mockEngine.simulateResult(duplicate)
+        await mockEngine.simulateResult(duplicate)
         try await Task.sleep(for: .milliseconds(50))
 
         let segments = await vm.segments
@@ -138,7 +107,7 @@ struct ASREngineTests {
             language: "en-US",
             isFinal: true
         )
-        mockEngine.simulateResult(final2)
+        await mockEngine.simulateResult(final2)
         try await waitForCondition { await vm.segments.count == 2 }
 
         let finalSegments = await vm.segments
@@ -163,7 +132,7 @@ struct ASREngineTests {
                 language: "en-US",
                 isFinal: true
             )
-            mockEngine.simulateResult(result)
+            await mockEngine.simulateResult(result)
         }
 
         try await waitForCondition { await vm.segments.count == 3 }

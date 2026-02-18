@@ -13,18 +13,18 @@ struct RecordingViewModelTests {
         #expect(vm.isRecording == false)
         #expect(vm.segments.isEmpty)
         #expect(vm.partialText == "")
-        #expect(vm.elapsedTime == 0)
+        #expect(vm.clock.elapsedTime == 0)
         #expect(vm.errorMessage == nil)
-        #expect(vm.formattedElapsedTime == "00:00:00")
+        #expect(vm.clock.formatted == "00:00:00")
     }
 
-    @Test func formattedElapsedTime() {
+    @Test func clockFormattedDefault() {
         let mock = MockASREngine()
         let vm = RecordingViewModel(
             audioCaptureService: AudioCaptureService(),
             asrEngine: mock
         )
-        #expect(vm.formattedElapsedTime == "00:00:00")
+        #expect(vm.clock.formatted == "00:00:00")
     }
 
     @Test func handlePartialResult() async throws {
@@ -42,7 +42,7 @@ struct RecordingViewModelTests {
             language: "en-US",
             isFinal: false
         )
-        mock.simulateResult(result)
+        await mock.simulateResult(result)
 
         try await waitForCondition { vm.partialText == "Hello" }
 
@@ -65,7 +65,7 @@ struct RecordingViewModelTests {
             language: "en-US",
             isFinal: true
         )
-        mock.simulateResult(result)
+        await mock.simulateResult(result)
 
         try await waitForCondition { vm.segments.count == 1 }
 
@@ -101,6 +101,31 @@ struct RecordingViewModelTests {
         #expect(mock.stopCallCount == 0)
     }
 
+    @Test func dismissCompletedRecordingClearsState() async throws {
+        let mock = MockASREngine()
+        let vm = RecordingViewModel(
+            audioCaptureService: AudioCaptureService(),
+            asrEngine: mock
+        )
+
+        // Add some segments via ASR callback
+        let result = TranscriptResult(
+            text: "Hello world",
+            startTime: 0.0,
+            endTime: 2.0,
+            confidence: 0.95,
+            language: "en-US",
+            isFinal: true
+        )
+        await mock.simulateResult(result)
+        try await waitForCondition { vm.segments.count == 1 }
+
+        // dismissCompletedRecording should only work from .completed state
+        // From .idle it should be a no-op
+        vm.dismissCompletedRecording()
+        #expect(vm.segments.count == 1, "Should not clear from idle state")
+    }
+
     @Test func handleDuplicateFinalResult() async throws {
         let mock = MockASREngine()
         let vm = RecordingViewModel(
@@ -116,11 +141,11 @@ struct RecordingViewModelTests {
             language: "en-US",
             isFinal: true
         )
-        mock.simulateResult(result)
+        await mock.simulateResult(result)
         try await waitForCondition { vm.segments.count == 1 }
 
         // Send exact duplicate — should be skipped
-        mock.simulateResult(result)
+        await mock.simulateResult(result)
         try await Task.sleep(for: .milliseconds(50))
 
         #expect(vm.segments.count == 1)
@@ -142,7 +167,7 @@ struct RecordingViewModelTests {
             language: "en-US",
             isFinal: true
         )
-        mock.simulateResult(first)
+        await mock.simulateResult(first)
         try await waitForCondition { vm.segments.count == 1 }
 
         let second = TranscriptResult(
@@ -153,7 +178,7 @@ struct RecordingViewModelTests {
             language: "en-US",
             isFinal: true
         )
-        mock.simulateResult(second)
+        await mock.simulateResult(second)
         try await waitForCondition { vm.segments.count == 2 }
 
         #expect(vm.segments.count == 2)
@@ -176,7 +201,7 @@ struct RecordingViewModelTests {
             language: "en-US",
             isFinal: true
         )
-        mock.simulateResult(finalResult)
+        await mock.simulateResult(finalResult)
         try await waitForCondition { vm.segments.count == 1 }
 
         let partial = TranscriptResult(
@@ -187,7 +212,7 @@ struct RecordingViewModelTests {
             language: "en-US",
             isFinal: false
         )
-        mock.simulateResult(partial)
+        await mock.simulateResult(partial)
         try await waitForCondition { vm.partialText == "Next words" }
 
         #expect(vm.segments.count == 1)
@@ -209,7 +234,7 @@ struct RecordingViewModelTests {
             language: "en-US",
             isFinal: false
         )
-        mock.simulateResult(partial)
+        await mock.simulateResult(partial)
         try await waitForCondition { vm.partialText == "Working" }
         #expect(vm.partialText == "Working")
 
@@ -221,7 +246,7 @@ struct RecordingViewModelTests {
             language: "en-US",
             isFinal: true
         )
-        mock.simulateResult(final1)
+        await mock.simulateResult(final1)
         try await waitForCondition { vm.segments.count == 1 }
 
         #expect(vm.segments.count == 1)
@@ -235,7 +260,7 @@ struct RecordingViewModelTests {
             language: "en-US",
             isFinal: true
         )
-        mock.simulateResult(final2)
+        await mock.simulateResult(final2)
         try await waitForCondition { vm.segments.count == 2 }
 
         #expect(vm.segments.count == 2)

@@ -17,8 +17,8 @@ struct PlaybackControlView: View {
             .accessibilityLabel(service.isPlaying ? "Pause" : "Play")
 
             Text((isSeeking ? seekValue : service.currentTime).mmss)
-                .font(.system(.caption, design: .monospaced))
-                .frame(width: 50, alignment: .trailing)
+                .font(ControlBarMetrics.timeFont)
+                .frame(minWidth: ControlBarMetrics.timeMinWidth, alignment: .trailing)
 
             Slider(
                 value: Binding(
@@ -35,9 +35,10 @@ struct PlaybackControlView: View {
             )
 
             Text(service.duration.mmss)
-                .font(.system(.caption, design: .monospaced))
-                .frame(width: 50, alignment: .leading)
+                .font(ControlBarMetrics.timeFont)
+                .frame(minWidth: ControlBarMetrics.timeMinWidth, alignment: .leading)
         }
+        .frame(minHeight: ControlBarMetrics.barMinHeight)
         .padding()
     }
 }

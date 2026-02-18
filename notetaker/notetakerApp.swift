@@ -11,6 +11,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // Best-effort sync stop; M2 will use applicationShouldTerminate with .terminateLater
         viewModel?.stopRecording(modelContext: modelContainer?.mainContext)
     }
 }
@@ -26,6 +27,7 @@ struct notetakerApp: App {
     private let containerError: String?
 
     init() {
+        CrashLogService.install()
         let schema = Schema([RecordingSession.self, TranscriptSegment.self])
         let configuration = ModelConfiguration()
         do {
@@ -88,7 +90,7 @@ struct MenuBarView: View {
         if viewModel.isRecording {
             Label("Recording...", systemImage: "record.circle.fill")
                 .foregroundStyle(.red)
-            Text(viewModel.formattedElapsedTime)
+            Text(viewModel.clock.formatted)
                 .font(.system(.caption, design: .monospaced))
             Divider()
             Button("Stop Recording") {
@@ -100,7 +102,7 @@ struct MenuBarView: View {
             Divider()
             Button("Start Recording") {
                 Task {
-                    await viewModel.startRecording()
+                    await viewModel.startRecording(modelContext: modelContainer.mainContext)
                 }
             }
         }

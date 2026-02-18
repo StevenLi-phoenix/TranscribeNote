@@ -7,6 +7,15 @@ enum RecordingState {
     case idle
     case recording
     case stopping
+    case completed
+}
+
+@Observable
+final class ElapsedTimeClock {
+    private(set) var elapsedTime: TimeInterval = 0
+    var formatted: String { elapsedTime.hhmmss }
+    func update(_ time: TimeInterval) { elapsedTime = time }
+    func reset() { elapsedTime = 0 }
 }
 
 @Observable
@@ -16,22 +25,18 @@ final class RecordingViewModel {
     private(set) var state: RecordingState = .idle
     private(set) var segments: [TranscriptSegment] = []
     private(set) var partialText: String = ""
-    private(set) var elapsedTime: TimeInterval = 0
+    let clock = ElapsedTimeClock()
     private(set) var errorMessage: String?
     private(set) var currentSession: RecordingSession?
 
     var isRecording: Bool { state == .recording }
 
-    var formattedElapsedTime: String {
-        elapsedTime.hhmmss
-    }
-
     private let audioCaptureService: AudioCaptureService
     private let asrEngine: any ASREngine
     private var timer: Timer?
     private var recordingStartTime: Date?
-    private var audioFileURL: URL?
-
+    private var drainTask: Task<Void, Never>?
+    private var sessionPersisted = false
     init(
         audioCaptureService: AudioCaptureService = AudioCaptureService(),
         asrEngine: any ASREngine
@@ -63,7 +68,7 @@ final class RecordingViewModel {
 
     private func setupASRCallbacks() {
         asrEngine.onResult = { [weak self] result in
-            Task { @MainActor [weak self] in
+            await MainActor.run { [weak self] in
                 self?.handleTranscriptResult(result)
             }
         }
@@ -75,8 +80,11 @@ final class RecordingViewModel {
         }
     }
 
-    func startRecording() async {
-        guard state == .idle else { return }
+    func startRecording(modelContext: ModelContext? = nil) async {
+        guard state == .idle || state == .completed else { return }
+        if state == .completed {
+            dismissCompletedRecording(modelContext: modelContext)
+        }
         errorMessage = nil
 
         guard await checkPermissions() else { return }
@@ -127,8 +135,6 @@ final class RecordingViewModel {
     }
 
     private func createSession(fileURL: URL) {
-        self.audioFileURL = fileURL
-
         let session = RecordingSession(
             title: "Recording \(Date().formatted(date: .abbreviated, time: .shortened))"
         )
@@ -139,24 +145,23 @@ final class RecordingViewModel {
         state = .recording
         segments = []
         partialText = ""
-        elapsedTime = 0
+        clock.reset()
     }
 
     private func startElapsedTimer() {
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+        let t = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             guard let self, let start = self.recordingStartTime else { return }
-            self.elapsedTime = Date().timeIntervalSince(start)
+            self.clock.update(Date().timeIntervalSince(start))
         }
+        t.tolerance = 0.2
+        timer = t
     }
 
     func stopRecording(modelContext: ModelContext? = nil) {
         guard state == .recording else { return }
-        state = .stopping
 
         timer?.invalidate()
         timer = nil
-
-        asrEngine.stopRecognition()
         audioCaptureService.onAudioBuffer = nil
 
         if let savedURL = audioCaptureService.stopCapture() {
@@ -167,22 +172,68 @@ final class RecordingViewModel {
 
         if let session = currentSession {
             session.endedAt = Date()
-
-            if let modelContext {
-                modelContext.insert(session)
-                for segment in segments {
-                    segment.session = session
-                    modelContext.insert(segment)
-                }
-                do {
-                    try modelContext.save()
-                } catch {
-                    self.errorMessage = "Failed to save session: \(error.localizedDescription)"
-                }
-            }
         }
 
+        // Show stopping UI while draining ASR results
+        state = .stopping
+
+        // Background: drain ASR results → persist to SwiftData → signal completed
+        drainTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.asrEngine.stopRecognition()
+            guard !Task.isCancelled else { return }
+
+            // Promote orphaned partialText to a final segment
+            if !self.partialText.isEmpty {
+                Self.logger.info("Promoting orphaned partialText (\(self.partialText.count) chars)")
+                let segment = TranscriptSegment(
+                    startTime: self.segments.last?.endTime ?? 0,
+                    endTime: self.clock.elapsedTime,
+                    text: self.partialText,
+                    confidence: 0.0,
+                    language: nil
+                )
+                self.segments.append(segment)
+                self.partialText = ""
+            }
+
+            self.persistSession(modelContext: modelContext)
+            self.state = .completed
+        }
+    }
+
+    /// Persist current session + segments to SwiftData. Idempotent — skips if already persisted.
+    func persistSession(modelContext: ModelContext?) {
+        guard !sessionPersisted, let modelContext, let session = currentSession else { return }
+        sessionPersisted = true
+        modelContext.insert(session)
+        for segment in segments {
+            segment.session = session
+            modelContext.insert(segment)
+        }
+        do {
+            try modelContext.save()
+            Self.logger.info("Session saved with \(self.segments.count) segments")
+        } catch {
+            errorMessage = "Failed to save session: \(error.localizedDescription)"
+        }
+    }
+
+    func dismissCompletedRecording(modelContext: ModelContext? = nil) {
+        guard state == .completed else { return }
+        // Persist whatever we have before dismissing
+        if drainTask != nil, let modelContext {
+            drainTask?.cancel()
+            persistSession(modelContext: modelContext)
+        }
+        drainTask = nil
         state = .idle
+        segments = []
+        partialText = ""
+        clock.reset()
+        currentSession = nil
+        errorMessage = nil
+        sessionPersisted = false
     }
 
     private func handleTranscriptResult(_ result: TranscriptResult) {

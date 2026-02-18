@@ -10,10 +10,9 @@ nonisolated struct TranscriptResult: Sendable {
 }
 
 nonisolated protocol ASREngine: AnyObject, Sendable {
-    var onResult: (@Sendable (TranscriptResult) -> Void)? { get set }
+    var onResult: (@Sendable (TranscriptResult) async -> Void)? { get set }
     var onError: (@Sendable (Error) -> Void)? { get set }
     func startRecognition(audioEngine: AVAudioEngine) throws
-    func stopRecognition()
+    func stopRecognition() async
     func appendAudioBuffer(_ buffer: AVAudioPCMBuffer)
-    var supportsOnDevice: Bool { get }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import Testing
 
 /// Helper class used solely to locate the test bundle.
 final class TestBundleAnchor {}

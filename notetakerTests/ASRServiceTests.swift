@@ -4,7 +4,7 @@ import AVFoundation
 @testable import notetaker
 
 struct ASRServiceTests {
-    @Test func mockEngineStartStop() throws {
+    @Test func mockEngineStartStop() async throws {
         let engine = MockASREngine()
         #expect(engine.isRecognizing == false)
         #expect(engine.startCallCount == 0)
@@ -14,7 +14,7 @@ struct ASRServiceTests {
         #expect(engine.isRecognizing == true)
         #expect(engine.startCallCount == 1)
 
-        engine.stopRecognition()
+        await engine.stopRecognition()
         #expect(engine.isRecognizing == false)
         #expect(engine.stopCallCount == 1)
     }
@@ -30,7 +30,7 @@ struct ASRServiceTests {
         #expect(engine.isRecognizing == false)
     }
 
-    @Test func mockEngineResultCallback() {
+    @Test func mockEngineResultCallback() async {
         let engine = MockASREngine()
         var receivedResult: TranscriptResult?
 
@@ -46,7 +46,7 @@ struct ASRServiceTests {
             language: "en-US",
             isFinal: true
         )
-        engine.simulateResult(result)
+        await engine.simulateResult(result)
 
         #expect(receivedResult?.text == "Hello world")
         #expect(receivedResult?.isFinal == true)
@@ -65,10 +65,4 @@ struct ASRServiceTests {
         #expect(receivedError != nil)
     }
 
-    @Test func supportsOnDevice() {
-        let engine = MockASREngine()
-        #expect(engine.supportsOnDevice == true)
-        engine.supportsOnDevice = false
-        #expect(engine.supportsOnDevice == false)
-    }
 }

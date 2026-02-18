@@ -5,17 +5,9 @@ import AVFoundation
 @Suite("Synthetic Buffer Injection")
 struct SyntheticBufferInjectionTests {
 
-    /// Helper to create a simple test buffer
-    private func makeTestBuffer(frameCount: AVAudioFrameCount = 1024) -> AVAudioPCMBuffer {
-        let format = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
-        buffer.frameLength = frameCount
-        return buffer
-    }
-
     @Test func mockEngineReceivesSyntheticBuffers() {
         let engine = MockASREngine()
-        let buffer = makeTestBuffer()
+        let buffer = BufferFactory.silence()
 
         engine.appendAudioBuffer(buffer)
 
@@ -27,7 +19,7 @@ struct SyntheticBufferInjectionTests {
         let engine = MockASREngine()
 
         for _ in 0..<10 {
-            engine.appendAudioBuffer(makeTestBuffer())
+            engine.appendAudioBuffer(BufferFactory.silence())
         }
 
         #expect(engine.appendedBufferCount == 10)
@@ -35,7 +27,7 @@ struct SyntheticBufferInjectionTests {
 
     @Test func noopEngineAcceptsSyntheticBuffers() {
         let engine = NoopASREngine()
-        let buffer = makeTestBuffer()
+        let buffer = BufferFactory.silence()
 
         // Should not crash
         engine.appendAudioBuffer(buffer)
@@ -49,8 +41,8 @@ struct SyntheticBufferInjectionTests {
             engine.appendAudioBuffer(buffer)
         }
 
-        let buffer1 = makeTestBuffer()
-        let buffer2 = makeTestBuffer(frameCount: 512)
+        let buffer1 = BufferFactory.silence()
+        let buffer2 = BufferFactory.silence(frameCount: 512)
 
         onAudioBuffer(buffer1)
         onAudioBuffer(buffer2)

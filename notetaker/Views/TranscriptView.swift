@@ -21,21 +21,21 @@ struct TranscriptView: View {
                     }
 
                     // Partial text (current recognition in progress)
-                    if !partialText.isEmpty {
-                        HStack(alignment: .top, spacing: 12) {
-                            Text("...")
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 60, alignment: .trailing)
+                    // Always rendered to avoid layout thrashing from conditional insertion/removal
+                    HStack(alignment: .top, spacing: 12) {
+                        Text("...")
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 60, alignment: .trailing)
 
-                            Text(partialText)
-                                .font(.body)
-                                .foregroundStyle(.secondary)
-                                .underline(pattern: .dash)
-                        }
-                        .padding(.vertical, 2)
-                        .id("partial")
+                        Text(partialText.isEmpty ? " " : partialText)
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                            .underline(pattern: .dash)
                     }
+                    .padding(.vertical, 2)
+                    .id("partial")
+                    .opacity(partialText.isEmpty ? 0 : 1)
                 }
                 .padding()
             }
@@ -46,7 +46,7 @@ struct TranscriptView: View {
                     }
                 }
             }
-            .onChange(of: partialText) {
+            .onChange(of: partialText.isEmpty) {
                 if !partialText.isEmpty {
                     withAnimation {
                         proxy.scrollTo("partial", anchor: .bottom)

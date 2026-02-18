@@ -93,10 +93,12 @@ final class AudioPlaybackService: NSObject, AVAudioPlayerDelegate {
 
     private func startTimer() {
         stopTimer()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+        let t = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             guard let self, let player = self.player else { return }
             self.currentTime = player.currentTime
         }
+        t.tolerance = 0.05
+        timer = t
     }
 
     private func stopTimer() {

@@ -3,7 +3,7 @@ import AVFoundation
 @testable import notetaker
 
 nonisolated final class MockASREngine: ASREngine, @unchecked Sendable {
-    var onResult: (@Sendable (TranscriptResult) -> Void)?
+    var onResult: (@Sendable (TranscriptResult) async -> Void)?
     var onError: (@Sendable (Error) -> Void)?
 
     private let lock = NSLock()
@@ -16,12 +16,6 @@ nonisolated final class MockASREngine: ASREngine, @unchecked Sendable {
 
     private var _stopCallCount = 0
     var stopCallCount: Int { lock.withLock { _stopCallCount } }
-
-    private var _supportsOnDevice = true
-    var supportsOnDevice: Bool {
-        get { lock.withLock { _supportsOnDevice } }
-        set { lock.withLock { _supportsOnDevice = newValue } }
-    }
 
     private var _shouldThrowOnStart = false
     var shouldThrowOnStart: Bool {
@@ -49,7 +43,7 @@ nonisolated final class MockASREngine: ASREngine, @unchecked Sendable {
         }
     }
 
-    func stopRecognition() {
+    func stopRecognition() async {
         lock.withLock {
             _stopCallCount += 1
             _isRecognizing = false
@@ -63,8 +57,8 @@ nonisolated final class MockASREngine: ASREngine, @unchecked Sendable {
         }
     }
 
-    func simulateResult(_ result: TranscriptResult) {
-        onResult?(result)
+    func simulateResult(_ result: TranscriptResult) async {
+        await onResult?(result)
     }
 
     func simulateError(_ error: Error) {
