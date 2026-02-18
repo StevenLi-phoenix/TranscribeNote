@@ -1,5 +1,3 @@
-import Foundation
-
 nonisolated struct AudioConfig: Sendable {
     let sampleRate: Double
     let channels: UInt32

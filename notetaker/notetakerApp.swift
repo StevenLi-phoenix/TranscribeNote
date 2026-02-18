@@ -10,9 +10,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
-        // Best-effort sync stop; M2 will use applicationShouldTerminate with .terminateLater
-        viewModel?.stopRecording(modelContext: modelContainer?.mainContext)
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let viewModel, viewModel.isRecording else {
+            return .terminateNow
+        }
+
+        // Stop recording and wait for drain + final summary before quitting
+        viewModel.stopRecording(modelContext: modelContainer?.mainContext)
+
+        Task { @MainActor in
+            await viewModel.awaitDrainCompletion()
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+
+        return .terminateLater
     }
 }
 
@@ -21,14 +32,19 @@ struct notetakerApp: App {
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "notetaker", category: "App")
 
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @State private var viewModel = RecordingViewModel()
+    @State private var viewModel: RecordingViewModel
 
     private let sharedModelContainer: ModelContainer?
     private let containerError: String?
 
     init() {
         CrashLogService.install()
-        let schema = Schema([RecordingSession.self, TranscriptSegment.self])
+
+        let llmConfig = LLMConfig.fromUserDefaults()
+        let summarizerConfig = SummarizerConfig.fromUserDefaults()
+        _viewModel = State(initialValue: RecordingViewModel(llmConfig: llmConfig, summarizerConfig: summarizerConfig))
+
+        let schema = Schema([RecordingSession.self, TranscriptSegment.self, SummaryBlock.self])
         let configuration = ModelConfiguration()
         do {
             sharedModelContainer = try ModelContainer(for: schema, configurations: [configuration])
@@ -39,7 +55,7 @@ struct notetakerApp: App {
             containerError = error.localizedDescription
         }
 
-        // Wire AppDelegate refs eagerly so applicationWillTerminate works
+        // Wire AppDelegate refs eagerly so applicationShouldTerminate works
         // even if the main window never appeared (e.g. MenuBarExtra-only usage).
         appDelegate.viewModel = viewModel
         appDelegate.modelContainer = sharedModelContainer
@@ -78,6 +94,10 @@ struct notetakerApp: App {
             Image(systemName: viewModel.isRecording ? "record.circle.fill" : "mic")
                 .symbolRenderingMode(.multicolor)
         }
+
+        Settings {
+            SettingsView()
+        }
     }
 }
 
@@ -92,6 +112,12 @@ struct MenuBarView: View {
                 .foregroundStyle(.red)
             Text(viewModel.clock.formatted)
                 .font(.system(.caption, design: .monospaced))
+            if let summary = viewModel.latestSummary {
+                Text(summary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .font(.caption)
+            }
             Divider()
             Button("Stop Recording") {
                 viewModel.stopRecording(modelContext: modelContainer.mainContext)
@@ -112,6 +138,8 @@ struct MenuBarView: View {
         Button("Open Main Window") {
             openWindow(id: "main")
         }
+
+        SettingsLink()
 
         Divider()
 

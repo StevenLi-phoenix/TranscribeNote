@@ -5,6 +5,7 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var viewModel: RecordingViewModel
     @State private var selectedSessionID: UUID?
+    @State private var autoSummarySessionID: UUID?
 
     var body: some View {
         NavigationSplitView {
@@ -35,7 +36,7 @@ struct ContentView: View {
                     }
                 )
             } else if let sessionID = selectedSessionID {
-                SessionDetailView(sessionID: sessionID)
+                SessionDetailView(sessionID: sessionID, autoGenerateSummary: sessionID == autoSummarySessionID)
             } else {
                 ContentUnavailableView(
                     "No Session Selected",
@@ -47,11 +48,12 @@ struct ContentView: View {
         .frame(minWidth: 600, minHeight: 400)
         .onChange(of: viewModel.state) { _, newState in
             if newState == .completed {
-                viewModel.persistSession(modelContext: modelContext)
+                // drainTask already called persistSession — just navigate and dismiss
                 if let session = viewModel.currentSession {
                     selectedSessionID = session.id
+                    autoSummarySessionID = session.id
                 }
-                viewModel.dismissCompletedRecording(modelContext: modelContext)
+                viewModel.dismissCompletedRecording()
             }
         }
     }

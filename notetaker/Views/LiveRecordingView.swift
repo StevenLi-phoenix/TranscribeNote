@@ -46,6 +46,42 @@ struct LiveRecordingView: View {
                     partialText: viewModel.partialText
                 )
             }
+
+            // Summary section (shown during recording)
+            if viewModel.isRecording || viewModel.state == .stopping {
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    if viewModel.isSummarizing {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text("Summarizing...")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal)
+                    }
+
+                    if let error = viewModel.summaryError {
+                        Text(error)
+                            .foregroundStyle(.orange)
+                            .font(.caption)
+                            .padding(.horizontal)
+                    }
+
+                    if let summary = viewModel.latestSummary {
+                        SummaryCardView(
+                            coveringFrom: viewModel.summaries.last?.coveringFrom ?? 0,
+                            coveringTo: viewModel.summaries.last?.coveringTo ?? 0,
+                            content: summary,
+                            model: "",
+                            isCompact: true
+                        )
+                        .padding(.horizontal)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
         }
     }
 }

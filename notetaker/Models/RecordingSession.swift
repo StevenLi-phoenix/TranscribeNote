@@ -13,6 +13,9 @@ final class RecordingSession {
     @Relationship(deleteRule: .cascade)
     var segments: [TranscriptSegment]
 
+    @Relationship(deleteRule: .cascade)
+    var summaries: [SummaryBlock] = []
+
     var audioFileURL: URL? {
         guard let audioFilePath else { return nil }
         guard let dir = try? AudioCaptureService.recordingsDirectory() else { return nil }
@@ -31,7 +34,8 @@ final class RecordingSession {
         title: String = "",
         audioFilePath: String? = nil,
         tags: [String] = [],
-        segments: [TranscriptSegment] = []
+        segments: [TranscriptSegment] = [],
+        summaries: [SummaryBlock] = []
     ) {
         self.id = id
         self.startedAt = startedAt
@@ -40,5 +44,6 @@ final class RecordingSession {
         self.audioFilePath = audioFilePath
         self.tags = tags
         self.segments = segments
+        self.summaries = summaries
     }
 }

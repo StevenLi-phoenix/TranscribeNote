@@ -28,6 +28,10 @@ final class RecordingViewModel {
     let clock = ElapsedTimeClock()
     private(set) var errorMessage: String?
     private(set) var currentSession: RecordingSession?
+    private(set) var summaries: [SummaryBlock] = []
+    private(set) var isSummarizing: Bool = false
+    private(set) var latestSummary: String?
+    private(set) var summaryError: String?
 
     var isRecording: Bool { state == .recording }
 
@@ -37,17 +41,31 @@ final class RecordingViewModel {
     private var recordingStartTime: Date?
     private var drainTask: Task<Void, Never>?
     private var sessionPersisted = false
+    private var summaryTimer: Timer?
+    private var lastSummarizedSegmentCount: Int = 0
+    private var summaryTask: Task<Void, Never>?
+    private let summarizerService: SummarizerService
+    private var summarizerConfig: SummarizerConfig
+    private var llmConfig: LLMConfig
     init(
         audioCaptureService: AudioCaptureService = AudioCaptureService(),
-        asrEngine: any ASREngine
+        asrEngine: any ASREngine,
+        summarizerService: SummarizerService = SummarizerService(engine: NoopLLMEngine()),
+        summarizerConfig: SummarizerConfig = .default,
+        llmConfig: LLMConfig = .default
     ) {
         self.audioCaptureService = audioCaptureService
         self.asrEngine = asrEngine
+        self.summarizerService = summarizerService
+        self.summarizerConfig = summarizerConfig
+        self.llmConfig = llmConfig
         setupASRCallbacks()
     }
 
     convenience init(
-        audioCaptureService: AudioCaptureService = AudioCaptureService()
+        audioCaptureService: AudioCaptureService = AudioCaptureService(),
+        llmConfig: LLMConfig = .default,
+        summarizerConfig: SummarizerConfig = .default
     ) {
         let engine: any ASREngine
         do {
@@ -56,7 +74,15 @@ final class RecordingViewModel {
             Self.logger.warning("SpeechAnalyzerEngine unavailable (\(error.localizedDescription)), falling back to NoopASREngine")
             engine = NoopASREngine()
         }
-        self.init(audioCaptureService: audioCaptureService, asrEngine: engine)
+        let llmEngine = LLMEngineFactory.create(from: llmConfig)
+        let summarizer = SummarizerService(engine: llmEngine)
+        self.init(
+            audioCaptureService: audioCaptureService,
+            asrEngine: engine,
+            summarizerService: summarizer,
+            summarizerConfig: summarizerConfig,
+            llmConfig: llmConfig
+        )
         if engine is NoopASREngine {
             self.errorMessage = "Speech recognition is unavailable. Transcription is disabled."
         }
@@ -64,6 +90,7 @@ final class RecordingViewModel {
 
     deinit {
         timer?.invalidate()
+        summaryTimer?.invalidate()
     }
 
     private func setupASRCallbacks() {
@@ -93,6 +120,7 @@ final class RecordingViewModel {
             let fileURL = try startAudioPipeline()
             createSession(fileURL: fileURL)
             startElapsedTimer()
+            startSummaryTimer()
         } catch {
             errorMessage = "Failed to start recording: \(error.localizedDescription)"
         }
@@ -157,11 +185,67 @@ final class RecordingViewModel {
         timer = t
     }
 
+    private func startSummaryTimer() {
+        let interval = TimeInterval(summarizerConfig.intervalMinutes * 60)
+        guard interval > 0 else { return }
+        summaryTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            self?.triggerPeriodicSummary()
+        }
+        summaryTimer?.tolerance = 5.0
+    }
+
+    func triggerPeriodicSummary() {
+        guard state == .recording else { return }
+        guard segments.count > lastSummarizedSegmentCount else { return }
+
+        let unsummarized = Array(segments[lastSummarizedSegmentCount...])
+        let previousSummary = self.latestSummary
+        let config = self.summarizerConfig
+        let llmCfg = self.llmConfig
+
+        isSummarizing = true
+        summaryError = nil
+
+        summaryTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let content = try await self.summarizerService.summarize(
+                    segments: unsummarized,
+                    previousSummary: previousSummary,
+                    config: config,
+                    llmConfig: llmCfg
+                )
+                guard !Task.isCancelled else { return }
+                if !content.isEmpty {
+                    let block = SummaryBlock(
+                        coveringFrom: unsummarized.first?.startTime ?? 0,
+                        coveringTo: unsummarized.last?.endTime ?? 0,
+                        content: content,
+                        style: config.summaryStyle,
+                        model: llmCfg.model
+                    )
+                    self.summaries.append(block)
+                    self.latestSummary = content
+                    self.lastSummarizedSegmentCount = self.segments.count
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                Self.logger.error("Periodic summary failed: \(error.localizedDescription)")
+                self.summaryError = error.localizedDescription
+            }
+            self.isSummarizing = false
+        }
+    }
+
     func stopRecording(modelContext: ModelContext? = nil) {
         guard state == .recording else { return }
 
         timer?.invalidate()
         timer = nil
+        summaryTimer?.invalidate()
+        summaryTimer = nil
+        summaryTask?.cancel()
+        summaryTask = nil
         audioCaptureService.onAudioBuffer = nil
 
         if let savedURL = audioCaptureService.stopCapture() {
@@ -197,6 +281,7 @@ final class RecordingViewModel {
                 self.partialText = ""
             }
 
+            // Persist immediately — final summary runs on detail view after navigation
             self.persistSession(modelContext: modelContext)
             self.state = .completed
         }
@@ -211,9 +296,13 @@ final class RecordingViewModel {
             segment.session = session
             modelContext.insert(segment)
         }
+        for summary in summaries {
+            summary.session = session
+            modelContext.insert(summary)
+        }
         do {
             try modelContext.save()
-            Self.logger.info("Session saved with \(self.segments.count) segments")
+            Self.logger.info("Session saved with \(self.segments.count) segments, \(self.summaries.count) summaries")
         } catch {
             errorMessage = "Failed to save session: \(error.localizedDescription)"
         }
@@ -234,6 +323,17 @@ final class RecordingViewModel {
         currentSession = nil
         errorMessage = nil
         sessionPersisted = false
+        summaries = []
+        isSummarizing = false
+        latestSummary = nil
+        summaryError = nil
+        lastSummarizedSegmentCount = 0
+        summaryTask?.cancel()
+        summaryTask = nil
+    }
+
+    func awaitDrainCompletion() async {
+        await drainTask?.value
     }
 
     private func handleTranscriptResult(_ result: TranscriptResult) {

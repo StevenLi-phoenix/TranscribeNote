@@ -7,12 +7,17 @@ struct SessionDetailView: View {
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "notetaker", category: "SessionDetailView")
 
     let sessionID: UUID
+    var autoGenerateSummary: Bool = false
     @Environment(\.modelContext) private var modelContext
     @State private var playbackService = AudioPlaybackService()
     @State private var session: RecordingSession?
     @State private var sortedSegments: [TranscriptSegment] = []
     @State private var isLoading = true
     @State private var fetchError: String?
+    @State private var isGeneratingSummary = false
+    @State private var summaryGenerationError: String?
+    @State private var hasAutoTriggeredSummary = false
+    @State private var summaryTask: Task<Void, Never>?
 
     var body: some View {
         if isLoading {
@@ -60,6 +65,17 @@ struct SessionDetailView: View {
                         }
                         .disabled(sortedSegments.isEmpty)
 
+                        Button {
+                            generateOnDemandSummary()
+                        } label: {
+                            if isGeneratingSummary {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Label("Generate Summary", systemImage: "text.badge.star")
+                            }
+                        }
+                        .disabled(sortedSegments.isEmpty || isGeneratingSummary)
+
                         if let audioURL = session.audioFileURL,
                            FileManager.default.fileExists(atPath: audioURL.path) {
                             Button {
@@ -87,6 +103,47 @@ struct SessionDetailView: View {
                     PlaybackControlView(service: playbackService)
                 }
 
+                // Summaries section
+                if isGeneratingSummary || !session.summaries.isEmpty {
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Summaries")
+                            .font(.headline)
+                            .padding(.horizontal)
+
+                        if isGeneratingSummary {
+                            VStack(spacing: 8) {
+                                ProgressView()
+                                    .progressViewStyle(.linear)
+                                Text("Generating summary...")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal)
+                        }
+
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 8) {
+                                let sortedSummaries = session.summaries.sorted { $0.coveringFrom < $1.coveringFrom }
+                                ForEach(sortedSummaries, id: \.id) { block in
+                                    SummaryCardView(block: block)
+                                        .padding(.horizontal)
+                                }
+                            }
+                        }
+                        .frame(maxHeight: 300)
+                    }
+                    .padding(.vertical, 8)
+                }
+
+                if let summaryGenerationError {
+                    Text(summaryGenerationError)
+                        .foregroundStyle(.orange)
+                        .font(.caption)
+                        .padding(.horizontal)
+                }
+
                 Divider()
 
                 // Transcript
@@ -102,16 +159,26 @@ struct SessionDetailView: View {
                 }
             }
             .onAppear {
-                sortedSegments = session.segments.sorted { $0.startTime < $1.startTime }
                 loadAudio(for: session)
+                if autoGenerateSummary && !hasAutoTriggeredSummary && !sortedSegments.isEmpty {
+                    hasAutoTriggeredSummary = true
+                    generateOnDemandSummary()
+                }
             }
             .onChange(of: sessionID) { _, _ in
                 playbackService.stop()
+                summaryTask?.cancel()
                 sortedSegments = []
                 isLoading = true
+                hasAutoTriggeredSummary = false
+                isGeneratingSummary = false
+                summaryGenerationError = nil
                 fetchSession()
             }
-            .onDisappear { playbackService.stop() }
+            .onDisappear {
+                playbackService.stop()
+                summaryTask?.cancel()
+            }
         } else if let fetchError {
             ContentUnavailableView(
                 "Failed to Load Session",
@@ -150,4 +217,51 @@ struct SessionDetailView: View {
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         playbackService.load(url: url)
     }
+
+    private func generateOnDemandSummary() {
+        guard let session, !sortedSegments.isEmpty else { return }
+        isGeneratingSummary = true
+        summaryGenerationError = nil
+        let id = sessionID
+
+        summaryTask = Task { @MainActor in
+            do {
+                let llmConfig = LLMConfig.fromUserDefaults()
+                let summarizerConfig = SummarizerConfig.fromUserDefaults()
+                let engine = LLMEngineFactory.create(from: llmConfig)
+                let service = SummarizerService(engine: engine)
+
+                let content = try await service.summarize(
+                    segments: sortedSegments,
+                    previousSummary: nil,
+                    config: summarizerConfig,
+                    llmConfig: llmConfig
+                )
+
+                guard !Task.isCancelled, !content.isEmpty else { return }
+
+                // Re-fetch session to verify it still exists
+                let predicate = #Predicate<RecordingSession> { $0.id == id }
+                guard let freshSession = try? modelContext.fetch(FetchDescriptor(predicate: predicate)).first else {
+                    return
+                }
+                let block = SummaryBlock(
+                    coveringFrom: sortedSegments.first?.startTime ?? 0,
+                    coveringTo: sortedSegments.last?.endTime ?? 0,
+                    content: content,
+                    style: summarizerConfig.summaryStyle,
+                    model: llmConfig.model
+                )
+                block.session = freshSession
+                modelContext.insert(block)
+                try modelContext.save()
+                fetchSession()
+            } catch {
+                Self.logger.error("On-demand summary failed: \(error.localizedDescription)")
+                self.summaryGenerationError = error.localizedDescription
+            }
+            self.isGeneratingSummary = false
+        }
+    }
+
 }
