@@ -74,4 +74,173 @@ nonisolated final class SummarizerService: @unchecked Sendable {
         }
         return true // Unknown errors are retryable
     }
+
+    /// Split segments into time-window chunks by intervalMinutes, with window indices.
+    /// Windows are zero-based: window 0 = [0, interval), window 1 = [interval, 2*interval), etc.
+    /// Returns (windowIndex, segments) pairs for each non-empty window.
+    static func splitIntoChunksWithWindowIndices(
+        segments: [TranscriptSegment],
+        intervalMinutes: Int
+    ) -> [(windowIndex: Int, segments: [TranscriptSegment])] {
+        guard !segments.isEmpty, intervalMinutes > 0 else { return [] }
+
+        let intervalSeconds = TimeInterval(intervalMinutes * 60)
+        let sorted = segments.sorted { $0.startTime < $1.startTime }
+
+        let lastEnd = sorted[sorted.count - 1].endTime
+        let windowCount = max(1, Int(ceil(lastEnd / intervalSeconds)))
+
+        var chunks: [[TranscriptSegment]] = Array(repeating: [], count: windowCount)
+        for segment in sorted {
+            let windowIndex = min(
+                Int(segment.startTime / intervalSeconds),
+                windowCount - 1
+            )
+            chunks[windowIndex].append(segment)
+        }
+
+        return chunks.enumerated().compactMap { index, segs in
+            segs.isEmpty ? nil : (windowIndex: index, segments: segs)
+        }
+    }
+
+    /// Split segments into time-window chunks by intervalMinutes.
+    /// Segments are assigned to the zero-based window containing their startTime.
+    /// Empty windows are filtered out.
+    static func splitIntoChunks(
+        segments: [TranscriptSegment],
+        intervalMinutes: Int
+    ) -> [[TranscriptSegment]] {
+        splitIntoChunksWithWindowIndices(segments: segments, intervalMinutes: intervalMinutes)
+            .map(\.segments)
+    }
+
+    /// Summarize segments in time-window chunks, yielding a ChunkProgress for each.
+    /// Chunks are processed sequentially so each uses the previous as context.
+    /// Non-retryable errors (e.g. misconfigured API key) terminate the stream with a throw.
+    /// Retryable errors that exhaust all retries are logged and the chunk is skipped.
+    func summarizeInChunks(
+        segments: [TranscriptSegment],
+        intervalMinutes: Int,
+        config: SummarizerConfig,
+        llmConfig: LLMConfig
+    ) -> AsyncThrowingStream<ChunkProgress, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                let intervalSeconds = TimeInterval(intervalMinutes * 60)
+                let indexedChunks = Self.splitIntoChunksWithWindowIndices(segments: segments, intervalMinutes: intervalMinutes)
+                let totalChunks = indexedChunks.count
+                Self.logger.info("Chunked summarization: \(totalChunks) chunks from \(segments.count) segments (interval: \(intervalMinutes)m)")
+
+                let sorted = segments.sorted { $0.startTime < $1.startTime }
+                let lastEnd = sorted.last?.endTime ?? 0
+
+                var previousSummary: String?
+
+                for (index, entry) in indexedChunks.enumerated() {
+                    guard !Task.isCancelled else {
+                        Self.logger.info("Chunked summarization cancelled at chunk \(index + 1)/\(totalChunks)")
+                        break
+                    }
+
+                    let coveringFrom = TimeInterval(entry.windowIndex) * intervalSeconds
+                    let isLastChunk = (index == indexedChunks.count - 1)
+                    let coveringTo = isLastChunk
+                        ? lastEnd
+                        : TimeInterval(entry.windowIndex + 1) * intervalSeconds
+
+                    do {
+                        let content = try await self.summarize(
+                            segments: entry.segments,
+                            previousSummary: previousSummary,
+                            config: config,
+                            llmConfig: llmConfig
+                        )
+                        guard !content.isEmpty else { continue }
+
+                        let progress = ChunkProgress(
+                            chunkIndex: index,
+                            totalChunks: totalChunks,
+                            content: content,
+                            coveringFrom: coveringFrom,
+                            coveringTo: coveringTo
+                        )
+                        continuation.yield(progress)
+                        previousSummary = content
+                    } catch {
+                        if !Self.isRetryable(error) {
+                            Self.logger.error("Non-retryable error on chunk \(index + 1)/\(totalChunks): \(error.localizedDescription). Aborting.")
+                            continuation.finish(throwing: error)
+                            return
+                        }
+                        Self.logger.error("Chunk \(index + 1)/\(totalChunks) failed after retries: \(error.localizedDescription)")
+                    }
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// Synthesize chunk summaries into a single overall summary.
+    func summarizeOverall(
+        chunkSummaries: [(coveringFrom: TimeInterval, coveringTo: TimeInterval, content: String)],
+        config: SummarizerConfig,
+        llmConfig: LLMConfig
+    ) async throws -> String {
+        guard !chunkSummaries.isEmpty else {
+            Self.logger.info("No chunk summaries to synthesize, returning empty")
+            return ""
+        }
+
+        let totalText = chunkSummaries.map(\.content).joined(separator: " ")
+        guard totalText.count >= config.minTranscriptLength else {
+            Self.logger.info("Overall text too short (\(totalText.count) < \(config.minTranscriptLength)), skipping overall summarization")
+            return ""
+        }
+
+        let prompt = PromptBuilder.buildOverallSummaryPrompt(
+            chunkSummaries: chunkSummaries,
+            config: config
+        )
+
+        Self.logger.info("Starting overall summarization (\(chunkSummaries.count) chunks, \(totalText.count) chars)")
+
+        var lastError: Error?
+
+        for attempt in 0..<3 {
+            do {
+                let result = try await engine.generate(prompt: prompt, config: llmConfig)
+                let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
+                Self.logger.info("Overall summarization succeeded on attempt \(attempt + 1) (\(trimmed.count) chars)")
+                return trimmed
+            } catch {
+                lastError = error
+                Self.logger.warning("Overall summarization attempt \(attempt + 1) failed: \(error.localizedDescription)")
+
+                if !Self.isRetryable(error) {
+                    Self.logger.error("Non-retryable error in overall summarization, aborting")
+                    throw error
+                }
+
+                if attempt < 2 {
+                    let delay = Self.retryDelays[attempt]
+                    Self.logger.info("Retrying overall summarization in \(Int(delay))s...")
+                    try await Task.sleep(for: .seconds(delay))
+                }
+            }
+        }
+
+        Self.logger.error("All 3 overall summarization attempts failed")
+        throw lastError!
+    }
+}
+
+/// Progress update emitted during chunked summarization.
+nonisolated struct ChunkProgress: Sendable {
+    let chunkIndex: Int
+    let totalChunks: Int
+    let content: String
+    let coveringFrom: TimeInterval
+    let coveringTo: TimeInterval
 }

@@ -48,6 +48,7 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - Cancel long-running `Task`s on view disappear: store in `@State`, cancel in `.onDisappear` and `.onChange(of: sessionID)` — prevents detached tasks modifying SwiftData after navigation
 - Re-fetch SwiftData `@Model` objects after `await` in async Tasks — captured references may be stale; re-fetch by ID with `#Predicate`
 - Reset transient view state (`isGeneratingSummary`, `hasAutoTriggered`, errors) in `onChange(of: sessionID)` — prevents stale flags blocking behavior on navigation
+- **SwiftData property defaults for migration**: New non-optional stored properties on `@Model` classes MUST have inline default values on the property declaration (e.g., `var isOverall: Bool = false`), NOT just in `init()` — SwiftData uses the property-level default to fill existing rows during lightweight migration; `init` defaults are ignored
 
 ### Audio & ASR
 - Audio tap singleton: only ONE tap per `AVAudioEngine` bus; `AudioCaptureService` owns the tap
@@ -59,12 +60,15 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - `LLMEngine` protocol: `generate(prompt:config:) async throws -> String`, `isAvailable(config:) async -> Bool` — `nonisolated`, `AnyObject`, `Sendable`, injectable `URLSession` for testing; config param ensures engines check user-configured URLs, not hardcoded defaults
 - Four implementations: `OllamaEngine`, `OpenAIEngine`, `AnthropicEngine`, `NoopLLMEngine` — created via `LLMEngineFactory.create(from:session:)`; `.custom` provider maps to `OpenAIEngine` (OpenAI-compatible API for LM Studio etc.)
 - `SummarizerService` orchestrates: guard minTranscriptLength → build prompt via `PromptBuilder` → call LLM with retry (3 attempts, 10s/30s/60s backoff, only retries network/HTTP errors)
-- `PromptBuilder.buildSummarizationPrompt()` formats: system instruction + style + language + previous context + timestamped transcript
+- `SummarizerService.summarizeInChunks()` yields `ChunkProgress` per time window; `summarizeOverall()` synthesizes chunk summaries into a single overall summary
+- `SummarizerService.splitIntoChunks()` uses zero-based windows: window 0 = `[0, interval)`, window 1 = `[interval, 2*interval)` — segments assigned by `Int(startTime / intervalSeconds)`; `splitIntoChunksWithWindowIndices()` returns window indices for boundary calculations
+- `PromptBuilder` uses shared `styleInstructions(style:task:)` helper for DRY style formatting; `constraintBlock(config:)` enforces no-preamble output and language compliance; `sanitizeLanguage()` strips newlines and limits to 50 chars to prevent prompt injection
 - `AnthropicEngine` guards empty `apiKey` with `.notConfigured` error (unlike OpenAI which skips the header for local/keyless setups)
 - `LLMHTTPHelpers` enum in `LLMEngine.swift` consolidates shared HTTP methods (`performRequest`, `validateHTTPResponse`, `decodeResponse`) — don't duplicate in individual engines
-- `LLMConfig` and `SummarizerConfig` stored as JSON in `@AppStorage` (`llmConfigJSON`, `summarizerConfigJSON` keys); use `.fromUserDefaults()` static methods to load — don't duplicate loading logic
+- Split LLM config: `liveLLMConfigJSON` (periodic during recording), `overallLLMConfigJSON` (post-recording overall/chunked), `llmConfigJSON` (legacy fallback); `SessionDetailView.loadOverallLLMConfig()` tries keys in order: overall → live → legacy
+- `LLMConfig` and `SummarizerConfig` stored as JSON in `@AppStorage`; use `.fromUserDefaults(key:)` static methods to load — don't duplicate loading logic; `LLMSettingsTab` accepts `configKey`/`fallbackKey` parameters for dynamic `@AppStorage` binding
 - Default config: `.custom` provider, `qwen3-14b-mlx` model, `http://localhost:1234/v1` (LM Studio)
-- `SummaryBlock` stores `style` as `String` raw value (SwiftData can't store custom enums directly); use `summaryStyle` computed property
+- `SummaryBlock` stores `style` as `String` raw value (SwiftData can't store custom enums directly); use `summaryStyle` computed property; `isOverall: Bool` distinguishes overall summaries from chunk summaries
 
 ### Thread Safety
 - `SpeechAnalyzerEngine` uses serial `DispatchQueue` for thread safety — all mutable state accessed through `queue`; `stopRecognition()` is async with 4-phase drain (finish input → finalize analyzer → await resultTask with 2s timeout → cleanup with sessionID guard); `stopRecognitionLocked()` is the synchronous force-stop used internally by `startRecognition()`
@@ -74,8 +78,8 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 
 ### State & Lifecycle
 - `RecordingSession.audioFilePath` stores relative filename only — use `audioFileURL` computed property to reconstruct full path
-- `RecordingViewModel.stopRecording()` is sync (non-blocking) — sets `.stopping` immediately, drains ASR + persists in background `drainTask`; final summary runs on detail view after navigation (non-blocking UX); `persistSession()` is idempotent via `sessionPersisted` flag — `drainTask` already calls it, so ContentView.onChange should NOT call it again
-- Periodic summarization: `summaryTimer` fires at configurable interval during recording; `triggerPeriodicSummary()` summarizes unsummarized segments
+- `RecordingViewModel.stopRecording()` is sync (non-blocking) — sets `.stopping` immediately; does NOT cancel in-flight `summaryTask` — `drainTask` awaits it before persist; `persistSession()` is idempotent via `sessionPersisted` flag — `drainTask` already calls it, so ContentView.onChange should NOT call it again
+- Periodic summarization: `summaryTimer` fires at configurable interval; `triggerPeriodicSummary()` uses `periodicWindowCount` for window-aligned `coveringFrom`/`coveringTo` (don't use `ceil(elapsedTime)` — timer drift causes off-by-one window); `nextPeriodicCoveringFrom` tracks accumulated windows when previous ones are skipped
 - Use `1 << Int(x)` not `Int(pow(2, x))` for power-of-2 values — avoids floating-point precision issues at large exponents
 - `CrashLogService` uses async-signal-safe POSIX calls only — no Swift runtime in signal handlers; pre-computed C file path via `strdup()`; installed at app init; crash logs written to `~/Library/Application Support/notetaker/CrashLogs/last_crash.log`
 - `TranscriptExporter` formats segments as timestamped text and copies to `NSPasteboard`; `formatAsText(title:segments:)` supports optional title header
@@ -89,7 +93,7 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
   - `Models/` — `AudioConfig`, `RecordingSession`, `TranscriptSegment`, `SummaryBlock` (SwiftData), `SummaryStyle`, `LLMProvider`, `LLMConfig`, `SummarizerConfig`
   - `Services/` — `ASREngine` protocol, `SpeechAnalyzerEngine`, `NoopASREngine`, `AudioCaptureService`, `AudioPlaybackService`, `RingBuffer`, `CrashLogService`, `TranscriptExporter`, `LLMEngine` protocol, `OllamaEngine`, `OpenAIEngine`, `AnthropicEngine`, `NoopLLMEngine`, `LLMEngineFactory`, `SummarizerService`, `PromptBuilder`
   - `ViewModels/` — `RecordingViewModel` (`@Observable`)
-  - `Views/` — `LiveRecordingView`, `SessionListView`, `SessionDetailView`, `PlaybackControlView`, `TranscriptView`, `ControlBarMetrics`, `SummaryCardView`, `SettingsView` (LLM + Summarization tabs)
+  - `Views/` — `LiveRecordingView`, `SessionListView`, `SessionDetailView`, `PlaybackControlView`, `TranscriptView` (supports `scrollToTime` binding for jump-to-segment), `ControlBarMetrics`, `SummaryCardView` (tap timestamp to scroll transcript), `SettingsView` (Live LLM / Overall LLM / Summarization tabs with language picker)
   - `Extensions/` — `TimeInterval+Formatting` (`.mmss`, `.compactDuration`, `.hhmmss`)
 - **`notetakerTests/`** — Unit tests using Swift Testing (`@Test`, `#expect`)
   - `Mocks/` — `MockASREngine`, `MockLLMEngine`, `MockURLProtocol` (per-engine subclasses: `OllamaMockProtocol`, `OpenAIMockProtocol`, `AnthropicMockProtocol`)
@@ -117,3 +121,4 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - API key stored in plaintext `UserDefaults` — should move to Keychain for production
 - `ModelContainer` init failure now logged and surfaced in UI, but needs schema migration plan for recovery
 - Settings changes require app restart to take effect for LLM engine (engine created at init time); summarizer config changes update timer interval live
+- API keys stored in plaintext in two config keys (`liveLLMConfigJSON`, `overallLLMConfigJSON`) — doubles surface area vs single key; both should move to Keychain

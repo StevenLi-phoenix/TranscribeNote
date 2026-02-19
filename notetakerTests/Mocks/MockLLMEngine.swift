@@ -19,6 +19,17 @@ nonisolated final class MockLLMEngine: LLMEngine, @unchecked Sendable {
         set { lock.withLock { _stubbedResponse = newValue } }
     }
 
+    private var _stubbedResponses: [String]?
+    /// When set, each call returns the next element; falls back to stubbedResponse when exhausted.
+    var stubbedResponses: [String]? {
+        get { lock.withLock { _stubbedResponses } }
+        set { lock.withLock { _stubbedResponses = newValue } }
+    }
+
+    private var _allPrompts: [String] = []
+    /// All prompts received across every generate() call, in order.
+    var allPrompts: [String] { lock.withLock { _allPrompts } }
+
     private var _stubbedError: Error?
     var stubbedError: Error? {
         get { lock.withLock { _stubbedError } }
@@ -32,13 +43,18 @@ nonisolated final class MockLLMEngine: LLMEngine, @unchecked Sendable {
     }
 
     func generate(prompt: String, config: LLMConfig) async throws -> String {
-        lock.withLock {
+        let callIndex = lock.withLock { () -> Int in
             _generateCallCount += 1
             _lastPrompt = prompt
             _lastConfig = config
+            _allPrompts.append(prompt)
+            return _generateCallCount - 1
         }
         if let error = stubbedError {
             throw error
+        }
+        if let responses = stubbedResponses, callIndex < responses.count {
+            return responses[callIndex]
         }
         return stubbedResponse
     }

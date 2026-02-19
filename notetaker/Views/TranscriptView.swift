@@ -10,6 +10,13 @@ import SwiftUI
 struct TranscriptView: View {
     let segments: [TranscriptSegment]
     let partialText: String
+    @Binding var scrollToTime: TimeInterval?
+
+    init(segments: [TranscriptSegment], partialText: String, scrollToTime: Binding<TimeInterval?> = .constant(nil)) {
+        self.segments = segments
+        self.partialText = partialText
+        self._scrollToTime = scrollToTime
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -52,6 +59,17 @@ struct TranscriptView: View {
                         proxy.scrollTo("partial", anchor: .bottom)
                     }
                 }
+            }
+            .onChange(of: scrollToTime) { _, time in
+                guard let time else { return }
+                // Find first segment at or after the requested time
+                let target = segments.first { $0.startTime >= time } ?? segments.last
+                if let target {
+                    withAnimation {
+                        proxy.scrollTo(target.id, anchor: .top)
+                    }
+                }
+                scrollToTime = nil
             }
         }
     }

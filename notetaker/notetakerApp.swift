@@ -40,7 +40,13 @@ struct notetakerApp: App {
     init() {
         CrashLogService.install()
 
-        let llmConfig = LLMConfig.fromUserDefaults()
+        let liveLLMJSON = UserDefaults.standard.string(forKey: "liveLLMConfigJSON")
+        let llmConfig: LLMConfig
+        if let liveLLMJSON, !liveLLMJSON.isEmpty {
+            llmConfig = LLMConfig.fromUserDefaults(key: "liveLLMConfigJSON")
+        } else {
+            llmConfig = LLMConfig.fromUserDefaults(key: "llmConfigJSON")
+        }
         let summarizerConfig = SummarizerConfig.fromUserDefaults()
         _viewModel = State(initialValue: RecordingViewModel(llmConfig: llmConfig, summarizerConfig: summarizerConfig))
 

@@ -18,6 +18,8 @@ struct SessionDetailView: View {
     @State private var summaryGenerationError: String?
     @State private var hasAutoTriggeredSummary = false
     @State private var summaryTask: Task<Void, Never>?
+    @State private var summaryProgress: String?
+    @State private var scrollToTime: TimeInterval?
 
     var body: some View {
         if isLoading {
@@ -66,7 +68,7 @@ struct SessionDetailView: View {
                         .disabled(sortedSegments.isEmpty)
 
                         Button {
-                            generateOnDemandSummary()
+                            generateChunkedSummary()
                         } label: {
                             if isGeneratingSummary {
                                 ProgressView().controlSize(.small)
@@ -116,7 +118,7 @@ struct SessionDetailView: View {
                             VStack(spacing: 8) {
                                 ProgressView()
                                     .progressViewStyle(.linear)
-                                Text("Generating summary...")
+                                Text(summaryProgress ?? "Preparing...")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -125,10 +127,15 @@ struct SessionDetailView: View {
 
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 8) {
-                                let sortedSummaries = session.summaries.sorted { $0.coveringFrom < $1.coveringFrom }
+                                let sortedSummaries = session.summaries.sorted { a, b in
+                                    if a.isOverall != b.isOverall { return a.isOverall }
+                                    return a.coveringFrom < b.coveringFrom
+                                }
                                 ForEach(sortedSummaries, id: \.id) { block in
-                                    SummaryCardView(block: block)
-                                        .padding(.horizontal)
+                                    SummaryCardView(block: block) {
+                                        scrollToTime = block.coveringFrom
+                                    }
+                                    .padding(.horizontal)
                                 }
                             }
                         }
@@ -155,14 +162,14 @@ struct SessionDetailView: View {
                     )
                     .frame(maxHeight: .infinity)
                 } else {
-                    TranscriptView(segments: sortedSegments, partialText: "")
+                    TranscriptView(segments: sortedSegments, partialText: "", scrollToTime: $scrollToTime)
                 }
             }
             .onAppear {
                 loadAudio(for: session)
                 if autoGenerateSummary && !hasAutoTriggeredSummary && !sortedSegments.isEmpty {
                     hasAutoTriggeredSummary = true
-                    generateOnDemandSummary()
+                    generateOverallSummary()
                 }
             }
             .onChange(of: sessionID) { _, _ in
@@ -173,6 +180,8 @@ struct SessionDetailView: View {
                 hasAutoTriggeredSummary = false
                 isGeneratingSummary = false
                 summaryGenerationError = nil
+                summaryProgress = nil
+                scrollToTime = nil
                 fetchSession()
             }
             .onDisappear {
@@ -218,49 +227,180 @@ struct SessionDetailView: View {
         playbackService.load(url: url)
     }
 
-    private func generateOnDemandSummary() {
-        guard let session, !sortedSegments.isEmpty else { return }
+    /// Load overall LLM config with fallback chain: overallLLMConfigJSON → liveLLMConfigJSON → llmConfigJSON (legacy).
+    private static func loadOverallLLMConfig() -> LLMConfig {
+        for key in ["overallLLMConfigJSON", "liveLLMConfigJSON", "llmConfigJSON"] {
+            if let json = UserDefaults.standard.string(forKey: key), !json.isEmpty {
+                return LLMConfig.fromUserDefaults(key: key)
+            }
+        }
+        return .default
+    }
+
+    /// Auto-triggered after recording — synthesizes chunk summaries into an overall summary.
+    private func generateOverallSummary() {
+        guard !sortedSegments.isEmpty else { return }
         isGeneratingSummary = true
         summaryGenerationError = nil
+        summaryProgress = "Generating overall summary..."
         let id = sessionID
 
         summaryTask = Task { @MainActor in
             do {
-                let llmConfig = LLMConfig.fromUserDefaults()
+                let llmConfig = Self.loadOverallLLMConfig()
                 let summarizerConfig = SummarizerConfig.fromUserDefaults()
                 let engine = LLMEngineFactory.create(from: llmConfig)
                 let service = SummarizerService(engine: engine)
 
-                let content = try await service.summarize(
-                    segments: sortedSegments,
-                    previousSummary: nil,
+                let predicate = #Predicate<RecordingSession> { $0.id == id }
+                guard let freshSession = try? modelContext.fetch(FetchDescriptor(predicate: predicate)).first else {
+                    Self.logger.error("Session \(id) not found for overall summary")
+                    self.summaryGenerationError = "Session not found."
+                    self.isGeneratingSummary = false
+                    self.summaryProgress = nil
+                    return
+                }
+
+                // Check for existing chunk summaries (non-overall, non-pinned, non-user-edited)
+                let chunkSummaries = freshSession.summaries.filter { !$0.isOverall && !$0.isPinned && !$0.userEdited }
+
+                if chunkSummaries.isEmpty {
+                    Self.logger.info("No chunk summaries found, falling back to chunked generation")
+                    self.isGeneratingSummary = false
+                    self.summaryProgress = nil
+                    generateChunkedSummary()
+                    return
+                }
+
+                // Build input tuples from chunk summaries
+                let chunkInputs = chunkSummaries
+                    .sorted { $0.coveringFrom < $1.coveringFrom }
+                    .map { (coveringFrom: $0.coveringFrom, coveringTo: $0.coveringTo, content: $0.content) }
+
+                let content = try await service.summarizeOverall(
+                    chunkSummaries: chunkInputs,
                     config: summarizerConfig,
                     llmConfig: llmConfig
                 )
 
-                guard !Task.isCancelled, !content.isEmpty else { return }
-
-                // Re-fetch session to verify it still exists
-                let predicate = #Predicate<RecordingSession> { $0.id == id }
-                guard let freshSession = try? modelContext.fetch(FetchDescriptor(predicate: predicate)).first else {
+                guard !Task.isCancelled, !content.isEmpty else {
+                    self.isGeneratingSummary = false
+                    self.summaryProgress = nil
                     return
                 }
+
+                // Re-fetch session after await
+                guard let currentSession = try? modelContext.fetch(FetchDescriptor(predicate: predicate)).first else {
+                    Self.logger.error("Session \(id) no longer exists after overall summarization")
+                    self.summaryGenerationError = "Session was deleted during summary generation."
+                    self.isGeneratingSummary = false
+                    self.summaryProgress = nil
+                    return
+                }
+
+                // Delete old overall summaries (non-pinned, non-user-edited)
+                for existing in currentSession.summaries where existing.isOverall && !existing.isPinned && !existing.userEdited {
+                    modelContext.delete(existing)
+                }
+
+                let overallFrom = chunkInputs.first?.coveringFrom ?? 0
+                let overallTo = chunkInputs.last?.coveringTo ?? 0
                 let block = SummaryBlock(
-                    coveringFrom: sortedSegments.first?.startTime ?? 0,
-                    coveringTo: sortedSegments.last?.endTime ?? 0,
+                    coveringFrom: overallFrom,
+                    coveringTo: overallTo,
                     content: content,
                     style: summarizerConfig.summaryStyle,
-                    model: llmConfig.model
+                    model: llmConfig.model,
+                    isOverall: true
                 )
-                block.session = freshSession
+                block.session = currentSession
                 modelContext.insert(block)
-                try modelContext.save()
+                do {
+                    try modelContext.save()
+                } catch {
+                    Self.logger.error("Failed to save overall summary: \(error.localizedDescription)")
+                }
                 fetchSession()
             } catch {
-                Self.logger.error("On-demand summary failed: \(error.localizedDescription)")
+                Self.logger.error("Overall summary generation failed: \(error.localizedDescription)")
                 self.summaryGenerationError = error.localizedDescription
             }
             self.isGeneratingSummary = false
+            self.summaryProgress = nil
+        }
+    }
+
+    /// Manual toolbar button — regenerates chunked summaries from transcript segments.
+    private func generateChunkedSummary() {
+        guard !sortedSegments.isEmpty else { return }
+        isGeneratingSummary = true
+        summaryGenerationError = nil
+        summaryProgress = nil
+        let id = sessionID
+        let segments = sortedSegments
+
+        summaryTask = Task { @MainActor in
+            do {
+                let llmConfig = Self.loadOverallLLMConfig()
+                let summarizerConfig = SummarizerConfig.fromUserDefaults()
+                let engine = LLMEngineFactory.create(from: llmConfig)
+                let service = SummarizerService(engine: engine)
+
+                // Delete non-pinned, non-user-edited, non-overall summaries before regenerating
+                let predicate = #Predicate<RecordingSession> { $0.id == id }
+                if let freshSession = try? modelContext.fetch(FetchDescriptor(predicate: predicate)).first {
+                    for existing in freshSession.summaries where !existing.isOverall && !existing.isPinned && !existing.userEdited {
+                        modelContext.delete(existing)
+                    }
+                    do {
+                        try modelContext.save()
+                    } catch {
+                        Self.logger.error("Failed to delete old chunk summaries: \(error.localizedDescription)")
+                    }
+                }
+
+                // Chunked summarization — one SummaryBlock per time window
+                for try await progress in service.summarizeInChunks(
+                    segments: segments,
+                    intervalMinutes: summarizerConfig.intervalMinutes,
+                    config: summarizerConfig,
+                    llmConfig: llmConfig
+                ) {
+                    guard !Task.isCancelled else { break }
+
+                    summaryProgress = "Generating chunk \(progress.chunkIndex + 1) of \(progress.totalChunks)..."
+
+                    // Re-fetch session after each async suspension point
+                    guard let currentSession = try? modelContext.fetch(
+                        FetchDescriptor(predicate: predicate)
+                    ).first else {
+                        Self.logger.error("Session \(id) no longer exists; aborting summary generation")
+                        summaryGenerationError = "Session was deleted during summary generation."
+                        break
+                    }
+
+                    let block = SummaryBlock(
+                        coveringFrom: progress.coveringFrom,
+                        coveringTo: progress.coveringTo,
+                        content: progress.content,
+                        style: summarizerConfig.summaryStyle,
+                        model: llmConfig.model
+                    )
+                    block.session = currentSession
+                    modelContext.insert(block)
+                    do {
+                        try modelContext.save()
+                    } catch {
+                        Self.logger.error("Failed to save chunk \(progress.chunkIndex + 1): \(error.localizedDescription)")
+                    }
+                    fetchSession()
+                }
+            } catch {
+                Self.logger.error("Chunked summary generation failed: \(error.localizedDescription)")
+                self.summaryGenerationError = error.localizedDescription
+            }
+            self.isGeneratingSummary = false
+            self.summaryProgress = nil
         }
     }
 

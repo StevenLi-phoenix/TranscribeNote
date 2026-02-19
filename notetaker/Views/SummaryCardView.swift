@@ -6,31 +6,39 @@ struct SummaryCardView: View {
     let content: String
     let model: String
     let isCompact: Bool
+    let isOverall: Bool
+    var onTimeTap: (() -> Void)?
 
     @State private var isExpanded = false
 
-    init(coveringFrom: TimeInterval, coveringTo: TimeInterval, content: String, model: String, isCompact: Bool = false) {
+    init(coveringFrom: TimeInterval, coveringTo: TimeInterval, content: String, model: String, isCompact: Bool = false, isOverall: Bool = false, onTimeTap: (() -> Void)? = nil) {
         self.coveringFrom = coveringFrom
         self.coveringTo = coveringTo
         self.content = content
         self.model = model
         self.isCompact = isCompact
+        self.isOverall = isOverall
+        self.onTimeTap = onTimeTap
     }
 
-    init(block: SummaryBlock, isCompact: Bool = false) {
+    init(block: SummaryBlock, isCompact: Bool = false, onTimeTap: (() -> Void)? = nil) {
         self.coveringFrom = block.coveringFrom
         self.coveringTo = block.coveringTo
         self.content = block.content
         self.model = block.model
         self.isCompact = isCompact
+        self.isOverall = block.isOverall
+        self.onTimeTap = onTimeTap
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Label("\(coveringFrom.mmss) – \(coveringTo.mmss)", systemImage: "clock")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if isOverall {
+                    timeLabel("Overall Summary", systemImage: "text.badge.checkmark")
+                } else {
+                    timeLabel("\(coveringFrom.mmss) – \(coveringTo.mmss)", systemImage: "clock")
+                }
 
                 Spacer()
 
@@ -71,5 +79,24 @@ struct SummaryCardView: View {
         .padding(10)
         .background(.background.secondary)
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    @ViewBuilder
+    private func timeLabel(_ title: String, systemImage: String) -> some View {
+        if let onTimeTap {
+            Button {
+                onTimeTap()
+            } label: {
+                Label(title, systemImage: systemImage)
+                    .font(.caption)
+                    .foregroundStyle(Color.accentColor)
+            }
+            .buttonStyle(.plain)
+            .help("Jump to transcript")
+        } else {
+            Label(title, systemImage: systemImage)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 }

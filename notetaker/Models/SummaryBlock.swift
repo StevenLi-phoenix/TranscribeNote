@@ -12,6 +12,7 @@ final class SummaryBlock {
     var model: String
     var isPinned: Bool
     var userEdited: Bool
+    var isOverall: Bool = false
 
     @Relationship(inverse: \RecordingSession.summaries)
     var session: RecordingSession?
@@ -25,7 +26,8 @@ final class SummaryBlock {
         style: SummaryStyle = .bullets,
         model: String = "",
         isPinned: Bool = false,
-        userEdited: Bool = false
+        userEdited: Bool = false,
+        isOverall: Bool = false
     ) {
         self.id = id
         self.generatedAt = generatedAt
@@ -36,6 +38,7 @@ final class SummaryBlock {
         self.model = model
         self.isPinned = isPinned
         self.userEdited = userEdited
+        self.isOverall = isOverall
     }
 
     var summaryStyle: SummaryStyle {

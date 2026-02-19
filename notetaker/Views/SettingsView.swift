@@ -4,8 +4,11 @@ import os
 struct SettingsView: View {
     var body: some View {
         TabView {
-            LLMSettingsTab()
-                .tabItem { Label("LLM", systemImage: "brain") }
+            LLMSettingsTab(configKey: "liveLLMConfigJSON")
+                .tabItem { Label("Live LLM", systemImage: "brain") }
+
+            LLMSettingsTab(configKey: "overallLLMConfigJSON")
+                .tabItem { Label("Overall LLM", systemImage: "brain.head.profile") }
 
             SummarizationSettingsTab()
                 .tabItem { Label("Summarization", systemImage: "text.badge.star") }
@@ -17,12 +20,21 @@ struct SettingsView: View {
 struct LLMSettingsTab: View {
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "notetaker", category: "LLMSettingsTab")
 
-    @AppStorage("llmConfigJSON") private var llmConfigJSON: String = ""
+    let configKey: String
+    let fallbackKey: String
+    @AppStorage private var configJSON: String
     @State private var config: LLMConfig = .default
     @State private var connectionStatus: ConnectionStatus = .unknown
+    @State private var connectionTask: Task<Void, Never>?
 
     enum ConnectionStatus {
         case unknown, testing, available, unavailable
+    }
+
+    init(configKey: String, fallbackKey: String = "llmConfigJSON") {
+        self.configKey = configKey
+        self.fallbackKey = fallbackKey
+        _configJSON = AppStorage(wrappedValue: "", configKey)
     }
 
     var body: some View {
@@ -85,19 +97,23 @@ struct LLMSettingsTab: View {
     }
 
     private func loadConfig() {
-        guard !llmConfigJSON.isEmpty,
-              let data = llmConfigJSON.data(using: .utf8),
-              let decoded = try? JSONDecoder().decode(LLMConfig.self, from: data) else { return }
-        config = decoded
+        // Try primary key first
+        if !configJSON.isEmpty,
+           let data = configJSON.data(using: .utf8),
+           let decoded = try? JSONDecoder().decode(LLMConfig.self, from: data) {
+            config = decoded
+            return
+        }
+        // Fall back to legacy key
+        let fallback = LLMConfig.fromUserDefaults(key: fallbackKey)
+        config = fallback
     }
 
     private func saveConfig(_ config: LLMConfig) {
         guard let data = try? JSONEncoder().encode(config),
               let json = String(data: data, encoding: .utf8) else { return }
-        llmConfigJSON = json
+        configJSON = json
     }
-
-    @State private var connectionTask: Task<Void, Never>?
 
     private func testConnection() {
         connectionTask?.cancel()
@@ -114,10 +130,27 @@ struct LLMSettingsTab: View {
 }
 
 struct SummarizationSettingsTab: View {
-    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "notetaker", category: "SummarizationSettingsTab")
+    private static let languageOptions: [(label: String, value: String)] = [
+        ("Auto (match transcript)", "auto"),
+        ("English", "English"),
+        ("中文", "Chinese"),
+        ("日本語", "Japanese"),
+        ("한국어", "Korean"),
+        ("Español", "Spanish"),
+        ("Français", "French"),
+        ("Deutsch", "German"),
+        ("Custom...", "custom"),
+    ]
+
+    /// Built-in picker values (everything except "custom").
+    private static let builtinValues: Set<String> = {
+        Set(languageOptions.map(\.value).filter { $0 != "custom" })
+    }()
 
     @AppStorage("summarizerConfigJSON") private var summarizerConfigJSON: String = ""
     @State private var config: SummarizerConfig = .default
+    @State private var pickerSelection: String = "auto"
+    @State private var customLanguage: String = ""
 
     var body: some View {
         Form {
@@ -129,10 +162,29 @@ struct SummarizationSettingsTab: View {
                 Text("Bullet Points").tag(SummaryStyle.bullets)
                 Text("Paragraph").tag(SummaryStyle.paragraph)
                 Text("Action Items").tag(SummaryStyle.actionItems)
+                Text("Lecture Notes").tag(SummaryStyle.lectureNotes)
             }
 
-            TextField("Language", text: $config.summaryLanguage)
-                .textFieldStyle(.roundedBorder)
+            Picker("Language", selection: $pickerSelection) {
+                ForEach(Self.languageOptions, id: \.value) { option in
+                    Text(option.label).tag(option.value)
+                }
+            }
+            .onChange(of: pickerSelection) { _, newValue in
+                if newValue == "custom" {
+                    config.summaryLanguage = customLanguage.isEmpty ? "auto" : customLanguage
+                } else {
+                    config.summaryLanguage = newValue
+                }
+            }
+
+            if pickerSelection == "custom" {
+                TextField("Custom Language", text: $customLanguage)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: customLanguage) { _, newValue in
+                        config.summaryLanguage = newValue.isEmpty ? "auto" : newValue
+                    }
+            }
 
             Toggle("Include Previous Context", isOn: $config.includeContext)
 
@@ -150,6 +202,13 @@ struct SummarizationSettingsTab: View {
               let data = summarizerConfigJSON.data(using: .utf8),
               let decoded = try? JSONDecoder().decode(SummarizerConfig.self, from: data) else { return }
         config = decoded
+        // Restore picker state from stored language
+        if Self.builtinValues.contains(decoded.summaryLanguage) {
+            pickerSelection = decoded.summaryLanguage
+        } else {
+            pickerSelection = "custom"
+            customLanguage = decoded.summaryLanguage
+        }
     }
 
     private func saveConfig(_ config: SummarizerConfig) {

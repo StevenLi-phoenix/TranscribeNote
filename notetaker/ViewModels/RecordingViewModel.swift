@@ -47,6 +47,8 @@ final class RecordingViewModel {
     private let summarizerService: SummarizerService
     private var summarizerConfig: SummarizerConfig
     private var llmConfig: LLMConfig
+    private var nextPeriodicCoveringFrom: TimeInterval = 0
+    private var periodicWindowCount: Int = 0
     init(
         audioCaptureService: AudioCaptureService = AudioCaptureService(),
         asrEngine: any ASREngine,
@@ -203,6 +205,13 @@ final class RecordingViewModel {
         let config = self.summarizerConfig
         let llmCfg = self.llmConfig
 
+        // Window-aligned boundaries: each timer fire = one window
+        let intervalSeconds = TimeInterval(config.intervalMinutes * 60)
+        let currentWindow = self.periodicWindowCount
+        self.periodicWindowCount += 1
+        let coveringFrom = self.nextPeriodicCoveringFrom
+        let coveringTo = TimeInterval(currentWindow + 1) * intervalSeconds
+
         isSummarizing = true
         summaryError = nil
 
@@ -218,8 +227,8 @@ final class RecordingViewModel {
                 guard !Task.isCancelled else { return }
                 if !content.isEmpty {
                     let block = SummaryBlock(
-                        coveringFrom: unsummarized.first?.startTime ?? 0,
-                        coveringTo: unsummarized.last?.endTime ?? 0,
+                        coveringFrom: coveringFrom,
+                        coveringTo: coveringTo,
                         content: content,
                         style: config.summaryStyle,
                         model: llmCfg.model
@@ -227,6 +236,7 @@ final class RecordingViewModel {
                     self.summaries.append(block)
                     self.latestSummary = content
                     self.lastSummarizedSegmentCount = self.segments.count
+                    self.nextPeriodicCoveringFrom = coveringTo
                 }
             } catch {
                 guard !Task.isCancelled else { return }
@@ -244,8 +254,7 @@ final class RecordingViewModel {
         timer = nil
         summaryTimer?.invalidate()
         summaryTimer = nil
-        summaryTask?.cancel()
-        summaryTask = nil
+        // Don't cancel summaryTask — let in-flight LLM call finish; drainTask awaits it
         audioCaptureService.onAudioBuffer = nil
 
         if let savedURL = audioCaptureService.stopCapture() {
@@ -279,6 +288,13 @@ final class RecordingViewModel {
                 )
                 self.segments.append(segment)
                 self.partialText = ""
+            }
+
+            // Wait for any in-flight periodic summary to finish before persisting
+            if let summaryTask = self.summaryTask {
+                Self.logger.info("Awaiting in-flight periodic summary before persist...")
+                await summaryTask.value
+                self.summaryTask = nil
             }
 
             // Persist immediately — final summary runs on detail view after navigation
@@ -328,6 +344,8 @@ final class RecordingViewModel {
         latestSummary = nil
         summaryError = nil
         lastSummarizedSegmentCount = 0
+        nextPeriodicCoveringFrom = 0
+        periodicWindowCount = 0
         summaryTask?.cancel()
         summaryTask = nil
     }
