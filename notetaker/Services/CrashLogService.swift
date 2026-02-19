@@ -1,87 +1,11 @@
-import Darwin
 import Foundation
+import MetricKit
 import os
 
-/// Pre-computed C file path for the crash log, set at `install()` time.
-/// Stored as a global so the signal handler can access it without Swift runtime calls.
-nonisolated(unsafe) private var signalCrashLogCPath: UnsafeMutablePointer<CChar>?
-
-/// Top-level C-compatible signal handler (cannot capture context).
-/// Uses only async-signal-safe POSIX calls — no Swift runtime, no Foundation, no heap allocation.
-nonisolated private func handleSignal(_ signalNumber: Int32) {
-    guard let cPath = signalCrashLogCPath else {
-        // No path available — re-raise with default handler
-        signal(signalNumber, SIG_DFL)
-        raise(signalNumber)
-        return
-    }
-
-    let fd = open(cPath, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
-    if fd >= 0 {
-        // Write "Signal: " header
-        let header: StaticString = "Signal: "
-        header.withUTF8Buffer { buf in
-            _ = write(fd, buf.baseAddress, buf.count)
-        }
-
-        // Write signal number as ASCII digits (async-signal-safe)
-        writeInt32AsASCII(fd: fd, value: signalNumber)
-
-        let newline: StaticString = "\n"
-        newline.withUTF8Buffer { buf in
-            _ = write(fd, buf.baseAddress, buf.count)
-        }
-
-        close(fd)
-    }
-
-    signal(signalNumber, SIG_DFL)
-    raise(signalNumber)
-}
-
-/// Writes an Int32 as decimal ASCII digits to a file descriptor.
-/// Async-signal-safe: uses only stack memory and the `write` syscall.
-nonisolated private func writeInt32AsASCII(fd: Int32, value: Int32) {
-    var val = value
-    if val < 0 {
-        let minus: StaticString = "-"
-        minus.withUTF8Buffer { buf in
-            _ = write(fd, buf.baseAddress, buf.count)
-        }
-        val = -val
-    }
-
-    // Int32 max is 2147483647 — 10 digits + null
-    var buf: (CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar, CChar) =
-        (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-    var pos = 10 // write digits from end
-
-    if val == 0 {
-        buf.10 = 0x30 // '0'
-        pos = 10
-    } else {
-        while val > 0 {
-            withUnsafeMutableBytes(of: &buf) { ptr in
-                ptr[pos] = UInt8(val % 10) + 0x30 // '0'
-            }
-            val /= 10
-            pos -= 1
-        }
-        pos += 1 // point to first digit
-    }
-
-    withUnsafeBytes(of: &buf) { ptr in
-        _ = write(fd, ptr.baseAddress! + pos, 11 - pos)
-    }
-}
-
-/// Top-level C-compatible exception handler (cannot capture context).
-nonisolated private func handleUncaughtException(_ exception: NSException) {
-    CrashLogService.writeExceptionCrashLog(exception)
-}
-
-nonisolated enum CrashLogService {
+/// Receives crash diagnostics from MetricKit (delivered on next launch after a crash).
+nonisolated final class CrashLogService: NSObject, MXMetricManagerSubscriber, @unchecked Sendable {
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "notetaker", category: "CrashLog")
+    private static let shared = CrashLogService()
 
     private static var crashLogDirectory: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -93,45 +17,70 @@ nonisolated enum CrashLogService {
         crashLogDirectory.appendingPathComponent("last_crash.log")
     }
 
+    private override init() {
+        super.init()
+    }
+
+    /// Register the MetricKit subscriber and check for previous crash logs.
     static func install() {
-        // Check for previous crash log
         checkPreviousCrash()
+        MXMetricManager.shared.add(shared)
+        logger.info("MetricKit crash diagnostic subscriber installed")
+    }
 
-        // Create crash log directory eagerly so signal handler doesn't need to
-        try? FileManager.default.createDirectory(at: crashLogDirectory, withIntermediateDirectories: true)
+    /// Remove the MetricKit subscriber (for testing).
+    static func uninstall() {
+        MXMetricManager.shared.remove(shared)
+        logger.info("MetricKit crash diagnostic subscriber removed")
+    }
 
-        // Pre-compute crash log path as a C string for the signal handler.
-        // Intentional leak: strdup'd pointer must live for the process lifetime.
-        let path = crashLogFile.path
-        let cPath = strdup(path)
-        signalCrashLogCPath = cPath
-        logger.debug("Crash log path: \(path)")
+    // MARK: - MXMetricManagerSubscriber
 
-        // Install ObjC exception handler (non-capturing top-level function)
-        NSSetUncaughtExceptionHandler(handleUncaughtException)
+    func didReceive(_ payloads: [MXDiagnosticPayload]) {
+        Self.logger.info("Received \(payloads.count) diagnostic payload(s)")
 
-        // Install POSIX signal handlers (non-capturing — calls top-level function)
-        let signals: [Int32] = [SIGABRT, SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGTRAP]
-        for sig in signals {
-            signal(sig, handleSignal)
+        for payload in payloads {
+            if let crashDiagnostics = payload.crashDiagnostics {
+                for diagnostic in crashDiagnostics {
+                    let report = Self.formatCrashDiagnostic(diagnostic)
+                    Self.logger.warning("Crash diagnostic:\n\(report)")
+                    Self.writeCrashLog(report)
+                }
+            }
+        }
+    }
+
+    // MARK: - Private
+
+    private static func formatCrashDiagnostic(_ diagnostic: MXCrashDiagnostic) -> String {
+        var lines: [String] = []
+        lines.append("=== MetricKit Crash Diagnostic ===")
+        lines.append("Date: \(Date())")
+
+        if let terminationReason = diagnostic.terminationReason {
+            lines.append("Termination Reason: \(terminationReason)")
+        }
+        if let exceptionType = diagnostic.exceptionType {
+            lines.append("Exception Type: \(exceptionType)")
+        }
+        if let exceptionCode = diagnostic.exceptionCode {
+            lines.append("Exception Code: \(exceptionCode)")
+        }
+        if let signal = diagnostic.signal {
+            lines.append("Signal: \(signal)")
+        }
+        if let vmRegionInfo = diagnostic.virtualMemoryRegionInfo {
+            lines.append("VM Region Info: \(vmRegionInfo)")
         }
 
-        logger.info("Crash log handlers installed")
+        if let jsonData = diagnostic.callStackTree.jsonRepresentation() as Data?,
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            lines.append("Call Stack:\n\(jsonString)")
+        }
+
+        return lines.joined(separator: "\n")
     }
 
-    /// Called from the top-level exception handler.
-    /// Runs in normal Objective-C runtime context — safe to use Swift/Foundation.
-    fileprivate static func writeExceptionCrashLog(_ exception: NSException) {
-        let info = """
-        Uncaught Exception: \(exception.name.rawValue)
-        Reason: \(exception.reason ?? "unknown")
-        Stack: \(exception.callStackSymbols.joined(separator: "\n"))
-        Date: \(Date())
-        """
-        writeCrashLog(info)
-    }
-
-    /// Best-effort crash log write for exception handler context.
     private static func writeCrashLog(_ content: String) {
         try? FileManager.default.createDirectory(at: crashLogDirectory, withIntermediateDirectories: true)
         try? content.write(to: crashLogFile, atomically: true, encoding: .utf8)

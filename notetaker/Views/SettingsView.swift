@@ -23,6 +23,8 @@ struct LLMSettingsTab: View {
     let configKey: String
     let fallbackKey: String
     @AppStorage private var configJSON: String
+    @AppStorage("hasShownPrivacyDisclosure") private var hasShownDisclosure = false
+    @State private var showPrivacySheet = false
     @State private var config: LLMConfig = .default
     @State private var connectionStatus: ConnectionStatus = .unknown
     @State private var connectionTask: Task<Void, Never>?
@@ -92,15 +94,27 @@ struct LLMSettingsTab: View {
             }
         }
         .padding()
-        .onAppear { loadConfig() }
+        .onAppear {
+            if !hasShownDisclosure {
+                showPrivacySheet = true
+            }
+            loadConfig()
+        }
         .onChange(of: config) { _, newValue in saveConfig(newValue) }
+        .sheet(isPresented: $showPrivacySheet) {
+            PrivacyDisclosureView {
+                hasShownDisclosure = true
+                showPrivacySheet = false
+            }
+        }
     }
 
     private func loadConfig() {
         // Try primary key first
         if !configJSON.isEmpty,
            let data = configJSON.data(using: .utf8),
-           let decoded = try? JSONDecoder().decode(LLMConfig.self, from: data) {
+           var decoded = try? JSONDecoder().decode(LLMConfig.self, from: data) {
+            decoded.apiKey = KeychainService.load(key: LLMConfig.keychainKey(for: configKey)) ?? ""
             config = decoded
             return
         }
@@ -113,6 +127,7 @@ struct LLMSettingsTab: View {
         guard let data = try? JSONEncoder().encode(config),
               let json = String(data: data, encoding: .utf8) else { return }
         configJSON = json
+        KeychainService.save(key: LLMConfig.keychainKey(for: configKey), value: config.apiKey)
     }
 
     private func testConnection() {

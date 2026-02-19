@@ -39,6 +39,7 @@ struct notetakerApp: App {
 
     init() {
         CrashLogService.install()
+        KeychainMigration.migrateIfNeeded()
 
         let liveLLMJSON = UserDefaults.standard.string(forKey: "liveLLMConfigJSON")
         let llmConfig: LLMConfig
@@ -50,10 +51,13 @@ struct notetakerApp: App {
         let summarizerConfig = SummarizerConfig.fromUserDefaults()
         _viewModel = State(initialValue: RecordingViewModel(llmConfig: llmConfig, summarizerConfig: summarizerConfig))
 
-        let schema = Schema([RecordingSession.self, TranscriptSegment.self, SummaryBlock.self])
         let configuration = ModelConfiguration()
         do {
-            sharedModelContainer = try ModelContainer(for: schema, configurations: [configuration])
+            sharedModelContainer = try ModelContainer(
+                for: RecordingSession.self, TranscriptSegment.self, SummaryBlock.self,
+                migrationPlan: NotetakerMigrationPlan.self,
+                configurations: configuration
+            )
             containerError = nil
         } catch {
             Self.logger.error("Failed to create ModelContainer: \(error.localizedDescription)")
@@ -103,6 +107,18 @@ struct notetakerApp: App {
 
         Settings {
             SettingsView()
+        }
+        .commands {
+            CommandGroup(replacing: .help) {
+                Button("Privacy Policy") {
+                    NSWorkspace.shared.open(PrivacyDisclosureView.privacyPolicyURL)
+                }
+
+                Button("Data Usage Information") {
+                    // Reset disclosure flag so the sheet re-appears on next Settings open
+                    UserDefaults.standard.set(false, forKey: "hasShownPrivacyDisclosure")
+                }
+            }
         }
     }
 }

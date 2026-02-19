@@ -1,6 +1,6 @@
 # Known Bugs
 
-## BUG-001: API Key 明文存储在 UserDefaults
+## ~~BUG-001: API Key 明文存储在 UserDefaults~~ [RESOLVED]
 
 **严重度**: High (App Store 审核阻塞)
 
@@ -8,7 +8,9 @@
 
 **修复方案**: 迁移到 Keychain (`Security.framework`)，UserDefaults 中仅保留非敏感配置字段。
 
-## BUG-002: 崩溃日志使用自定义 signal handler
+**Status**: ✅ Resolved — Implemented `KeychainService` for secure API key storage; `LLMConfig.apiKey` now excluded from JSON encoding (via custom `CodingKeys`); automatic one-time migration from UserDefaults to Keychain via `KeychainMigration.migrateIfNeeded()`; all tests pass.
+
+## ~~BUG-002: 崩溃日志使用自定义 signal handler~~ [RESOLVED]
 
 **严重度**: Medium
 
@@ -20,3 +22,5 @@
 - `signal()` 在多线程环境下行为未定义（应使用 `sigaction()`）
 
 **修复方案**: 迁移到 `MetricKit` (`MXCrashDiagnostic`) 或集成 Sentry/Crashlytics 等标准 crash reporting SDK。
+
+**Status**: ✅ Resolved — Replaced POSIX signal handlers with MetricKit (`MXMetricManagerSubscriber`); `CrashLogService` now receives crash diagnostics via `didReceive(_: [MXDiagnosticPayload])` on next launch after crash; extracts termination reason, exception type/code, signal, VM region info, and call stack tree JSON; all tests pass.
