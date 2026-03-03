@@ -10,7 +10,7 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             SessionListView(selectedSessionID: $selectedSessionID)
-                .navigationSplitViewColumnWidth(min: 200, ideal: 250)
+                .navigationSplitViewColumnWidth(min: DS.Layout.sidebarMinWidth, ideal: DS.Layout.sidebarIdealWidth)
                 .toolbar {
                     ToolbarItem {
                         Button {

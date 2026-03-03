@@ -68,11 +68,12 @@ import Foundation
 /// - https://www.hackingwithswift.com/quick-start/swiftdata/how-to-create-a-complex-migration-using-versionedschema
 enum NotetakerMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [SchemaV1.self]
+        [SchemaV1.self, SchemaV2.self]
     }
 
     static var stages: [MigrationStage] {
-        // Empty until V2 is shipped
-        []
+        [
+            .lightweight(fromVersion: SchemaV1.self, toVersion: SchemaV2.self)
+        ]
     }
 }

@@ -13,12 +13,19 @@ nonisolated final class AudioCaptureService: @unchecked Sendable {
     private struct State: Sendable {
         var audioFile: AVAudioFile?
         var onAudioBuffer: (@Sendable (AVAudioPCMBuffer) -> Void)?
+        var onAudioLevel: (@Sendable (Float) -> Void)?
     }
 
     /// External subscribers receive audio buffers (e.g., ASR engine).
     var onAudioBuffer: (@Sendable (AVAudioPCMBuffer) -> Void)? {
         get { lock.withLock { $0.onAudioBuffer } }
         set { lock.withLock { $0.onAudioBuffer = newValue } }
+    }
+
+    /// External subscribers receive audio level (0..1) for metering UI.
+    var onAudioLevel: (@Sendable (Float) -> Void)? {
+        get { lock.withLock { $0.onAudioLevel } }
+        set { lock.withLock { $0.onAudioLevel = newValue } }
     }
 
     enum AudioCaptureError: Error {
@@ -69,8 +76,8 @@ nonisolated final class AudioCaptureService: @unchecked Sendable {
             // Offload file I/O and ASR forwarding to background queue
             self.writeQueue.async {
                 // Snapshot shared state under lock
-                let (file, bufferCallback) = self.lock.withLock { state in
-                    (state.audioFile, state.onAudioBuffer)
+                let (file, bufferCallback, levelCallback) = self.lock.withLock { state in
+                    (state.audioFile, state.onAudioBuffer, state.onAudioLevel)
                 }
 
                 // Write audio archive
@@ -78,6 +85,24 @@ nonisolated final class AudioCaptureService: @unchecked Sendable {
                     try file?.write(from: bufferCopy)
                 } catch {
                     Self.logger.error("Audio file write failed: \(error.localizedDescription)")
+                }
+
+                // Calculate RMS audio level for metering
+                if let levelCallback, let channelData = bufferCopy.floatChannelData {
+                    let frameCount = Int(bufferCopy.frameLength)
+                    if frameCount > 0 {
+                        var sumOfSquares: Float = 0
+                        let samples = channelData[0]
+                        for i in 0..<frameCount {
+                            let sample = samples[i]
+                            sumOfSquares += sample * sample
+                        }
+                        let rms = sqrtf(sumOfSquares / Float(frameCount))
+                        // Convert to 0..1 log scale: -50dB → 0, 0dB → 1
+                        let db = 20 * log10f(max(rms, 1e-10))
+                        let level = max(0, min(1, (db + 50) / 50))
+                        levelCallback(level)
+                    }
                 }
 
                 // Forward to subscribers (ASR engine)
@@ -95,6 +120,8 @@ nonisolated final class AudioCaptureService: @unchecked Sendable {
         let url = lock.withLock { state -> URL? in
             let fileURL = state.audioFile?.url
             state.audioFile = nil
+            state.onAudioBuffer = nil
+            state.onAudioLevel = nil
             return fileURL
         }
         ringBuffer.reset()

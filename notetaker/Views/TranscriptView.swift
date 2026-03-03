@@ -1,10 +1,3 @@
-//
-//  TranscriptView.swift
-//  notetaker
-//
-//  Created by Steven Li on 2/11/26.
-//
-
 import SwiftUI
 
 struct TranscriptView: View {
@@ -21,7 +14,7 @@ struct TranscriptView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 4) {
+                LazyVStack(alignment: .leading, spacing: DS.Spacing.xs) {
                     ForEach(segments, id: \.id) { segment in
                         TranscriptSegmentRow(segment: segment)
                             .id(segment.id)
@@ -29,18 +22,18 @@ struct TranscriptView: View {
 
                     // Partial text (current recognition in progress)
                     // Always rendered to avoid layout thrashing from conditional insertion/removal
-                    HStack(alignment: .top, spacing: 12) {
+                    HStack(alignment: .top, spacing: DS.Spacing.md) {
                         Text("...")
-                            .font(.system(.caption, design: .monospaced))
+                            .font(DS.Typography.timestamp)
                             .foregroundStyle(.secondary)
-                            .frame(width: 60, alignment: .trailing)
+                            .frame(width: DS.Layout.timestampWidth, alignment: .trailing)
 
                         Text(partialText.isEmpty ? " " : partialText)
-                            .font(.body)
+                            .font(DS.Typography.body)
                             .foregroundStyle(.secondary)
                             .underline(pattern: .dash)
                     }
-                    .padding(.vertical, 2)
+                    .padding(.vertical, DS.Spacing.xxs)
                     .id("partial")
                     .opacity(partialText.isEmpty ? 0 : 1)
                 }
@@ -62,7 +55,6 @@ struct TranscriptView: View {
             }
             .onChange(of: scrollToTime) { _, time in
                 guard let time else { return }
-                // Find first segment at or after the requested time
                 let target = segments.first { $0.startTime >= time } ?? segments.last
                 if let target {
                     withAnimation {

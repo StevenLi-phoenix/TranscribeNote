@@ -13,6 +13,10 @@ final class SummaryBlock {
     var isPinned: Bool
     var userEdited: Bool
     var isOverall: Bool = false
+    var editedContent: String? = nil
+
+    /// Returns edited content if available, otherwise the original generated content.
+    var displayContent: String { editedContent ?? content }
 
     @Relationship(inverse: \RecordingSession.summaries)
     var session: RecordingSession?
@@ -27,7 +31,8 @@ final class SummaryBlock {
         model: String = "",
         isPinned: Bool = false,
         userEdited: Bool = false,
-        isOverall: Bool = false
+        isOverall: Bool = false,
+        editedContent: String? = nil
     ) {
         self.id = id
         self.generatedAt = generatedAt
@@ -39,6 +44,7 @@ final class SummaryBlock {
         self.isPinned = isPinned
         self.userEdited = userEdited
         self.isOverall = isOverall
+        self.editedContent = editedContent
     }
 
     var summaryStyle: SummaryStyle {

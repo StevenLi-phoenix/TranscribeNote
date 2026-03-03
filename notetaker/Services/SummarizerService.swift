@@ -11,6 +11,37 @@ nonisolated final class SummarizerService: @unchecked Sendable {
         self.engine = engine
     }
 
+    /// Core retry logic for LLM generation with exponential backoff.
+    private func retryableGenerate(prompt: String, llmConfig: LLMConfig, label: String = "generation") async throws -> String {
+        var lastError: Error?
+
+        for attempt in 0..<3 {
+            do {
+                let result = try await engine.generate(prompt: prompt, config: llmConfig)
+                let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
+                Self.logger.info("\(label) succeeded on attempt \(attempt + 1) (\(trimmed.count) chars)")
+                return trimmed
+            } catch {
+                lastError = error
+                Self.logger.warning("\(label) attempt \(attempt + 1) failed: \(error.localizedDescription)")
+
+                if !Self.isRetryable(error) {
+                    Self.logger.error("Non-retryable error in \(label), aborting")
+                    throw error
+                }
+
+                if attempt < 2 {
+                    let delay = Self.retryDelays[attempt]
+                    Self.logger.info("Retrying \(label) in \(Int(delay))s...")
+                    try await Task.sleep(for: .seconds(delay))
+                }
+            }
+        }
+
+        Self.logger.error("All 3 \(label) attempts failed")
+        throw lastError!
+    }
+
     func summarize(
         segments: [TranscriptSegment],
         previousSummary: String?,
@@ -31,36 +62,25 @@ nonisolated final class SummarizerService: @unchecked Sendable {
         )
 
         Self.logger.info("Starting summarization (\(segments.count) segments, \(totalText.count) chars)")
+        return try await retryableGenerate(prompt: prompt, llmConfig: llmConfig, label: "summarization")
+    }
 
-        var lastError: Error?
+    /// Regenerate a summary with additional user instructions (guided regeneration).
+    func summarizeWithInstructions(
+        segments: [TranscriptSegment],
+        instructions: String,
+        config: SummarizerConfig,
+        llmConfig: LLMConfig
+    ) async throws -> String {
+        let prompt = PromptBuilder.buildSummarizationPrompt(
+            segments: segments,
+            previousSummary: nil,
+            config: config,
+            additionalInstructions: instructions
+        )
 
-        for attempt in 0..<3 {
-            do {
-                let result = try await engine.generate(prompt: prompt, config: llmConfig)
-                let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
-                Self.logger.info("Summarization succeeded on attempt \(attempt + 1) (\(trimmed.count) chars)")
-                return trimmed
-            } catch {
-                lastError = error
-                Self.logger.warning("Summarization attempt \(attempt + 1) failed: \(error.localizedDescription)")
-
-                // Only retry on network/HTTP errors
-                if !Self.isRetryable(error) {
-                    Self.logger.error("Non-retryable error, aborting")
-                    throw error
-                }
-
-                // Wait before retry (except after last attempt)
-                if attempt < 2 {
-                    let delay = Self.retryDelays[attempt]
-                    Self.logger.info("Retrying in \(Int(delay))s...")
-                    try await Task.sleep(for: .seconds(delay))
-                }
-            }
-        }
-
-        Self.logger.error("All 3 summarization attempts failed")
-        throw lastError!
+        Self.logger.info("Starting guided regeneration (\(segments.count) segments, instructions: \(instructions.prefix(60)))")
+        return try await retryableGenerate(prompt: prompt, llmConfig: llmConfig, label: "guided regeneration")
     }
 
     private static func isRetryable(_ error: Error) -> Bool {
@@ -205,34 +225,7 @@ nonisolated final class SummarizerService: @unchecked Sendable {
         )
 
         Self.logger.info("Starting overall summarization (\(chunkSummaries.count) chunks, \(totalText.count) chars)")
-
-        var lastError: Error?
-
-        for attempt in 0..<3 {
-            do {
-                let result = try await engine.generate(prompt: prompt, config: llmConfig)
-                let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
-                Self.logger.info("Overall summarization succeeded on attempt \(attempt + 1) (\(trimmed.count) chars)")
-                return trimmed
-            } catch {
-                lastError = error
-                Self.logger.warning("Overall summarization attempt \(attempt + 1) failed: \(error.localizedDescription)")
-
-                if !Self.isRetryable(error) {
-                    Self.logger.error("Non-retryable error in overall summarization, aborting")
-                    throw error
-                }
-
-                if attempt < 2 {
-                    let delay = Self.retryDelays[attempt]
-                    Self.logger.info("Retrying overall summarization in \(Int(delay))s...")
-                    try await Task.sleep(for: .seconds(delay))
-                }
-            }
-        }
-
-        Self.logger.error("All 3 overall summarization attempts failed")
-        throw lastError!
+        return try await retryableGenerate(prompt: prompt, llmConfig: llmConfig, label: "overall summarization")
     }
 }
 

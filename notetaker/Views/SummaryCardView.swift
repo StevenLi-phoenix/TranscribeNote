@@ -7,32 +7,63 @@ struct SummaryCardView: View {
     let model: String
     let isCompact: Bool
     let isOverall: Bool
+    let isUserEdited: Bool
     var onTimeTap: (() -> Void)?
+    var onSave: ((String) -> Void)?
+    var onRegenerate: ((String) -> Void)?
 
     @State private var isExpanded = false
+    @State private var isEditing = false
+    @State private var editText = ""
+    @State private var showRegenerateField = false
+    @State private var regenerateInstructions = ""
 
-    init(coveringFrom: TimeInterval, coveringTo: TimeInterval, content: String, model: String, isCompact: Bool = false, isOverall: Bool = false, onTimeTap: (() -> Void)? = nil) {
+    init(
+        coveringFrom: TimeInterval,
+        coveringTo: TimeInterval,
+        content: String,
+        model: String,
+        isCompact: Bool = false,
+        isOverall: Bool = false,
+        isUserEdited: Bool = false,
+        onTimeTap: (() -> Void)? = nil,
+        onSave: ((String) -> Void)? = nil,
+        onRegenerate: ((String) -> Void)? = nil
+    ) {
         self.coveringFrom = coveringFrom
         self.coveringTo = coveringTo
         self.content = content
         self.model = model
         self.isCompact = isCompact
         self.isOverall = isOverall
+        self.isUserEdited = isUserEdited
         self.onTimeTap = onTimeTap
+        self.onSave = onSave
+        self.onRegenerate = onRegenerate
     }
 
-    init(block: SummaryBlock, isCompact: Bool = false, onTimeTap: (() -> Void)? = nil) {
+    init(
+        block: SummaryBlock,
+        isCompact: Bool = false,
+        onTimeTap: (() -> Void)? = nil,
+        onSave: ((String) -> Void)? = nil,
+        onRegenerate: ((String) -> Void)? = nil
+    ) {
         self.coveringFrom = block.coveringFrom
         self.coveringTo = block.coveringTo
-        self.content = block.content
+        self.content = block.displayContent
         self.model = block.model
         self.isCompact = isCompact
         self.isOverall = block.isOverall
+        self.isUserEdited = block.userEdited
         self.onTimeTap = onTimeTap
+        self.onSave = onSave
+        self.onRegenerate = onRegenerate
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            // Header
             HStack {
                 if isOverall {
                     timeLabel("Overall Summary", systemImage: "text.badge.checkmark")
@@ -40,45 +71,149 @@ struct SummaryCardView: View {
                     timeLabel("\(coveringFrom.mmss) – \(coveringTo.mmss)", systemImage: "clock")
                 }
 
+                if isUserEdited {
+                    Image(systemName: "pencil")
+                        .font(DS.Typography.caption2)
+                        .foregroundStyle(.secondary)
+                        .help("Edited by user")
+                }
+
                 Spacer()
 
                 if !model.isEmpty {
                     Text(model)
-                        .font(.caption2)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(.quaternary)
-                        .clipShape(Capsule())
+                        .badgeStyle()
                 }
             }
 
-            if isCompact && !isExpanded {
-                Text(content)
-                    .lineLimit(3)
-                    .font(.callout)
-
-                if content.count > 150 {
-                    Button("Show more") { isExpanded = true }
-                        .font(.caption)
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color.accentColor)
-                }
+            // Content area
+            if isEditing {
+                editingView
+            } else if showRegenerateField {
+                regenerateView
             } else {
-                Text(content)
-                    .font(.callout)
-                    .textSelection(.enabled)
+                contentView
+            }
 
-                if isCompact && isExpanded {
-                    Button("Show less") { isExpanded = false }
-                        .font(.caption)
+            // Action buttons (only in persisted context with callbacks)
+            if !isEditing && !showRegenerateField && (onSave != nil || onRegenerate != nil) {
+                HStack(spacing: DS.Spacing.sm) {
+                    Spacer()
+                    if onSave != nil {
+                        Button {
+                            editText = content
+                            isEditing = true
+                        } label: {
+                            Image(systemName: "pencil")
+                                .font(DS.Typography.caption)
+                        }
                         .buttonStyle(.plain)
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(.secondary)
+                        .help("Edit summary")
+                    }
+                    if onRegenerate != nil {
+                        Button {
+                            regenerateInstructions = ""
+                            showRegenerateField = true
+                        } label: {
+                            Image(systemName: "arrow.trianglehead.2.counterclockwise")
+                                .font(DS.Typography.caption)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .help("Regenerate with instructions")
+                    }
                 }
             }
         }
-        .padding(10)
-        .background(.background.secondary)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .cardStyle()
+    }
+
+    // MARK: - Subviews
+
+    @ViewBuilder
+    private var contentView: some View {
+        if isCompact && !isExpanded {
+            Text(content)
+                .lineLimit(3)
+                .font(DS.Typography.callout)
+
+            if content.count > 150 {
+                Button("Show more") { isExpanded = true }
+                    .font(DS.Typography.caption)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+            }
+        } else {
+            Text(content)
+                .font(DS.Typography.callout)
+                .textSelection(.enabled)
+
+            if isCompact && isExpanded {
+                Button("Show less") { isExpanded = false }
+                    .font(DS.Typography.caption)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+            }
+        }
+    }
+
+    private var editingView: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            TextEditor(text: $editText)
+                .font(DS.Typography.callout)
+                .frame(minHeight: 80)
+                .scrollContentBackground(.hidden)
+                .padding(DS.Spacing.xs)
+                .background(.quaternary)
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
+
+            HStack {
+                Spacer()
+                Button("Cancel") {
+                    isEditing = false
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+
+                Button("Save") {
+                    onSave?(editText)
+                    isEditing = false
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(editText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+    }
+
+    private var regenerateView: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            TextField("Instructions for regeneration...", text: $regenerateInstructions, axis: .vertical)
+                .font(DS.Typography.callout)
+                .textFieldStyle(.plain)
+                .lineLimit(2...4)
+                .padding(DS.Spacing.xs)
+                .background(.quaternary)
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
+
+            HStack {
+                Spacer()
+                Button("Cancel") {
+                    showRegenerateField = false
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+
+                Button("Regenerate") {
+                    onRegenerate?(regenerateInstructions)
+                    showRegenerateField = false
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(regenerateInstructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
     }
 
     @ViewBuilder
@@ -88,14 +223,14 @@ struct SummaryCardView: View {
                 onTimeTap()
             } label: {
                 Label(title, systemImage: systemImage)
-                    .font(.caption)
+                    .font(DS.Typography.caption)
                     .foregroundStyle(Color.accentColor)
             }
             .buttonStyle(.plain)
             .help("Jump to transcript")
         } else {
             Label(title, systemImage: systemImage)
-                .font(.caption)
+                .font(DS.Typography.caption)
                 .foregroundStyle(.secondary)
         }
     }

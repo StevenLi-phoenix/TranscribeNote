@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum ControlBarMetrics {
-    static let barMinHeight: CGFloat = 48
-    static let timeFont: Font = .system(.body, design: .monospaced)
-    static let timeMinWidth: CGFloat = 64
+    static let barMinHeight: CGFloat = DS.Layout.controlBarMinHeight
+    static let timeFont: Font = DS.Typography.timer
+    static let timeMinWidth: CGFloat = DS.Layout.timeMinWidth
 }

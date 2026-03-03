@@ -19,6 +19,13 @@ final class ElapsedTimeClock {
 }
 
 @Observable
+final class AudioLevelMeter {
+    private(set) var level: Float = 0
+    func update(_ newLevel: Float) { level = newLevel }
+    func reset() { level = 0 }
+}
+
+@Observable
 final class RecordingViewModel {
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "notetaker", category: "RecordingViewModel")
 
@@ -26,6 +33,7 @@ final class RecordingViewModel {
     private(set) var segments: [TranscriptSegment] = []
     private(set) var partialText: String = ""
     let clock = ElapsedTimeClock()
+    let audioMeter = AudioLevelMeter()
     private(set) var errorMessage: String?
     private(set) var currentSession: RecordingSession?
     private(set) var summaries: [SummaryBlock] = []
@@ -157,10 +165,26 @@ final class RecordingViewModel {
             engine.appendAudioBuffer(buffer)
         }
 
-        // 2. Start ASR (creates recognition request ready to receive buffers)
+        // 2. Wire audio level metering (throttle on audio thread to avoid Task spam)
+        let meter = audioMeter
+        let lastLevel = OSAllocatedUnfairLock(initialState: Float(0))
+        audioCaptureService.onAudioLevel = { level in
+            let shouldUpdate = lastLevel.withLock { last -> Bool in
+                guard abs(last - level) > 0.02 else { return false }
+                last = level
+                return true
+            }
+            if shouldUpdate {
+                Task { @MainActor in
+                    meter.update(level)
+                }
+            }
+        }
+
+        // 3. Start ASR (creates recognition request ready to receive buffers)
         try asrEngine.startRecognition(audioEngine: audioCaptureService.audioEngine)
 
-        // 3. Start audio capture LAST (tap installed, engine starts, audio flows to ASR)
+        // 4. Start audio capture LAST (tap installed, engine starts, audio flows to ASR)
         return try audioCaptureService.startCapture()
     }
 
@@ -256,6 +280,8 @@ final class RecordingViewModel {
         summaryTimer = nil
         // Don't cancel summaryTask — let in-flight LLM call finish; drainTask awaits it
         audioCaptureService.onAudioBuffer = nil
+        audioCaptureService.onAudioLevel = nil
+        audioMeter.reset()
 
         if let savedURL = audioCaptureService.stopCapture() {
             Self.logger.info("Audio saved to \(savedURL.path)")
@@ -336,6 +362,7 @@ final class RecordingViewModel {
         segments = []
         partialText = ""
         clock.reset()
+        audioMeter.reset()
         currentSession = nil
         errorMessage = nil
         sessionPersisted = false
@@ -348,6 +375,10 @@ final class RecordingViewModel {
         periodicWindowCount = 0
         summaryTask?.cancel()
         summaryTask = nil
+    }
+
+    func clearSummaryError() {
+        summaryError = nil
     }
 
     func awaitDrainCompletion() async {

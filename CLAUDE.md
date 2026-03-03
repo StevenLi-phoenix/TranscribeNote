@@ -50,6 +50,9 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - Reset transient view state (`isGeneratingSummary`, `hasAutoTriggered`, errors) in `onChange(of: sessionID)` — prevents stale flags blocking behavior on navigation
 - **SwiftData property defaults for migration**: New non-optional stored properties on `@Model` classes MUST have inline default values on the property declaration (e.g., `var isOverall: Bool = false`), NOT just in `init()` — SwiftData uses the property-level default to fill existing rows during lightweight migration; `init` defaults are ignored
 - **Schema versioning**: `NotetakerMigrationPlan` + `SchemaV1` in `Models/Schemas/` — ModelContainer initialized with `migrationPlan: NotetakerMigrationPlan.self`; when shipping V2: (1) keep SchemaV1 unchanged, (2) create SchemaV2 with modified models, (3) add `MigrationStage.lightweight(fromVersion: SchemaV1.self, toVersion: SchemaV2.self)` to `NotetakerMigrationPlan.stages`, (4) test with copy of production data
+- **SchemaV2**: Adds `editedContent: String? = nil` to SummaryBlock; lightweight migration from V1; `displayContent` computed property returns editedContent ?? content
+- **Design System tokens**: `DS` enum in `DesignSystem.swift` centralizes spacing (4pt grid), typography, colors, radii, layout constants; `ViewModifiers.swift` provides `.cardStyle()` and `.badgeStyle()`; `ControlBarMetrics` aliases DS values
+- **Session search**: `SessionListView` uses `.searchable()` filtering by title, segment text, summary content; debounced 300ms to prevent SwiftData fault storms; `DateFilter` enum for Today/This Week/This Month quick filters
 
 ### Privacy & App Store
 - **Privacy disclosure**: `PrivacyDisclosureView` shown as sheet on first `LLMSettingsTab` `onAppear` via `@AppStorage("hasShownPrivacyDisclosure")`; reset via Help > Data Usage Information menu or `defaults delete <bundle-id> hasShownPrivacyDisclosure`
@@ -61,6 +64,8 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - SpeechAnalyzerEngine uses `SpeechAnalyzer` + `SpeechTranscriber` (macOS 26+) — no time limit, native volatile/final results; MUST call `analyzer.finalizeAndFinishThroughEndOfInput()` when stopping — without it `transcriber.results` never terminates
 - `ASREngine` protocol: `stopRecognition()` is `async` (enables result drain); `onResult` is `@Sendable async` closure; `appendAudioBuffer(_:)` — never downcast to concrete engine type
 - `AudioCaptureService` records M4A/AAC by default (128kbps) with automatic WAV fallback — old `.wav` files still play fine (`AVAudioPlayer` is format-agnostic)
+- `AudioCaptureService.onAudioLevel` callback in `State` struct — RMS calculated on writeQueue, log-scaled to 0..1 (-50dB→0, 0dB→1); throttle with `OSAllocatedUnfairLock<Float>` on audio thread before dispatching to MainActor
+- `AudioLevelMeter` (`@Observable` in `RecordingViewModel.swift`) — same pattern as `ElapsedTimeClock` to isolate high-frequency audio level updates from invalidating unrelated views
 
 ### LLM & Summarization
 - `LLMEngine` protocol: `generate(prompt:config:) async throws -> String`, `isAvailable(config:) async -> Bool` — `nonisolated`, `AnyObject`, `Sendable`, injectable `URLSession` for testing; config param ensures engines check user-configured URLs, not hardcoded defaults
@@ -68,18 +73,20 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - `SummarizerService` orchestrates: guard minTranscriptLength → build prompt via `PromptBuilder` → call LLM with retry (3 attempts, 10s/30s/60s backoff, only retries network/HTTP errors)
 - `SummarizerService.summarizeInChunks()` yields `ChunkProgress` per time window; `summarizeOverall()` synthesizes chunk summaries into a single overall summary
 - `SummarizerService.splitIntoChunks()` uses zero-based windows: window 0 = `[0, interval)`, window 1 = `[interval, 2*interval)` — segments assigned by `Int(startTime / intervalSeconds)`; `splitIntoChunksWithWindowIndices()` returns window indices for boundary calculations
-- `PromptBuilder` uses shared `styleInstructions(style:task:)` helper for DRY style formatting; `constraintBlock(config:)` enforces no-preamble output and language compliance; `sanitizeLanguage()` strips newlines and limits to 50 chars to prevent prompt injection
+- `PromptBuilder` uses shared `styleInstructions(style:task:)` helper for DRY style formatting; `constraintBlock(config:)` enforces no-preamble output and language compliance; `sanitizeLanguage()` strips newlines and limits to 50 chars to prevent prompt injection; `sanitizeInstructions()` limits to 500 chars for guided regeneration
 - `AnthropicEngine` guards empty `apiKey` with `.notConfigured` error (unlike OpenAI which skips the header for local/keyless setups)
 - `LLMHTTPHelpers` enum in `LLMEngine.swift` consolidates shared HTTP methods (`performRequest`, `validateHTTPResponse`, `decodeResponse`) — don't duplicate in individual engines
 - Split LLM config: `liveLLMConfigJSON` (periodic during recording), `overallLLMConfigJSON` (post-recording overall/chunked), `llmConfigJSON` (legacy fallback); `SessionDetailView.loadOverallLLMConfig()` tries keys in order: overall → live → legacy
 - **`LLMConfig` API key security**: `apiKey` stored in macOS Keychain via `KeychainService`, NOT in UserDefaults JSON; custom `CodingKeys` excludes `apiKey` from encoding/decoding; `fromUserDefaults(key:)` hydrates `apiKey` from Keychain after JSON decode; `keychainKey(for:)` maps config keys to Keychain account names (`notetaker.live.apiKey`, `notetaker.overall.apiKey`, `notetaker.legacy.apiKey`); one-time migration via `KeychainMigration.migrateIfNeeded()` at app init
 - `LLMConfig` and `SummarizerConfig` stored as JSON in `@AppStorage`; use `.fromUserDefaults(key:)` static methods to load — don't duplicate loading logic; `LLMSettingsTab` accepts `configKey`/`fallbackKey` parameters for dynamic `@AppStorage` binding
 - Default config: `.custom` provider, `qwen3-14b-mlx` model, `http://localhost:1234/v1` (LM Studio)
-- `SummaryBlock` stores `style` as `String` raw value (SwiftData can't store custom enums directly); use `summaryStyle` computed property; `isOverall: Bool` distinguishes overall summaries from chunk summaries
+- `SummaryBlock` stores `style` as `String` raw value (SwiftData can't store custom enums directly); use `summaryStyle` computed property; `isOverall: Bool` distinguishes overall summaries from chunk summaries; `editedContent: String?` for user edits — use `displayContent` computed property which returns editedContent ?? content
+- Silent summaries: No spinners during summary generation; summaries fade in with `.transition(.opacity)` + `.animation(.easeIn)` on count; errors auto-dismiss after 5s via `.task(id:)`
+- Guided regeneration: `SummarizerService.summarizeWithInstructions()` passes `additionalInstructions` through `PromptBuilder`; `retryableGenerate()` extracted as shared retry logic
 
 ### Thread Safety
 - `SpeechAnalyzerEngine` uses serial `DispatchQueue` for thread safety — all mutable state accessed through `queue`; `stopRecognition()` is async with 4-phase drain (finish input → finalize analyzer → await resultTask with 2s timeout → cleanup with sessionID guard); `stopRecognitionLocked()` is the synchronous force-stop used internally by `startRecognition()`
-- `AudioCaptureService` uses `OSAllocatedUnfairLock<State>` protecting `audioFile`, `onAudioBuffer` from data races between main thread and audio render thread
+- `AudioCaptureService` uses `OSAllocatedUnfairLock<State>` protecting `audioFile`, `onAudioBuffer`, `onAudioLevel` from data races between main thread and audio render thread; `stopCapture()` clears all callbacks symmetrically
 - When using `withUnsafeContinuation` with competing Tasks (drain vs timeout), cancel the losing task to prevent resource leaks
 - LLM engines are `nonisolated final class: @unchecked Sendable` — safe to call from any isolation context
 
@@ -95,20 +102,18 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 
 ## Architecture
 
-- **`notetaker/`** — Main app target (SwiftUI)
-  - `notetakerApp.swift` — App entry point, shared `ModelContainer`, `MenuBarExtra`, `MenuBarView`, `Settings` scene, config loading
-  - `ContentView.swift` — `NavigationSplitView` (sidebar + detail routing)
-  - `Models/` — `AudioConfig`, `RecordingSession`, `TranscriptSegment`, `SummaryBlock` (SwiftData), `SummaryStyle`, `LLMProvider`, `LLMConfig`, `SummarizerConfig`; `Schemas/SchemaV1`, `NotetakerMigrationPlan`
-  - `Services/` — `ASREngine` protocol, `SpeechAnalyzerEngine`, `NoopASREngine`, `AudioCaptureService`, `AudioPlaybackService`, `RingBuffer`, `CrashLogService`, `KeychainService`, `KeychainMigration`, `TranscriptExporter`, `LLMEngine` protocol, `OllamaEngine`, `OpenAIEngine`, `AnthropicEngine`, `NoopLLMEngine`, `LLMEngineFactory`, `SummarizerService`, `PromptBuilder`
-  - `ViewModels/` — `RecordingViewModel` (`@Observable`)
-  - `Views/` — `LiveRecordingView`, `SessionListView`, `SessionDetailView`, `PlaybackControlView`, `TranscriptView` (supports `scrollToTime` binding for jump-to-segment), `ControlBarMetrics`, `SummaryCardView` (tap timestamp to scroll transcript), `SettingsView` (Live LLM / Overall LLM / Summarization tabs with language picker + privacy disclosure), `PrivacyDisclosureView`
-  - `Extensions/` — `TimeInterval+Formatting` (`.mmss`, `.compactDuration`, `.hhmmss`)
-- **`notetakerTests/`** — Unit tests using Swift Testing (`@Test`, `#expect`)
-  - `Mocks/` — `MockASREngine`, `MockLLMEngine`, `MockURLProtocol` (per-engine subclasses: `OllamaMockProtocol`, `OpenAIMockProtocol`, `AnthropicMockProtocol`)
-  - `Helpers/` — `BufferFactory` (synthetic PCM buffers), `FileAudioSource` (offline file-to-buffer rendering)
-  - `Resources/` — `sample_speech.mp3` test fixture
-  - `TestHelpers.swift` — shared `sampleSpeechURL()`, `TestBundleAnchor`, `TestError`
-- **`notetakerUITests/`** — UI tests using XCTest (`XCUIApplication`)
+Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Model` classes for persistence.
+
+- **`notetaker/`** — Main app target
+  - `notetakerApp.swift` — Entry point, shared `ModelContainer`, `MenuBarExtra`, `Settings` scene
+  - `ContentView.swift` — `NavigationSplitView` (sidebar session list + detail routing)
+  - `Models/` — SwiftData models (`RecordingSession`, `TranscriptSegment`, `SummaryBlock`), config types (`LLMConfig`, `SummarizerConfig`), schema versioning (`Schemas/`)
+  - `Services/` — Protocol-based engines (`ASREngine`, `LLMEngine`) with multiple implementations, `AudioCaptureService`, `AudioPlaybackService`, `SummarizerService`, `PromptBuilder`, `KeychainService`, `CrashLogService`
+  - `ViewModels/` — `RecordingViewModel` (`@Observable`) — central state machine for recording lifecycle
+  - `DesignSystem.swift` — `DS` enum (spacing, typography, colors, radius, layout tokens)
+  - `Views/` — SwiftUI views including `SettingsView` (tabbed LLM config with privacy disclosure), `AudioLevelBar`, `ViewModifiers` (.cardStyle(), .badgeStyle())
+- **`notetakerTests/`** — Swift Testing (`@Test`, `#expect`); `Mocks/` has per-suite `MockURLProtocol` subclasses; `Helpers/` has `BufferFactory` and `FileAudioSource`
+- **`notetakerUITests/`** — XCTest UI tests
 
 ## Testing Gotchas
 
@@ -126,6 +131,4 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 
 ## Known Limitations
 
-- ~~ModelContainer init failure needs schema migration plan~~ — **FIXED**: `NotetakerMigrationPlan` + `SchemaV1` versioning infrastructure in place
 - Settings changes require app restart to take effect for LLM engine (engine created at init time); summarizer config changes update timer interval live
-- ~~API keys stored in plaintext~~ — **FIXED**: Now stored securely in macOS Keychain via `KeychainService`; UserDefaults JSON excludes `apiKey` field; automatic one-time migration at app init

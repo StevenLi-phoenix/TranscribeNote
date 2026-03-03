@@ -2,6 +2,13 @@ import SwiftUI
 import SwiftData
 import os
 
+enum DateFilter: String, CaseIterable {
+    case all = "All"
+    case today = "Today"
+    case thisWeek = "This Week"
+    case thisMonth = "This Month"
+}
+
 struct SessionListView: View {
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "notetaker", category: "SessionListView")
 
@@ -11,12 +18,51 @@ struct SessionListView: View {
     @Environment(\.modelContext) private var modelContext
     @Binding var selectedSessionID: UUID?
     @State private var selectedSessionIDs: Set<UUID> = []
+    @State private var searchText = ""
+    @State private var dateFilter: DateFilter = .all
+    @State private var searchDebounceTask: Task<Void, Never>?
 
     @State private var groupedSessions: [(date: Date, sessions: [RecordingSession])] = []
 
+    private var filteredSessions: [RecordingSession] {
+        var result = sessions
+
+        // Date filter
+        if dateFilter != .all {
+            let calendar = Calendar.current
+            let now = Date()
+            result = result.filter { session in
+                switch dateFilter {
+                case .today:
+                    return calendar.isDateInToday(session.startedAt)
+                case .thisWeek:
+                    return calendar.isDate(session.startedAt, equalTo: now, toGranularity: .weekOfYear)
+                case .thisMonth:
+                    return calendar.isDate(session.startedAt, equalTo: now, toGranularity: .month)
+                case .all:
+                    return true
+                }
+            }
+        }
+
+        // Text search
+        if !searchText.isEmpty {
+            let query = searchText
+            result = result.filter { session in
+                if session.title.localizedCaseInsensitiveContains(query) { return true }
+                if session.segments.contains(where: { $0.text.localizedCaseInsensitiveContains(query) }) { return true }
+                if session.summaries.contains(where: { $0.content.localizedCaseInsensitiveContains(query) }) { return true }
+                return false
+            }
+        }
+
+        return result
+    }
+
     private func updateGroupedSessions() {
         let calendar = Calendar.current
-        let grouped = Dictionary(grouping: sessions) { session in
+        let filtered = filteredSessions
+        let grouped = Dictionary(grouping: filtered) { session in
             calendar.startOfDay(for: session.startedAt)
         }
         groupedSessions = grouped.sorted { $0.key > $1.key }
@@ -26,9 +72,23 @@ struct SessionListView: View {
     var body: some View {
         sessionList
             .listStyle(.sidebar)
+            .searchable(text: $searchText, prompt: "Search sessions...")
             .onDeleteCommand { deleteSessions(ids: selectedSessionIDs) }
             .onAppear { updateGroupedSessions() }
             .onChange(of: sessions) { updateGroupedSessions() }
+            .onChange(of: searchText) { _, newValue in
+                searchDebounceTask?.cancel()
+                if newValue.isEmpty {
+                    updateGroupedSessions()
+                } else {
+                    searchDebounceTask = Task {
+                        try? await Task.sleep(for: .milliseconds(300))
+                        guard !Task.isCancelled else { return }
+                        updateGroupedSessions()
+                    }
+                }
+            }
+            .onChange(of: dateFilter) { updateGroupedSessions() }
             .onChange(of: selectedSessionIDs) { _, newValue in
                 if newValue.count == 1 {
                     selectedSessionID = newValue.first
@@ -52,6 +112,28 @@ struct SessionListView: View {
                         systemImage: "tray",
                         description: Text("Start a recording to create your first session")
                     )
+                } else if filteredSessions.isEmpty {
+                    ContentUnavailableView.search(text: searchText)
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .automatic) {
+                    Menu {
+                        ForEach(DateFilter.allCases, id: \.self) { filter in
+                            Button {
+                                dateFilter = filter
+                            } label: {
+                                if dateFilter == filter {
+                                    Label(filter.rawValue, systemImage: "checkmark")
+                                } else {
+                                    Text(filter.rawValue)
+                                }
+                            }
+                        }
+                    } label: {
+                        Image(systemName: dateFilter == .all ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+                    }
+                    .help("Filter by date")
                 }
             }
     }
@@ -116,26 +198,59 @@ private struct SessionRowView: View {
     let session: RecordingSession
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: DS.Spacing.xxs) {
             Text(session.title)
-                .font(.headline)
+                .font(DS.Typography.sectionHeader)
                 .lineLimit(1)
 
-            HStack {
+            HStack(spacing: DS.Spacing.xs) {
                 Text(session.startedAt.formatted(date: .omitted, time: .shortened))
-                    .font(.caption)
+                    .font(DS.Typography.caption)
                     .foregroundStyle(.secondary)
 
                 if session.totalDuration > 0 {
                     Text("·")
                         .foregroundStyle(.secondary)
                     Text(session.totalDuration.compactDuration)
-                        .font(.caption)
+                        .font(DS.Typography.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if !session.segments.isEmpty {
+                    Text("·")
+                        .foregroundStyle(.secondary)
+                    Text("\(session.segments.count) segments")
+                        .font(DS.Typography.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if !session.summaries.isEmpty {
+                    Image(systemName: "star.fill")
+                        .font(DS.Typography.caption2)
                         .foregroundStyle(.secondary)
                 }
             }
+
+            // Transcript preview
+            if let firstSegment = session.segments.min(by: { $0.startTime < $1.startTime }) {
+                Text(firstSegment.text)
+                    .font(DS.Typography.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+
+            // Summary snippet
+            if let firstSummary = session.summaries.min(by: { a, b in
+                if a.isOverall != b.isOverall { return a.isOverall }
+                return a.coveringFrom < b.coveringFrom
+            }) {
+                Text(firstSummary.displayContent.prefix(60) + (firstSummary.displayContent.count > 60 ? "..." : ""))
+                    .font(DS.Typography.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, DS.Spacing.xxs)
         .accessibilityLabel(accessibilityDescription)
     }
 
@@ -143,6 +258,9 @@ private struct SessionRowView: View {
         var parts = [session.title, session.startedAt.formatted(date: .omitted, time: .shortened)]
         if session.totalDuration > 0 {
             parts.append(session.totalDuration.compactDuration)
+        }
+        if !session.segments.isEmpty {
+            parts.append("\(session.segments.count) segments")
         }
         return parts.joined(separator: ", ")
     }

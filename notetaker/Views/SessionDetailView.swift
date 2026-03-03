@@ -28,10 +28,9 @@ struct SessionDetailView: View {
         } else if let session {
             VStack(spacing: 0) {
                 // Header
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                     Text(session.title)
-                        .font(.title2)
-                        .fontWeight(.semibold)
+                        .font(DS.Typography.title)
 
                     HStack {
                         Text(session.startedAt.formatted(date: .abbreviated, time: .shortened))
@@ -40,7 +39,7 @@ struct SessionDetailView: View {
                             Text(session.totalDuration.compactDuration)
                         }
                     }
-                    .font(.subheadline)
+                    .font(DS.Typography.callout)
                     .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -109,46 +108,52 @@ struct SessionDetailView: View {
                 if isGeneratingSummary || !session.summaries.isEmpty {
                     Divider()
 
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                         Text("Summaries")
-                            .font(.headline)
+                            .font(DS.Typography.sectionHeader)
                             .padding(.horizontal)
-
-                        if isGeneratingSummary {
-                            VStack(spacing: 8) {
-                                ProgressView()
-                                    .progressViewStyle(.linear)
-                                Text(summaryProgress ?? "Preparing...")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding(.horizontal)
-                        }
 
                         ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 8) {
+                            LazyVStack(alignment: .leading, spacing: DS.Spacing.sm) {
                                 let sortedSummaries = session.summaries.sorted { a, b in
                                     if a.isOverall != b.isOverall { return a.isOverall }
                                     return a.coveringFrom < b.coveringFrom
                                 }
                                 ForEach(sortedSummaries, id: \.id) { block in
-                                    SummaryCardView(block: block) {
-                                        scrollToTime = block.coveringFrom
-                                    }
+                                    SummaryCardView(
+                                        block: block,
+                                        onTimeTap: {
+                                            scrollToTime = block.coveringFrom
+                                        },
+                                        onSave: { newContent in
+                                            saveEditedSummary(block: block, content: newContent)
+                                        },
+                                        onRegenerate: { instructions in
+                                            regenerateSummary(block: block, instructions: instructions)
+                                        }
+                                    )
                                     .padding(.horizontal)
+                                    .transition(.opacity)
                                 }
                             }
+                            .animation(.easeIn(duration: 0.3), value: session.summaries.count)
                         }
-                        .frame(maxHeight: 300)
+                        .frame(maxHeight: DS.Layout.summaryMaxHeight)
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, DS.Spacing.sm)
                 }
 
                 if let summaryGenerationError {
                     Text(summaryGenerationError)
-                        .foregroundStyle(.orange)
-                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .font(DS.Typography.caption)
                         .padding(.horizontal)
+                        .transition(.opacity)
+                        .task(id: summaryGenerationError) {
+                            try? await Task.sleep(for: .seconds(5))
+                            guard !Task.isCancelled else { return }
+                            self.summaryGenerationError = nil
+                        }
                 }
 
                 Divider()
@@ -401,6 +406,87 @@ struct SessionDetailView: View {
             }
             self.isGeneratingSummary = false
             self.summaryProgress = nil
+        }
+    }
+
+    private func saveEditedSummary(block: SummaryBlock, content: String) {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            Self.logger.warning("Attempted to save empty edited content")
+            return
+        }
+        block.editedContent = trimmed
+        block.userEdited = true
+        do {
+            try modelContext.save()
+            Self.logger.info("Saved edited summary for block \(block.id)")
+        } catch {
+            Self.logger.error("Failed to save edited summary: \(error.localizedDescription)")
+            summaryGenerationError = "Failed to save edit: \(error.localizedDescription)"
+        }
+    }
+
+    private func regenerateSummary(block: SummaryBlock, instructions: String) {
+        let id = sessionID
+        let blockCoveringFrom = block.coveringFrom
+        let blockCoveringTo = block.coveringTo
+        let blockID = block.id
+        let capturedSegments = sortedSegments
+
+        isGeneratingSummary = true
+        summaryGenerationError = nil
+
+        summaryTask = Task { @MainActor in
+            do {
+                let llmConfig = Self.loadOverallLLMConfig()
+                let summarizerConfig = SummarizerConfig.fromUserDefaults()
+                let engine = LLMEngineFactory.create(from: llmConfig)
+                let service = SummarizerService(engine: engine)
+
+                // Filter segments to the block's time range (use captured segments for prompt)
+                let relevantSegments = capturedSegments.filter {
+                    $0.startTime >= blockCoveringFrom && $0.startTime < blockCoveringTo
+                }
+
+                guard !relevantSegments.isEmpty else {
+                    summaryGenerationError = "No transcript segments in this time range."
+                    isGeneratingSummary = false
+                    return
+                }
+
+                let content = try await service.summarizeWithInstructions(
+                    segments: relevantSegments,
+                    instructions: instructions,
+                    config: summarizerConfig,
+                    llmConfig: llmConfig
+                )
+
+                guard !Task.isCancelled, !content.isEmpty else {
+                    isGeneratingSummary = false
+                    return
+                }
+
+                // Re-fetch session after await — captured references may be stale
+                let predicate = #Predicate<RecordingSession> { $0.id == id }
+                guard let currentSession = try? modelContext.fetch(FetchDescriptor(predicate: predicate)).first else {
+                    summaryGenerationError = "Session was deleted during regeneration."
+                    isGeneratingSummary = false
+                    return
+                }
+
+                if let targetBlock = currentSession.summaries.first(where: { $0.id == blockID }) {
+                    targetBlock.content = content
+                    targetBlock.generatedAt = Date()
+                    targetBlock.editedContent = nil
+                    targetBlock.userEdited = false
+                    try modelContext.save()
+                    fetchSession()
+                }
+            } catch {
+                Self.logger.error("Guided regeneration failed: \(error.localizedDescription)")
+                summaryGenerationError = error.localizedDescription
+            }
+            isGeneratingSummary = false
         }
     }
 

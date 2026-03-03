@@ -12,6 +12,7 @@ struct LiveRecordingView: View {
             RecordingControlView(
                 state: viewModel.state,
                 elapsedTime: viewModel.clock.formatted,
+                audioLevel: viewModel.audioMeter.level,
                 onStart: {
                     Task {
                         await viewModel.startRecording()
@@ -27,32 +28,26 @@ struct LiveRecordingView: View {
                     .foregroundStyle(.red)
                     .font(.caption)
                     .padding(.horizontal)
-                    .padding(.vertical, 4)
+                    .padding(.vertical, DS.Spacing.xs)
             }
 
             // Summary section (shown during recording) — above transcript
             if viewModel.isRecording || viewModel.state == .stopping {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: DS.Spacing.sm) {
                     Button {
                         showSummaries.toggle()
                     } label: {
-                        HStack(spacing: 6) {
+                        HStack(spacing: DS.Spacing.sm) {
                             Image(systemName: showSummaries ? "chevron.down" : "chevron.right")
-                                .font(.caption)
+                                .font(DS.Typography.caption)
 
                             Text("Summaries")
-                                .font(.headline)
+                                .font(DS.Typography.sectionHeader)
 
                             Text("\(viewModel.summaries.count)")
-                                .font(.caption2)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(.quaternary)
-                                .clipShape(Capsule())
+                                .badgeStyle()
 
-                            if viewModel.isSummarizing {
-                                ProgressView().controlSize(.small)
-                            }
+                            // Summaries appear silently — no spinner
                         }
                     }
                     .buttonStyle(.plain)
@@ -60,7 +55,7 @@ struct LiveRecordingView: View {
 
                     if showSummaries {
                         ScrollView {
-                            LazyVStack(spacing: 8) {
+                            LazyVStack(spacing: DS.Spacing.sm) {
                                 ForEach(viewModel.summaries) { summary in
                                     SummaryCardView(
                                         coveringFrom: summary.coveringFrom,
@@ -72,20 +67,28 @@ struct LiveRecordingView: View {
                                     ) {
                                         scrollToTime = summary.coveringFrom
                                     }
+                                    .transition(.opacity)
                                 }
                             }
+                            .animation(.easeIn(duration: 0.3), value: viewModel.summaries.count)
                         }
                         .frame(maxHeight: 200)
                     }
 
                     if let error = viewModel.summaryError {
                         Text(error)
-                            .foregroundStyle(.orange)
-                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .font(DS.Typography.caption)
+                            .transition(.opacity)
+                            .task(id: error) {
+                                try? await Task.sleep(for: .seconds(5))
+                                guard !Task.isCancelled else { return }
+                                viewModel.clearSummaryError()
+                            }
                     }
                 }
                 .padding(.horizontal)
-                .padding(.vertical, 8)
+                .padding(.vertical, DS.Spacing.sm)
                 .animation(.easeInOut, value: showSummaries)
 
                 Divider()

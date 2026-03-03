@@ -9,6 +9,15 @@ enum PromptBuilder {
         return String(cleaned.prefix(50))
     }
 
+    /// Sanitize user-provided instructions: strip control characters, limit length.
+    private static func sanitizeInstructions(_ raw: String) -> String {
+        let cleaned = raw
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(cleaned.prefix(500))
+    }
+
     /// Constraint block: no preamble + language enforcement.
     private static func constraintBlock(config: SummarizerConfig) -> String {
         var lines = ["Output ONLY the summary content. Do not include any preamble, introduction, or meta-commentary."]
@@ -53,7 +62,8 @@ enum PromptBuilder {
     static func buildSummarizationPrompt(
         segments: [TranscriptSegment],
         previousSummary: String?,
-        config: SummarizerConfig
+        config: SummarizerConfig,
+        additionalInstructions: String? = nil
     ) -> String {
         var parts: [String] = []
 
@@ -66,6 +76,12 @@ enum PromptBuilder {
 
         // Constraints: no preamble + language
         parts.append(constraintBlock(config: config))
+
+        // Additional user instructions for guided regeneration
+        if let additionalInstructions, !additionalInstructions.isEmpty {
+            let sanitized = sanitizeInstructions(additionalInstructions)
+            parts.append("Additional user instructions: \(sanitized)")
+        }
 
         // Previous context — label varies by style
         if config.includeContext, let previousSummary, !previousSummary.isEmpty {

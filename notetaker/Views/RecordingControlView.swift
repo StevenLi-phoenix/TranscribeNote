@@ -3,6 +3,7 @@ import SwiftUI
 struct RecordingControlView: View {
     let state: RecordingState
     let elapsedTime: String
+    var audioLevel: Float = 0
     let onStart: () -> Void
     let onStop: () -> Void
 
@@ -13,7 +14,7 @@ struct RecordingControlView: View {
     var body: some View {
         ZStack {
             // Recording indicator — always rendered to prevent layout shift
-            HStack(spacing: 16) {
+            HStack(spacing: DS.Spacing.lg) {
                 Circle()
                     .fill(.red)
                     .frame(width: 10, height: 10)
@@ -40,8 +41,16 @@ struct RecordingControlView: View {
             .allowsHitTesting(isRecording)
             .accessibilityHidden(!isRecording)
 
+            // Audio level bar — only during recording, positioned below controls
+            if isRecording {
+                AudioLevelBar(level: audioLevel)
+                    .padding(.horizontal, DS.Spacing.lg)
+                    .frame(maxWidth: .infinity)
+                    .offset(y: DS.Spacing.xl)
+            }
+
             // Stopping state — transient "saving..." indicator
-            HStack(spacing: 16) {
+            HStack(spacing: DS.Spacing.lg) {
                 ProgressView()
                     .controlSize(.small)
 

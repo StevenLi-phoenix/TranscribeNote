@@ -119,6 +119,81 @@ struct PromptBuilderTests {
         #expect(prompt.contains("Previous summary for context:"))
     }
 
+    // MARK: - additionalInstructions
+
+    @Test func additionalInstructionsAppearInPrompt() {
+        let segments = [makeSegment(startTime: 0, endTime: 5, text: "Hello")]
+        let config = SummarizerConfig.default
+
+        let prompt = PromptBuilder.buildSummarizationPrompt(
+            segments: segments,
+            previousSummary: nil,
+            config: config,
+            additionalInstructions: "Focus on action items"
+        )
+        #expect(prompt.contains("Additional user instructions:"))
+        #expect(prompt.contains("Focus on action items"))
+    }
+
+    @Test func additionalInstructionsOmittedWhenNil() {
+        let segments = [makeSegment(startTime: 0, endTime: 5, text: "Hello")]
+        let config = SummarizerConfig.default
+
+        let prompt = PromptBuilder.buildSummarizationPrompt(
+            segments: segments,
+            previousSummary: nil,
+            config: config,
+            additionalInstructions: nil
+        )
+        #expect(!prompt.contains("Additional user instructions"))
+    }
+
+    @Test func additionalInstructionsOmittedWhenEmpty() {
+        let segments = [makeSegment(startTime: 0, endTime: 5, text: "Hello")]
+        let config = SummarizerConfig.default
+
+        let prompt = PromptBuilder.buildSummarizationPrompt(
+            segments: segments,
+            previousSummary: nil,
+            config: config,
+            additionalInstructions: ""
+        )
+        #expect(!prompt.contains("Additional user instructions"))
+    }
+
+    @Test func additionalInstructionsSanitized() {
+        let segments = [makeSegment(startTime: 0, endTime: 5, text: "Hello")]
+        let config = SummarizerConfig.default
+
+        let prompt = PromptBuilder.buildSummarizationPrompt(
+            segments: segments,
+            previousSummary: nil,
+            config: config,
+            additionalInstructions: "Line1\nLine2\rLine3"
+        )
+        // Newlines should be replaced with spaces
+        #expect(!prompt.contains("Line1\n"))
+        #expect(prompt.contains("Line1 Line2 Line3"))
+    }
+
+    @Test func additionalInstructionsTruncatedAt500Chars() {
+        let segments = [makeSegment(startTime: 0, endTime: 5, text: "Hello")]
+        let config = SummarizerConfig.default
+        let longInstructions = String(repeating: "x", count: 600)
+
+        let prompt = PromptBuilder.buildSummarizationPrompt(
+            segments: segments,
+            previousSummary: nil,
+            config: config,
+            additionalInstructions: longInstructions
+        )
+        // Should contain at most 500 x's
+        let instructionsLine = prompt.components(separatedBy: "\n\n")
+            .first { $0.contains("Additional user instructions") } ?? ""
+        let xCount = instructionsLine.filter { $0 == "x" }.count
+        #expect(xCount == 500)
+    }
+
     // MARK: - buildOverallSummaryPrompt
 
     @Test func overallPromptContainsSynthesizeInstruction() {
