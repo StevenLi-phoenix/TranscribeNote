@@ -68,12 +68,18 @@ import Foundation
 /// - https://www.hackingwithswift.com/quick-start/swiftdata/how-to-create-a-complex-migration-using-versionedschema
 enum NotetakerMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [SchemaV1.self, SchemaV2.self]
+        [SchemaV1.self, SchemaV2.self, SchemaV3.self, SchemaV4.self, SchemaV5.self]
     }
 
     static var stages: [MigrationStage] {
         [
-            .lightweight(fromVersion: SchemaV1.self, toVersion: SchemaV2.self)
+            .lightweight(fromVersion: SchemaV1.self, toVersion: SchemaV2.self),
+            // V3 adds ScheduledRecording — new model, no existing data affected, lightweight is sufficient.
+            .lightweight(fromVersion: SchemaV2.self, toVersion: SchemaV3.self),
+            // V4 adds audioFilePaths to RecordingSession for multi-clip pause/resume support.
+            .lightweight(fromVersion: SchemaV3.self, toVersion: SchemaV4.self),
+            // V5 adds isPartial to RecordingSession for force-quit detection.
+            .lightweight(fromVersion: SchemaV4.self, toVersion: SchemaV5.self),
         ]
     }
 }

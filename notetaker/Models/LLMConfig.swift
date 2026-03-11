@@ -1,6 +1,10 @@
 import Foundation
 import os
 
+extension Notification.Name {
+    static let llmConfigDidSave = Notification.Name("notetaker.llmConfigDidSave")
+}
+
 nonisolated struct LLMConfig: Codable, Sendable, Equatable {
     var provider: LLMProvider
     var model: String
@@ -8,19 +12,21 @@ nonisolated struct LLMConfig: Codable, Sendable, Equatable {
     var baseURL: String
     var temperature: Double
     var maxTokens: Int
+    var thinkingEnabled: Bool
 
     // Exclude apiKey from JSON encoding/decoding — it lives in Keychain
     private enum CodingKeys: String, CodingKey {
-        case provider, model, baseURL, temperature, maxTokens
+        case provider, model, baseURL, temperature, maxTokens, thinkingEnabled
     }
 
-    init(provider: LLMProvider = .custom, model: String = "qwen3-14b-mlx", apiKey: String = "", baseURL: String = "http://localhost:1234/v1", temperature: Double = 0.7, maxTokens: Int = 4096) {
+    init(provider: LLMProvider = .custom, model: String = "qwen3-14b-mlx", apiKey: String = "", baseURL: String = "http://localhost:1234/v1", temperature: Double = 0.7, maxTokens: Int = 4096, thinkingEnabled: Bool = false) {
         self.provider = provider
         self.model = model
         self.apiKey = apiKey
         self.baseURL = baseURL
         self.temperature = temperature
         self.maxTokens = maxTokens
+        self.thinkingEnabled = thinkingEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -30,6 +36,7 @@ nonisolated struct LLMConfig: Codable, Sendable, Equatable {
         baseURL = try container.decode(String.self, forKey: .baseURL)
         temperature = try container.decode(Double.self, forKey: .temperature)
         maxTokens = try container.decode(Int.self, forKey: .maxTokens)
+        thinkingEnabled = try container.decodeIfPresent(Bool.self, forKey: .thinkingEnabled) ?? false
         apiKey = "" // Hydrated from Keychain separately
     }
 
@@ -39,7 +46,8 @@ nonisolated struct LLMConfig: Codable, Sendable, Equatable {
         apiKey: "",
         baseURL: "http://localhost:1234/v1",
         temperature: 0.7,
-        maxTokens: 4096
+        maxTokens: 4096,
+        thinkingEnabled: false
     )
 
     /// Maps a UserDefaults config key to its Keychain account name.
@@ -47,6 +55,7 @@ nonisolated struct LLMConfig: Codable, Sendable, Equatable {
         switch configKey {
         case "liveLLMConfigJSON": return "notetaker.live.apiKey"
         case "overallLLMConfigJSON": return "notetaker.overall.apiKey"
+        case "titleLLMConfigJSON": return "notetaker.title.apiKey"
         case "llmConfigJSON": return "notetaker.legacy.apiKey"
         default: return "notetaker.\(configKey).apiKey"
         }

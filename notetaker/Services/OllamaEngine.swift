@@ -10,7 +10,9 @@ nonisolated final class OllamaEngine: LLMEngine, @unchecked Sendable {
     }
 
     func generate(prompt: String, config: LLMConfig) async throws -> String {
-        let baseURL = config.baseURL.isEmpty ? "http://localhost:11434" : config.baseURL
+        let baseURL = LLMHTTPHelpers.normalizeBaseURL(
+            config.baseURL.isEmpty ? "http://localhost:11434" : config.baseURL
+        )
         guard let url = URL(string: "\(baseURL)/api/generate") else {
             throw LLMEngineError.invalidURL(baseURL)
         }
@@ -19,18 +21,19 @@ nonisolated final class OllamaEngine: LLMEngine, @unchecked Sendable {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "model": config.model,
             "prompt": prompt,
             "stream": false,
             "options": [
                 "temperature": config.temperature,
                 "num_predict": config.maxTokens
-            ]
+            ],
+            "think": config.thinkingEnabled
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        Self.logger.info("Generating with Ollama model \(config.model)")
+        Self.logger.info("Generating with Ollama model \(config.model) (thinking: \(config.thinkingEnabled))")
 
         let (data, response) = try await LLMHTTPHelpers.performRequest(request, session: session)
         try LLMHTTPHelpers.validateHTTPResponse(response, data: data)
@@ -40,7 +43,11 @@ nonisolated final class OllamaEngine: LLMEngine, @unchecked Sendable {
         }
 
         let ollamaResponse = try LLMHTTPHelpers.decodeResponse(OllamaResponse.self, from: data)
-        let result = ollamaResponse.response.trimmingCharacters(in: .whitespacesAndNewlines)
+        var content = ollamaResponse.response
+        if !config.thinkingEnabled {
+            content = LLMHTTPHelpers.stripThinking(from: content)
+        }
+        let result = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !result.isEmpty else { throw LLMEngineError.emptyResponse }
 
         Self.logger.info("Ollama generation complete (\(result.count) chars)")
@@ -48,7 +55,9 @@ nonisolated final class OllamaEngine: LLMEngine, @unchecked Sendable {
     }
 
     func isAvailable(config: LLMConfig) async -> Bool {
-        let baseURL = config.baseURL.isEmpty ? "http://localhost:11434" : config.baseURL
+        let baseURL = LLMHTTPHelpers.normalizeBaseURL(
+            config.baseURL.isEmpty ? "http://localhost:11434" : config.baseURL
+        )
         guard let url = URL(string: "\(baseURL)/api/tags") else { return false }
         do {
             let (_, response) = try await session.data(from: url)

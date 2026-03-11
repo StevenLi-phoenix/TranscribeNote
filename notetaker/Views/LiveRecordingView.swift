@@ -3,8 +3,9 @@ import SwiftUI
 struct LiveRecordingView: View {
     @Bindable var viewModel: RecordingViewModel
     let onStop: () -> Void
+    var onPause: (() -> Void)?
+    var onResume: (() -> Void)?
 
-    @State private var showSummaries = true
     @State private var scrollToTime: TimeInterval?
 
     var body: some View {
@@ -13,12 +14,15 @@ struct LiveRecordingView: View {
                 state: viewModel.state,
                 elapsedTime: viewModel.clock.formatted,
                 audioLevel: viewModel.audioMeter.level,
+                stoppingStatus: viewModel.stoppingStatus,
                 onStart: {
                     Task {
                         await viewModel.startRecording()
                     }
                 },
-                onStop: onStop
+                onStop: onStop,
+                onPause: onPause,
+                onResume: onResume
             )
 
             Divider()
@@ -31,71 +35,32 @@ struct LiveRecordingView: View {
                     .padding(.vertical, DS.Spacing.xs)
             }
 
-            // Summary section (shown during recording) — above transcript
-            if viewModel.isRecording || viewModel.state == .stopping {
-                VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            // Summary error — shown independently of summary section
+            if let error = viewModel.summaryError {
+                HStack(alignment: .top, spacing: DS.Spacing.xs) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                    Text(error)
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                    Spacer()
                     Button {
-                        showSummaries.toggle()
+                        viewModel.clearSummaryError()
                     } label: {
-                        HStack(spacing: DS.Spacing.sm) {
-                            Image(systemName: showSummaries ? "chevron.down" : "chevron.right")
-                                .font(DS.Typography.caption)
-
-                            Text("Summaries")
-                                .font(DS.Typography.sectionHeader)
-
-                            Text("\(viewModel.summaries.count)")
-                                .badgeStyle()
-
-                            // Summaries appear silently — no spinner
-                        }
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    if showSummaries {
-                        ScrollView {
-                            LazyVStack(spacing: DS.Spacing.sm) {
-                                ForEach(viewModel.summaries) { summary in
-                                    SummaryCardView(
-                                        coveringFrom: summary.coveringFrom,
-                                        coveringTo: summary.coveringTo,
-                                        content: summary.content,
-                                        model: summary.model,
-                                        isCompact: true,
-                                        isOverall: summary.isOverall
-                                    ) {
-                                        scrollToTime = summary.coveringFrom
-                                    }
-                                    .transition(.opacity)
-                                }
-                            }
-                            .animation(.easeIn(duration: 0.3), value: viewModel.summaries.count)
-                        }
-                        .frame(maxHeight: 200)
-                    }
-
-                    if let error = viewModel.summaryError {
-                        Text(error)
-                            .foregroundStyle(.secondary)
-                            .font(DS.Typography.caption)
-                            .transition(.opacity)
-                            .task(id: error) {
-                                try? await Task.sleep(for: .seconds(5))
-                                guard !Task.isCancelled else { return }
-                                viewModel.clearSummaryError()
-                            }
-                    }
                 }
+                .font(DS.Typography.caption)
+                .padding(DS.Spacing.sm)
                 .padding(.horizontal)
-                .padding(.vertical, DS.Spacing.sm)
-                .animation(.easeInOut, value: showSummaries)
-
-                Divider()
+                .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: DS.Radius.sm))
+                .transition(.opacity)
             }
 
             if viewModel.segments.isEmpty && viewModel.partialText.isEmpty {
-                if !viewModel.isRecording {
+                if !viewModel.isActive {
                     ContentUnavailableView(
                         "No Transcript",
                         systemImage: "mic.badge.plus",
@@ -104,13 +69,15 @@ struct LiveRecordingView: View {
                 } else {
                     TranscriptView(
                         segments: viewModel.segments,
-                        partialText: viewModel.partialText
+                        partialText: viewModel.partialText,
+                        summaries: viewModel.summaries
                     )
                 }
             } else {
                 TranscriptView(
                     segments: viewModel.segments,
                     partialText: viewModel.partialText,
+                    summaries: viewModel.summaries,
                     scrollToTime: $scrollToTime
                 )
             }

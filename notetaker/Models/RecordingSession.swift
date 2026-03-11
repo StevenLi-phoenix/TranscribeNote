@@ -8,7 +8,10 @@ final class RecordingSession {
     var endedAt: Date?
     var title: String
     var audioFilePath: String?
+    var audioFilePaths: [String] = []
     var tags: [String]
+    /// True if session was saved during force-quit (transcript may be incomplete).
+    var isPartial: Bool = false
 
     @Relationship(deleteRule: .cascade)
     var segments: [TranscriptSegment]
@@ -16,10 +19,22 @@ final class RecordingSession {
     @Relationship(deleteRule: .cascade)
     var summaries: [SummaryBlock] = []
 
+    /// All audio file URLs for this session (supports multi-clip pause/resume).
+    /// Falls back to legacy single `audioFilePath` for older sessions.
+    var audioFileURLs: [URL] {
+        guard let dir = try? AudioCaptureService.recordingsDirectory() else { return [] }
+        if !audioFilePaths.isEmpty {
+            return audioFilePaths.map { dir.appendingPathComponent($0) }
+        }
+        if let audioFilePath {
+            return [dir.appendingPathComponent(audioFilePath)]
+        }
+        return []
+    }
+
+    /// First audio file URL (backward-compatible convenience).
     var audioFileURL: URL? {
-        guard let audioFilePath else { return nil }
-        guard let dir = try? AudioCaptureService.recordingsDirectory() else { return nil }
-        return dir.appendingPathComponent(audioFilePath)
+        audioFileURLs.first
     }
 
     var totalDuration: TimeInterval {
@@ -33,17 +48,21 @@ final class RecordingSession {
         endedAt: Date? = nil,
         title: String = "",
         audioFilePath: String? = nil,
+        audioFilePaths: [String] = [],
         tags: [String] = [],
         segments: [TranscriptSegment] = [],
-        summaries: [SummaryBlock] = []
+        summaries: [SummaryBlock] = [],
+        isPartial: Bool = false
     ) {
         self.id = id
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.title = title
         self.audioFilePath = audioFilePath
+        self.audioFilePaths = audioFilePaths
         self.tags = tags
         self.segments = segments
         self.summaries = summaries
+        self.isPartial = isPartial
     }
 }

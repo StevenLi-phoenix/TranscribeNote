@@ -12,11 +12,11 @@ struct SummaryCardView: View {
     var onSave: ((String) -> Void)?
     var onRegenerate: ((String) -> Void)?
 
-    @State private var isExpanded = false
     @State private var isEditing = false
     @State private var editText = ""
     @State private var showRegenerateField = false
     @State private var regenerateInstructions = ""
+    @State private var isHovered = false
 
     init(
         coveringFrom: TimeInterval,
@@ -63,52 +63,49 @@ struct SummaryCardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
-            // Header
-            HStack {
-                if isOverall {
-                    timeLabel("Overall Summary", systemImage: "text.badge.checkmark")
-                } else {
-                    timeLabel("\(coveringFrom.mmss) – \(coveringTo.mmss)", systemImage: "clock")
-                }
-
-                if isUserEdited {
-                    Image(systemName: "pencil")
-                        .font(DS.Typography.caption2)
-                        .foregroundStyle(.secondary)
-                        .help("Edited by user")
-                }
-
-                Spacer()
-
-                if !model.isEmpty {
-                    Text(model)
-                        .badgeStyle()
-                }
-            }
-
             // Content area
             if isEditing {
                 editingView
             } else if showRegenerateField {
                 regenerateView
             } else {
-                contentView
+                HStack(alignment: .firstTextBaseline, spacing: DS.Spacing.md) {
+                    // Time label on the left — matches TranscriptSegmentRow / InlineSummaryRow width
+                    if isOverall {
+                        timeLabel("Overall", systemImage: nil)
+                            .frame(width: DS.Layout.timestampWidth, alignment: .leading)
+                    } else {
+                        timeLabel("\(coveringFrom.mmss)–\(coveringTo.mmss)", systemImage: nil)
+                            .frame(width: DS.Layout.timestampWidth, alignment: .leading)
+                    }
+
+                    if isUserEdited {
+                        Image(systemName: "pencil")
+                            .font(DS.Typography.caption2)
+                            .foregroundStyle(.tertiary)
+                            .help("Edited by user")
+                    }
+
+                    // Summary content
+                    contentView
+                }
             }
 
-            // Action buttons (only in persisted context with callbacks)
-            if !isEditing && !showRegenerateField && (onSave != nil || onRegenerate != nil) {
-                HStack(spacing: DS.Spacing.sm) {
-                    Spacer()
+        }
+        .padding(.vertical, DS.Spacing.xs)
+        .overlay(alignment: .topTrailing) {
+            if !isEditing && !showRegenerateField && isHovered && (onSave != nil || onRegenerate != nil) {
+                HStack(spacing: DS.Spacing.xs) {
                     if onSave != nil {
                         Button {
                             editText = content
                             isEditing = true
                         } label: {
                             Image(systemName: "pencil")
-                                .font(DS.Typography.caption)
+                                .font(DS.Typography.caption2)
                         }
                         .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.tertiary)
                         .help("Edit summary")
                     }
                     if onRegenerate != nil {
@@ -117,45 +114,25 @@ struct SummaryCardView: View {
                             showRegenerateField = true
                         } label: {
                             Image(systemName: "arrow.trianglehead.2.counterclockwise")
-                                .font(DS.Typography.caption)
+                                .font(DS.Typography.caption2)
                         }
                         .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.tertiary)
                         .help("Regenerate with instructions")
                     }
                 }
             }
         }
-        .cardStyle()
+        .onHover { isHovered = $0 }
     }
 
     // MARK: - Subviews
 
     @ViewBuilder
     private var contentView: some View {
-        if isCompact && !isExpanded {
-            Text(content)
-                .lineLimit(3)
-                .font(DS.Typography.callout)
-
-            if content.count > 150 {
-                Button("Show more") { isExpanded = true }
-                    .font(DS.Typography.caption)
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.accentColor)
-            }
-        } else {
-            Text(content)
-                .font(DS.Typography.callout)
-                .textSelection(.enabled)
-
-            if isCompact && isExpanded {
-                Button("Show less") { isExpanded = false }
-                    .font(DS.Typography.caption)
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.accentColor)
-            }
-        }
+        Text(content)
+            .font(DS.Typography.callout)
+            .textSelection(.enabled)
     }
 
     private var editingView: some View {
@@ -217,21 +194,30 @@ struct SummaryCardView: View {
     }
 
     @ViewBuilder
-    private func timeLabel(_ title: String, systemImage: String) -> some View {
+    private func timeLabel(_ title: String, systemImage: String?) -> some View {
         if let onTimeTap {
             Button {
                 onTimeTap()
             } label: {
-                Label(title, systemImage: systemImage)
-                    .font(DS.Typography.caption)
-                    .foregroundStyle(Color.accentColor)
+                timeLabelContent(title, systemImage: systemImage)
+                    .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
             .help("Jump to transcript")
         } else {
+            timeLabelContent(title, systemImage: systemImage)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func timeLabelContent(_ title: String, systemImage: String?) -> some View {
+        if let systemImage {
             Label(title, systemImage: systemImage)
                 .font(DS.Typography.caption)
-                .foregroundStyle(.secondary)
+        } else {
+            Text(title)
+                .font(DS.Typography.caption)
         }
     }
 }

@@ -199,9 +199,17 @@ private struct SessionRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.xxs) {
-            Text(session.title)
-                .font(DS.Typography.sectionHeader)
-                .lineLimit(1)
+            HStack(spacing: DS.Spacing.xs) {
+                Text(session.title)
+                    .font(DS.Typography.sectionHeader)
+                    .lineLimit(1)
+                if session.isPartial {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .help("Incomplete — saved on quit")
+                }
+            }
 
             HStack(spacing: DS.Spacing.xs) {
                 Text(session.startedAt.formatted(date: .omitted, time: .shortened))
@@ -224,31 +232,8 @@ private struct SessionRowView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                if !session.summaries.isEmpty {
-                    Image(systemName: "star.fill")
-                        .font(DS.Typography.caption2)
-                        .foregroundStyle(.secondary)
-                }
             }
 
-            // Transcript preview
-            if let firstSegment = session.segments.min(by: { $0.startTime < $1.startTime }) {
-                Text(firstSegment.text)
-                    .font(DS.Typography.caption)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-            }
-
-            // Summary snippet
-            if let firstSummary = session.summaries.min(by: { a, b in
-                if a.isOverall != b.isOverall { return a.isOverall }
-                return a.coveringFrom < b.coveringFrom
-            }) {
-                Text(firstSummary.displayContent.prefix(60) + (firstSummary.displayContent.count > 60 ? "..." : ""))
-                    .font(DS.Typography.caption2)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-            }
         }
         .padding(.vertical, DS.Spacing.xxs)
         .accessibilityLabel(accessibilityDescription)

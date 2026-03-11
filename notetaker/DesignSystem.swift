@@ -52,7 +52,7 @@ enum DS {
     enum Layout {
         static let sidebarMinWidth: CGFloat = 200
         static let sidebarIdealWidth: CGFloat = 250
-        static let timestampWidth: CGFloat = 60
+        static let timestampWidth: CGFloat = 72
         static let summaryMaxHeight: CGFloat = 300
         static let controlBarMinHeight: CGFloat = 48
         static let timeMinWidth: CGFloat = 64

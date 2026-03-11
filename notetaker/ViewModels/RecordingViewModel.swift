@@ -6,6 +6,7 @@ import os
 enum RecordingState {
     case idle
     case recording
+    case paused
     case stopping
     case completed
 }
@@ -40,8 +41,10 @@ final class RecordingViewModel {
     private(set) var isSummarizing: Bool = false
     private(set) var latestSummary: String?
     private(set) var summaryError: String?
+    private(set) var stoppingStatus: String = "Saving..."
 
     var isRecording: Bool { state == .recording }
+    var isActive: Bool { state == .recording || state == .paused }
 
     private let audioCaptureService: AudioCaptureService
     private let asrEngine: any ASREngine
@@ -52,11 +55,18 @@ final class RecordingViewModel {
     private var summaryTimer: Timer?
     private var lastSummarizedSegmentCount: Int = 0
     private var summaryTask: Task<Void, Never>?
-    private let summarizerService: SummarizerService
+    private var summarizerService: SummarizerService
     private var summarizerConfig: SummarizerConfig
     private var llmConfig: LLMConfig
     private var nextPeriodicCoveringFrom: TimeInterval = 0
     private var periodicWindowCount: Int = 0
+    private var llmConfigObserver: NSObjectProtocol?
+
+    // Multi-clip pause/resume state
+    private var clipTimeOffset: TimeInterval = 0
+    private var pausedElapsedTime: TimeInterval = 0
+    private var recordedAudioFilePaths: [String] = []
+
     init(
         audioCaptureService: AudioCaptureService = AudioCaptureService(),
         asrEngine: any ASREngine,
@@ -70,6 +80,11 @@ final class RecordingViewModel {
         self.summarizerConfig = summarizerConfig
         self.llmConfig = llmConfig
         setupASRCallbacks()
+        llmConfigObserver = NotificationCenter.default.addObserver(
+            forName: .llmConfigDidSave, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.reloadLLMConfig()
+        }
     }
 
     convenience init(
@@ -101,6 +116,18 @@ final class RecordingViewModel {
     deinit {
         timer?.invalidate()
         summaryTimer?.invalidate()
+        if let observer = llmConfigObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    private func reloadLLMConfig() {
+        let newConfig = LLMProfileStore.resolveConfig(for: .live)
+        if newConfig.provider != llmConfig.provider {
+            summarizerService = SummarizerService(engine: LLMEngineFactory.create(from: newConfig))
+        }
+        llmConfig = newConfig
+        Self.logger.info("Reloaded LLM config: provider=\(newConfig.provider.rawValue), model=\(newConfig.model)")
     }
 
     private func setupASRCallbacks() {
@@ -192,7 +219,7 @@ final class RecordingViewModel {
         let session = RecordingSession(
             title: "Recording \(Date().formatted(date: .abbreviated, time: .shortened))"
         )
-        session.audioFilePath = fileURL.lastPathComponent
+        recordedAudioFilePaths = [fileURL.lastPathComponent]
         currentSession = session
 
         recordingStartTime = Date()
@@ -200,6 +227,83 @@ final class RecordingViewModel {
         segments = []
         partialText = ""
         clock.reset()
+        clipTimeOffset = 0
+        pausedElapsedTime = 0
+    }
+
+    // MARK: - Pause / Resume
+
+    func pauseRecording() async {
+        guard state == .recording else { return }
+        Self.logger.info("Pausing recording...")
+
+        // 1. Stop timers
+        timer?.invalidate()
+        timer = nil
+        summaryTimer?.invalidate()
+        summaryTimer = nil
+
+        // 2. Disconnect audio callbacks
+        audioCaptureService.onAudioBuffer = nil
+        audioCaptureService.onAudioLevel = nil
+        audioMeter.reset()
+
+        // 3. Stop audio capture (saves current clip file)
+        if let savedURL = audioCaptureService.stopCapture() {
+            Self.logger.info("Clip saved to \(savedURL.path)")
+        }
+
+        // 4. Drain ASR results for current clip
+        await asrEngine.stopRecognition()
+
+        // 5. Promote orphaned partialText
+        if !partialText.isEmpty {
+            Self.logger.info("Promoting orphaned partialText on pause (\(self.partialText.count) chars)")
+            let segment = TranscriptSegment(
+                startTime: segments.last?.endTime ?? clipTimeOffset,
+                endTime: clock.elapsedTime,
+                text: partialText,
+                confidence: 0.0,
+                language: nil
+            )
+            segments.append(segment)
+            partialText = ""
+        }
+
+        // 6. Save elapsed time and transition to paused
+        pausedElapsedTime = clock.elapsedTime
+        state = .paused
+        Self.logger.info("Recording paused at \(self.pausedElapsedTime.hhmmss)")
+    }
+
+    func resumeRecording() async {
+        guard state == .paused else { return }
+        Self.logger.info("Resuming recording...")
+
+        // 1. Update clip offset — all new ASR timestamps will be shifted by this amount
+        clipTimeOffset = pausedElapsedTime
+
+        // 2. Start new audio pipeline (new file + new ASR session)
+        do {
+            let fileURL = try startAudioPipeline()
+            recordedAudioFilePaths.append(fileURL.lastPathComponent)
+            Self.logger.info("New clip started: \(fileURL.lastPathComponent)")
+        } catch {
+            errorMessage = "Failed to resume recording: \(error.localizedDescription)"
+            Self.logger.error("Resume failed: \(error.localizedDescription)")
+            return
+        }
+
+        // 3. Restore elapsed timer from paused time
+        let resumeDate = Date()
+        recordingStartTime = resumeDate.addingTimeInterval(-pausedElapsedTime)
+        startElapsedTimer()
+
+        // 4. Restart summary timer
+        startSummaryTimer()
+
+        state = .recording
+        Self.logger.info("Recording resumed from \(self.pausedElapsedTime.hhmmss)")
     }
 
     private func startElapsedTimer() {
@@ -212,6 +316,10 @@ final class RecordingViewModel {
     }
 
     private func startSummaryTimer() {
+        guard summarizerConfig.liveSummarizationEnabled else {
+            Self.logger.info("Live summarization disabled — skipping summary timer")
+            return
+        }
         let interval = TimeInterval(summarizerConfig.intervalMinutes * 60)
         guard interval > 0 else { return }
         summaryTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
@@ -237,7 +345,6 @@ final class RecordingViewModel {
         let coveringTo = TimeInterval(currentWindow + 1) * intervalSeconds
 
         isSummarizing = true
-        summaryError = nil
 
         summaryTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -249,6 +356,8 @@ final class RecordingViewModel {
                     llmConfig: llmCfg
                 )
                 guard !Task.isCancelled else { return }
+                // Clear previous error only on success
+                self.summaryError = nil
                 if !content.isEmpty {
                     let block = SummaryBlock(
                         coveringFrom: coveringFrom,
@@ -272,21 +381,26 @@ final class RecordingViewModel {
     }
 
     func stopRecording(modelContext: ModelContext? = nil) {
-        guard state == .recording else { return }
+        guard state == .recording || state == .paused else { return }
+
+        let wasPaused = state == .paused
 
         timer?.invalidate()
         timer = nil
         summaryTimer?.invalidate()
         summaryTimer = nil
         // Don't cancel summaryTask — let in-flight LLM call finish; drainTask awaits it
-        audioCaptureService.onAudioBuffer = nil
-        audioCaptureService.onAudioLevel = nil
-        audioMeter.reset()
 
-        if let savedURL = audioCaptureService.stopCapture() {
-            Self.logger.info("Audio saved to \(savedURL.path)")
-        } else {
-            Self.logger.warning("stopCapture returned nil — no audio file was saved")
+        if !wasPaused {
+            audioCaptureService.onAudioBuffer = nil
+            audioCaptureService.onAudioLevel = nil
+            audioMeter.reset()
+
+            if let savedURL = audioCaptureService.stopCapture() {
+                Self.logger.info("Audio saved to \(savedURL.path)")
+            } else {
+                Self.logger.warning("stopCapture returned nil — no audio file was saved")
+            }
         }
 
         if let session = currentSession {
@@ -295,12 +409,17 @@ final class RecordingViewModel {
 
         // Show stopping UI while draining ASR results
         state = .stopping
+        stoppingStatus = "Finishing transcription..."
 
         // Background: drain ASR results → persist to SwiftData → signal completed
         drainTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            await self.asrEngine.stopRecognition()
-            guard !Task.isCancelled else { return }
+
+            // If we were recording (not paused), drain ASR
+            if !wasPaused {
+                await self.asrEngine.stopRecognition()
+                guard !Task.isCancelled else { return }
+            }
 
             // Promote orphaned partialText to a final segment
             if !self.partialText.isEmpty {
@@ -316,37 +435,70 @@ final class RecordingViewModel {
                 self.partialText = ""
             }
 
-            // Wait for any in-flight periodic summary to finish before persisting
+            // Persist transcript immediately (session + segments)
+            self.stoppingStatus = "Saving..."
+            self.persistSession(modelContext: modelContext, includeSummaries: false)
+
+            // Wait for any in-flight periodic summary to finish
             if let summaryTask = self.summaryTask {
+                self.stoppingStatus = "Generating summaries..."
                 Self.logger.info("Awaiting in-flight periodic summary before persist...")
                 await summaryTask.value
                 self.summaryTask = nil
             }
 
-            // Persist immediately — final summary runs on detail view after navigation
-            self.persistSession(modelContext: modelContext)
+            // Save summaries
+            self.persistSummaries(modelContext: modelContext)
+
+            // Dispatch background overall summary (independent of view lifecycle)
+            if let session = self.currentSession, let modelContext {
+                BackgroundSummaryService.shared.dispatchOverallSummary(
+                    sessionID: session.id, container: modelContext.container
+                )
+            }
+
             self.state = .completed
         }
     }
 
-    /// Persist current session + segments to SwiftData. Idempotent — skips if already persisted.
-    func persistSession(modelContext: ModelContext?) {
+    /// Persist current session + segments (and optionally summaries) to SwiftData. Idempotent — skips if already persisted.
+    func persistSession(modelContext: ModelContext?, includeSummaries: Bool = true) {
         guard !sessionPersisted, let modelContext, let session = currentSession else { return }
         sessionPersisted = true
+        session.audioFilePaths = recordedAudioFilePaths
+        // Legacy compat: also set audioFilePath to first clip
+        session.audioFilePath = recordedAudioFilePaths.first
         modelContext.insert(session)
         for segment in segments {
             segment.session = session
             modelContext.insert(segment)
         }
-        for summary in summaries {
+        if includeSummaries {
+            for summary in summaries {
+                summary.session = session
+                modelContext.insert(summary)
+            }
+        }
+        do {
+            try modelContext.save()
+            Self.logger.info("Session saved with \(self.segments.count) segments\(includeSummaries ? ", \(self.summaries.count) summaries" : "")")
+        } catch {
+            errorMessage = "Failed to save session: \(error.localizedDescription)"
+        }
+    }
+
+    /// Persist summaries to an already-saved session.
+    private func persistSummaries(modelContext: ModelContext?) {
+        guard let modelContext, let session = currentSession else { return }
+        for summary in summaries where summary.session == nil {
             summary.session = session
             modelContext.insert(summary)
         }
         do {
             try modelContext.save()
-            Self.logger.info("Session saved with \(self.segments.count) segments, \(self.summaries.count) summaries")
+            Self.logger.info("Summaries saved: \(self.summaries.count)")
         } catch {
-            errorMessage = "Failed to save session: \(error.localizedDescription)"
+            errorMessage = "Failed to save summaries: \(error.localizedDescription)"
         }
     }
 
@@ -370,15 +522,74 @@ final class RecordingViewModel {
         isSummarizing = false
         latestSummary = nil
         summaryError = nil
+        stoppingStatus = "Saving..."
         lastSummarizedSegmentCount = 0
         nextPeriodicCoveringFrom = 0
         periodicWindowCount = 0
         summaryTask?.cancel()
         summaryTask = nil
+        clipTimeOffset = 0
+        pausedElapsedTime = 0
+        recordedAudioFilePaths = []
     }
 
     func clearSummaryError() {
         summaryError = nil
+    }
+
+    /// Immediately persist session data and cancel all in-flight tasks.
+    /// Used for fast app quit — no ASR drain, no LLM wait.
+    func forceQuitPersist(modelContext: ModelContext?) {
+        Self.logger.info("Force-quit persist: saving session data immediately")
+
+        timer?.invalidate()
+        timer = nil
+        summaryTimer?.invalidate()
+        summaryTimer = nil
+        summaryTask?.cancel()
+        summaryTask = nil
+        drainTask?.cancel()
+        drainTask = nil
+
+        // Stop audio capture if still running
+        if state == .recording {
+            audioCaptureService.onAudioBuffer = nil
+            audioCaptureService.onAudioLevel = nil
+            _ = audioCaptureService.stopCapture()
+        }
+
+        if let session = currentSession {
+            session.endedAt = Date()
+            session.isPartial = true
+        }
+
+        // Promote orphaned partialText
+        if !partialText.isEmpty {
+            let segment = TranscriptSegment(
+                startTime: segments.last?.endTime ?? 0,
+                endTime: clock.elapsedTime,
+                text: partialText,
+                confidence: 0.0,
+                language: nil
+            )
+            segments.append(segment)
+            partialText = ""
+        }
+
+        if sessionPersisted {
+            // Session already saved by drainTask — just save isPartial + any pending summaries
+            persistSummaries(modelContext: modelContext)
+            if let modelContext {
+                do {
+                    try modelContext.save()
+                    Self.logger.info("Force-quit: updated existing session (isPartial, summaries)")
+                } catch {
+                    Self.logger.error("Force-quit save failed: \(error.localizedDescription)")
+                }
+            }
+        } else {
+            persistSession(modelContext: modelContext)
+        }
     }
 
     func awaitDrainCompletion() async {
@@ -392,9 +603,10 @@ final class RecordingViewModel {
                 partialText = ""
                 return
             }
+            // Apply clip offset for cumulative timestamps across pause/resume clips
             let segment = TranscriptSegment(
-                startTime: result.startTime,
-                endTime: result.endTime,
+                startTime: result.startTime + clipTimeOffset,
+                endTime: result.endTime + clipTimeOffset,
                 text: result.text,
                 confidence: result.confidence,
                 language: result.language

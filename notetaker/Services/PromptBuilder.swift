@@ -104,6 +104,35 @@ enum PromptBuilder {
         return parts.joined(separator: "\n\n")
     }
 
+    /// Build a prompt to generate a concise session title from transcript segments.
+    static func buildTitlePrompt(
+        segments: [TranscriptSegment],
+        config: SummarizerConfig
+    ) -> String {
+        var parts: [String] = []
+
+        parts.append("You are a concise title generator. Generate a short, descriptive title (5-10 words max) for the following transcript.")
+        parts.append("Output ONLY the title text. Do not include quotes, punctuation at the end, or any preamble.")
+
+        if config.summaryLanguage != "auto" {
+            let lang = sanitizeLanguage(config.summaryLanguage)
+            parts.append("IMPORTANT: Write the title in \(lang).")
+        }
+
+        if !segments.isEmpty {
+            parts.append("Transcript:")
+            for segment in segments.prefix(50) {
+                let timestamp = segment.startTime.mmss
+                parts.append("[\(timestamp)] \(segment.text)")
+            }
+            if segments.count > 50 {
+                parts.append("... (\(segments.count - 50) more segments)")
+            }
+        }
+
+        return parts.joined(separator: "\n\n")
+    }
+
     static func buildOverallSummaryPrompt(
         chunkSummaries: [(coveringFrom: TimeInterval, coveringTo: TimeInterval, content: String)],
         config: SummarizerConfig

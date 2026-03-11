@@ -29,7 +29,12 @@ nonisolated protocol LLMEngine: AnyObject, Sendable {
 nonisolated enum LLMHTTPHelpers {
     static func performRequest(_ request: URLRequest, session: URLSession) async throws -> (Data, URLResponse) {
         do {
+            try Task.checkCancellation()
             return try await session.data(for: request)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            throw CancellationError()
         } catch {
             throw LLMEngineError.networkError(error)
         }
@@ -49,5 +54,24 @@ nonisolated enum LLMHTTPHelpers {
         } catch {
             throw LLMEngineError.decodingError(error.localizedDescription)
         }
+    }
+
+    /// Normalize a base URL by stripping trailing slash and common path suffixes.
+    /// e.g. "https://api.openai.com/v1/" → "https://api.openai.com/v1"
+    /// e.g. "https://api.anthropic.com/v1" → "https://api.anthropic.com" (when stripV1 is true)
+    static func normalizeBaseURL(_ raw: String, stripV1: Bool = false) -> String {
+        var url = raw
+        while url.hasSuffix("/") { url = String(url.dropLast()) }
+        if stripV1 && url.hasSuffix("/v1") { url = String(url.dropLast(3)) }
+        return url
+    }
+
+    /// Strip `<think>...</think>` blocks from model output when thinking is disabled.
+    static func stripThinking(from text: String) -> String {
+        text.replacingOccurrences(
+            of: #"<think>[\s\S]*?</think>"#,
+            with: "",
+            options: .regularExpression
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

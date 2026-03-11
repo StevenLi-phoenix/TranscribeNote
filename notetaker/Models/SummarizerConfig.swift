@@ -1,6 +1,7 @@
 import Foundation
 
 nonisolated struct SummarizerConfig: Codable, Sendable, Equatable {
+    var liveSummarizationEnabled: Bool
     var intervalMinutes: Int
     var minTranscriptLength: Int
     var summaryLanguage: String
@@ -9,6 +10,7 @@ nonisolated struct SummarizerConfig: Codable, Sendable, Equatable {
     var maxContextTokens: Int
 
     static let `default` = SummarizerConfig(
+        liveSummarizationEnabled: true,
         intervalMinutes: 1,
         minTranscriptLength: 100,
         summaryLanguage: "auto",
@@ -16,6 +18,35 @@ nonisolated struct SummarizerConfig: Codable, Sendable, Equatable {
         includeContext: true,
         maxContextTokens: 2000
     )
+
+    init(
+        liveSummarizationEnabled: Bool = true,
+        intervalMinutes: Int = 1,
+        minTranscriptLength: Int = 100,
+        summaryLanguage: String = "auto",
+        summaryStyle: SummaryStyle = .bullets,
+        includeContext: Bool = true,
+        maxContextTokens: Int = 2000
+    ) {
+        self.liveSummarizationEnabled = liveSummarizationEnabled
+        self.intervalMinutes = intervalMinutes
+        self.minTranscriptLength = minTranscriptLength
+        self.summaryLanguage = summaryLanguage
+        self.summaryStyle = summaryStyle
+        self.includeContext = includeContext
+        self.maxContextTokens = maxContextTokens
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        liveSummarizationEnabled = try container.decodeIfPresent(Bool.self, forKey: .liveSummarizationEnabled) ?? true
+        intervalMinutes = try container.decode(Int.self, forKey: .intervalMinutes)
+        minTranscriptLength = try container.decode(Int.self, forKey: .minTranscriptLength)
+        summaryLanguage = try container.decode(String.self, forKey: .summaryLanguage)
+        summaryStyle = try container.decode(SummaryStyle.self, forKey: .summaryStyle)
+        includeContext = try container.decode(Bool.self, forKey: .includeContext)
+        maxContextTokens = try container.decode(Int.self, forKey: .maxContextTokens)
+    }
 
     /// Load from UserDefaults, falling back to `.default`.
     static func fromUserDefaults(key: String = "summarizerConfigJSON") -> SummarizerConfig {

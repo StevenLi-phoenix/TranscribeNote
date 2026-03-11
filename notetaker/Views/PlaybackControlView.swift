@@ -38,7 +38,7 @@ struct PlaybackControlView: View {
                 .font(ControlBarMetrics.timeFont)
                 .frame(minWidth: ControlBarMetrics.timeMinWidth, alignment: .leading)
         }
-        .frame(minHeight: ControlBarMetrics.barMinHeight)
-        .padding()
+        .padding(.horizontal)
+        .padding(.vertical, DS.Spacing.sm)
     }
 }

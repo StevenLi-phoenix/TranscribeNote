@@ -10,9 +10,10 @@ nonisolated final class AnthropicEngine: LLMEngine, @unchecked Sendable {
     }
 
     func generate(prompt: String, config: LLMConfig) async throws -> String {
-        let baseURL = config.baseURL.isEmpty ? "https://api.anthropic.com" : config.baseURL
-        guard let url = URL(string: "\(baseURL)/v1/messages") else {
-            throw LLMEngineError.invalidURL(baseURL)
+        let raw = config.baseURL.isEmpty ? "https://api.anthropic.com" : config.baseURL
+        let root = LLMHTTPHelpers.normalizeBaseURL(raw, stripV1: true)
+        guard let url = URL(string: "\(root)/v1/messages") else {
+            throw LLMEngineError.invalidURL(root)
         }
 
         var request = URLRequest(url: url)
@@ -45,8 +46,11 @@ nonisolated final class AnthropicEngine: LLMEngine, @unchecked Sendable {
         }
 
         let anthropicResponse = try LLMHTTPHelpers.decodeResponse(AnthropicResponse.self, from: data)
-        guard let text = anthropicResponse.content.first(where: { $0.type == "text" })?.text else {
+        guard var text = anthropicResponse.content.first(where: { $0.type == "text" })?.text else {
             throw LLMEngineError.emptyResponse
+        }
+        if !config.thinkingEnabled {
+            text = LLMHTTPHelpers.stripThinking(from: text)
         }
         let result = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !result.isEmpty else { throw LLMEngineError.emptyResponse }

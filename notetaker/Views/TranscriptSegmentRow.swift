@@ -8,7 +8,7 @@ struct TranscriptSegmentRow: View {
             Text(segment.startTime.mmss)
                 .font(DS.Typography.timestamp)
                 .foregroundStyle(.secondary)
-                .frame(width: DS.Layout.timestampWidth, alignment: .trailing)
+                .frame(width: DS.Layout.timestampWidth, alignment: .leading)
 
             Text(segment.text)
                 .font(DS.Typography.body)
