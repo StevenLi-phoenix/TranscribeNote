@@ -11,15 +11,14 @@ permissions:
   issues: write
   id-token: write
 
-# Pre-cleanup: cancel redundant in-progress runs for the same PR
+# Cancel redundant in-progress runs for the same PR
 concurrency:
   group: pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   # ──────────────────────────────────────────────
-  # Pre-cleanup: remove stale review comments from
-  # previous pushes so the PR stays clean
+  # Pre-cleanup: remove stale review comments
   # ──────────────────────────────────────────────
   pre-cleanup:
     runs-on: ubuntu-latest
@@ -47,60 +46,10 @@ jobs:
             console.log(`Cleaned ${botComments.length} stale review comment(s)`);
 
   # ──────────────────────────────────────────────
-  # Build & Test (runs after pre-cleanup)
-  # ──────────────────────────────────────────────
-  test:
-    needs: pre-cleanup
-    runs-on: macos-15
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Select Xcode
-        run: |
-          set -euo pipefail
-          XCODE=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
-          echo "Using $XCODE"
-          sudo xcode-select -s "$XCODE"
-          xcodebuild -version
-
-      - name: Build
-        run: |
-          set -euo pipefail
-          xcodebuild -scheme notetaker -configuration Debug build \
-            -destination 'platform=macOS' \
-            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -5
-
-      - name: Check macOS version
-        id: os-check
-        run: |
-          set -euo pipefail
-          MACOS_MAJOR=$(sw_vers -productVersion | cut -d. -f1)
-          echo "macOS major version: $MACOS_MAJOR"
-          if [ "$MACOS_MAJOR" -ge 26 ]; then
-            echo "can_test=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "can_test=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::macOS $MACOS_MAJOR < 26 — skipping tests (deployment target requires macOS 26.2+)"
-          fi
-
-      - name: Run Unit Tests
-        if: steps.os-check.outputs.can_test == 'true'
-        run: |
-          set -euo pipefail
-          xcodebuild -scheme notetaker -configuration Debug \
-            -testPlan UnitTests \
-            -destination 'platform=macOS' \
-            CODE_SIGNING_ALLOWED=NO \
-            test 2>&1 | tail -20
-
-  # ──────────────────────────────────────────────
-  # Claude Code Review (runs after test passes)
-  # Sequential: test must pass before review starts
+  # Claude Code Review (build+test is handled by ci.yml)
   # ──────────────────────────────────────────────
   claude-review:
-    needs: test
+    needs: pre-cleanup
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -152,7 +101,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          # Get the latest Claude review comment
           COMMENT=$(gh pr view ${{ github.event.pull_request.number }} \
             --repo ${{ github.repository }} \
             --json comments \
@@ -167,7 +115,9 @@ jobs:
           fi
 
   # ──────────────────────────────────────────────
-  # Auto-merge: only if tests pass AND Claude approves
+  # Auto-merge: approve + enable auto-merge
+  # Uses --auto to wait for required status checks
+  # (ci.yml build-and-test) before actually merging
   # ──────────────────────────────────────────────
   auto-merge:
     needs: claude-review
@@ -181,14 +131,15 @@ jobs:
           gh pr review ${{ github.event.pull_request.number }} \
             --repo ${{ github.repository }} \
             --approve \
-            --body "Auto-approved: tests passed and Claude Code review approved."
+            --body "Auto-approved: Claude Code review approved."
 
-      - name: Merge PR
+      - name: Enable auto-merge
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr merge ${{ github.event.pull_request.number }} \
             --repo ${{ github.repository }} \
+            --auto \
             --merge \
             --delete-branch
 
