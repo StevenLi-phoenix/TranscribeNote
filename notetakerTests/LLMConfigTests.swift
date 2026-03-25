@@ -5,6 +5,13 @@ import Foundation
 @Suite("LLMConfig Tests", .serialized)
 struct LLMConfigTests {
 
+    private static let suiteName = "com.notetaker.test.LLMConfigTests"
+    private let testDefaults = UserDefaults(suiteName: LLMConfigTests.suiteName)!
+
+    init() {
+        testDefaults.removePersistentDomain(forName: LLMConfigTests.suiteName)
+    }
+
     // MARK: - Init & Defaults
 
     @Test func defaultValues() {

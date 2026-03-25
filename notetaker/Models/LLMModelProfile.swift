@@ -54,11 +54,11 @@ enum LLMProfileStore {
 
     // MARK: - Profile CRUD
 
-    static func loadProfiles() -> [LLMModelProfile] {
-        guard let json = UserDefaults.standard.string(forKey: profilesKey),
+    static func loadProfiles(defaults: UserDefaults = .standard) -> [LLMModelProfile] {
+        guard let json = defaults.string(forKey: profilesKey),
               let data = json.data(using: .utf8),
               var profiles = try? JSONDecoder().decode([LLMModelProfile].self, from: data) else {
-            return migrateFromLegacy()
+            return migrateFromLegacy(defaults: defaults)
         }
         // Hydrate API keys from Keychain
         for i in profiles.indices {
@@ -67,13 +67,13 @@ enum LLMProfileStore {
         return profiles
     }
 
-    static func saveProfiles(_ profiles: [LLMModelProfile]) {
+    static func saveProfiles(_ profiles: [LLMModelProfile], defaults: UserDefaults = .standard) {
         guard let data = try? JSONEncoder().encode(profiles),
               let json = String(data: data, encoding: .utf8) else {
             logger.error("Failed to encode LLM profiles")
             return
         }
-        UserDefaults.standard.set(json, forKey: profilesKey)
+        defaults.set(json, forKey: profilesKey)
         // Save each API key to Keychain (delete entry if empty to avoid storing blank secrets)
         for profile in profiles {
             if profile.config.apiKey.isEmpty {
@@ -85,62 +85,62 @@ enum LLMProfileStore {
         logger.debug("Saved \(profiles.count) LLM profiles")
     }
 
-    static func deleteProfile(id: UUID, from profiles: inout [LLMModelProfile]) {
+    static func deleteProfile(id: UUID, from profiles: inout [LLMModelProfile], defaults: UserDefaults = .standard) {
         if let index = profiles.firstIndex(where: { $0.id == id }) {
             let profile = profiles.remove(at: index)
             KeychainService.delete(key: profile.keychainKey)
             // Clear any role assignments pointing to this profile
             for role in LLMRole.allCases {
-                if assignedProfileID(for: role) == id {
-                    UserDefaults.standard.removeObject(forKey: role.profileIDKey)
+                if assignedProfileID(for: role, defaults: defaults) == id {
+                    defaults.removeObject(forKey: role.profileIDKey)
                 }
             }
-            saveProfiles(profiles)
+            saveProfiles(profiles, defaults: defaults)
             logger.info("Deleted profile '\(profile.name)' (\(id))")
         }
     }
 
     // MARK: - Role Assignment
 
-    static func assignedProfileID(for role: LLMRole) -> UUID? {
-        guard let str = UserDefaults.standard.string(forKey: role.profileIDKey) else { return nil }
+    static func assignedProfileID(for role: LLMRole, defaults: UserDefaults = .standard) -> UUID? {
+        guard let str = defaults.string(forKey: role.profileIDKey) else { return nil }
         return UUID(uuidString: str)
     }
 
-    static func setAssignedProfileID(_ id: UUID?, for role: LLMRole) {
+    static func setAssignedProfileID(_ id: UUID?, for role: LLMRole, defaults: UserDefaults = .standard) {
         if let id {
-            UserDefaults.standard.set(id.uuidString, forKey: role.profileIDKey)
+            defaults.set(id.uuidString, forKey: role.profileIDKey)
         } else {
-            UserDefaults.standard.removeObject(forKey: role.profileIDKey)
+            defaults.removeObject(forKey: role.profileIDKey)
         }
     }
 
-    static func inheritsLive(for role: LLMRole) -> Bool {
+    static func inheritsLive(for role: LLMRole, defaults: UserDefaults = .standard) -> Bool {
         guard role != .live else { return false }
-        return UserDefaults.standard.bool(forKey: role.inheritsLiveKey)
+        return defaults.bool(forKey: role.inheritsLiveKey)
     }
 
-    static func setInheritsLive(_ value: Bool, for role: LLMRole) {
-        UserDefaults.standard.set(value, forKey: role.inheritsLiveKey)
+    static func setInheritsLive(_ value: Bool, for role: LLMRole, defaults: UserDefaults = .standard) {
+        defaults.set(value, forKey: role.inheritsLiveKey)
     }
 
     // MARK: - Config Resolution
 
     /// Resolve the effective LLMConfig for a given role.
-    static func resolveConfig(for role: LLMRole) -> LLMConfig {
-        let profiles = loadProfiles()
+    static func resolveConfig(for role: LLMRole, defaults: UserDefaults = .standard) -> LLMConfig {
+        let profiles = loadProfiles(defaults: defaults)
 
         // If this role inherits live, resolve live instead
-        if role != .live && inheritsLive(for: role) {
-            return resolveConfigFromProfiles(role: .live, profiles: profiles)
+        if role != .live && inheritsLive(for: role, defaults: defaults) {
+            return resolveConfigFromProfiles(role: .live, profiles: profiles, defaults: defaults)
         }
 
-        return resolveConfigFromProfiles(role: role, profiles: profiles)
+        return resolveConfigFromProfiles(role: role, profiles: profiles, defaults: defaults)
     }
 
-    private static func resolveConfigFromProfiles(role: LLMRole, profiles: [LLMModelProfile]) -> LLMConfig {
+    private static func resolveConfigFromProfiles(role: LLMRole, profiles: [LLMModelProfile], defaults: UserDefaults = .standard) -> LLMConfig {
         // Try assigned profile ID
-        if let profileID = assignedProfileID(for: role),
+        if let profileID = assignedProfileID(for: role, defaults: defaults),
            let profile = profiles.first(where: { $0.id == profileID }) {
             return profile.config
         }
@@ -149,11 +149,11 @@ enum LLMProfileStore {
             return first.config
         }
         // Legacy fallback
-        return legacyFallbackConfig(for: role)
+        return legacyFallbackConfig(for: role, defaults: defaults)
     }
 
     /// Fallback to legacy UserDefaults keys for backward compatibility.
-    private static func legacyFallbackConfig(for role: LLMRole) -> LLMConfig {
+    private static func legacyFallbackConfig(for role: LLMRole, defaults: UserDefaults = .standard) -> LLMConfig {
         let keys: [String]
         switch role {
         case .live: keys = ["liveLLMConfigJSON", "llmConfigJSON"]
@@ -161,8 +161,8 @@ enum LLMProfileStore {
         case .title: keys = ["titleLLMConfigJSON", "liveLLMConfigJSON", "llmConfigJSON"]
         }
         for key in keys {
-            if let json = UserDefaults.standard.string(forKey: key), !json.isEmpty {
-                return LLMConfig.fromUserDefaults(key: key)
+            if let json = defaults.string(forKey: key), !json.isEmpty {
+                return LLMConfig.fromUserDefaults(key: key, defaults: defaults)
             }
         }
         return .default
@@ -171,7 +171,7 @@ enum LLMProfileStore {
     // MARK: - Migration
 
     /// Migrate legacy per-role configs into profiles on first launch.
-    private static func migrateFromLegacy() -> [LLMModelProfile] {
+    private static func migrateFromLegacy(defaults: UserDefaults = .standard) -> [LLMModelProfile] {
         logger.info("No profiles found, migrating from legacy configs")
         var profiles: [LLMModelProfile] = []
         var seen = Set<String>() // Deduplicate by provider+model+baseURL
@@ -184,8 +184,8 @@ enum LLMProfileStore {
         ]
 
         for (key, role, fallbackName) in legacyKeys {
-            guard let json = UserDefaults.standard.string(forKey: key), !json.isEmpty else { continue }
-            var config = LLMConfig.fromUserDefaults(key: key)
+            guard let json = defaults.string(forKey: key), !json.isEmpty else { continue }
+            var config = LLMConfig.fromUserDefaults(key: key, defaults: defaults)
             let dedup = "\(config.provider.rawValue)|\(config.model)|\(config.baseURL)"
             guard !seen.contains(dedup) else { continue }
             seen.insert(dedup)
@@ -195,16 +195,16 @@ enum LLMProfileStore {
             profiles.append(profile)
 
             // Assign this profile to the role it came from
-            setAssignedProfileID(profile.id, for: role)
+            setAssignedProfileID(profile.id, for: role, defaults: defaults)
         }
 
         if profiles.isEmpty {
             let defaultProfile = LLMModelProfile(name: "Default", config: .default)
             profiles.append(defaultProfile)
-            setAssignedProfileID(defaultProfile.id, for: .live)
+            setAssignedProfileID(defaultProfile.id, for: .live, defaults: defaults)
         }
 
-        saveProfiles(profiles)
+        saveProfiles(profiles, defaults: defaults)
         logger.info("Migrated \(profiles.count) legacy configs into profiles")
         return profiles
     }
