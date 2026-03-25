@@ -17,8 +17,11 @@ A macOS note-taking/transcription app with live ASR, audio recording/playback, L
 # Build
 xcodebuild -scheme notetaker -configuration Debug build
 
-# Run unit tests (Swift Testing framework)
-xcodebuild -scheme notetaker -configuration Debug test
+# Run fast unit tests only (pure logic, no shared state — default for local dev)
+xcodebuild -scheme notetaker -testPlan UnitTests -configuration Debug test
+
+# Run full test suite (all unit + UI tests — for CI / PR to main)
+xcodebuild -scheme notetaker -testPlan FullTests -configuration Debug test
 
 # Run a specific test suite (e.g., RingBufferTests)
 xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerTests/RingBufferTests test
@@ -150,7 +153,9 @@ Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Mo
 - `DispatchQueue.main.asyncAfter` may not fire during `Task.sleep`-based polling in Swift Testing — use `DispatchQueue.global()` or avoid dispatch
 - UI launch tests use `runsForEachTargetApplicationUIConfiguration = true` to test light/dark mode; do NOT delete
 - **Close the app before running tests** — if the app is already running, UI tests attach to the existing instance instead of launching a fresh one, causing `Failed to terminate` errors and test failures
-- 19 test suites use `.serialized` to prevent parallel UserDefaults/Keychain/URLProtocol contamination; ~737 tests total across ~60 test files
+- **Two-tier test plans**: `UnitTests.xctestplan` (22 pure-logic suites, ~257 tests, <0.2s) is default for Cmd+U; `FullTests.xctestplan` (all suites + UI tests) for CI on PR to main; shared scheme at `xcshareddata/xcschemes/notetaker.xcscheme` associates both plans
+- **Test plan gotcha**: Xcode auto-generated schemes don't support `-testPlan`; the explicit shared scheme with `shouldAutocreateTestPlan = "NO"` is required; verify with `xcodebuild -scheme notetaker -showTestPlans`
+- 31 test suites use `.serialized` to prevent parallel UserDefaults/Keychain/URLProtocol/SwiftData/NSPasteboard contamination; ~737 tests total across ~60 test files; UnitTests plan excludes all serialized suites for fast local iteration
 
 ## Known Limitations
 

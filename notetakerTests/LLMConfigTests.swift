@@ -9,10 +9,10 @@ struct LLMConfigTests {
 
     @Test func defaultValues() {
         let config = LLMConfig()
-        #expect(config.provider == .custom)
-        #expect(config.model == "qwen3-14b-mlx")
+        #expect(config.provider == .foundationModels)
+        #expect(config.model == "Apple Intelligence")
         #expect(config.apiKey == "")
-        #expect(config.baseURL == "http://localhost:1234/v1")
+        #expect(config.baseURL == "")
         #expect(config.temperature == 0.7)
         #expect(config.maxTokens == 4096)
         #expect(config.thinkingEnabled == false)
@@ -20,8 +20,8 @@ struct LLMConfigTests {
 
     @Test func staticDefault() {
         let config = LLMConfig.default
-        #expect(config.provider == .custom)
-        #expect(config.model == "qwen3-14b-mlx")
+        #expect(config.provider == .foundationModels)
+        #expect(config.model == "Apple Intelligence")
         #expect(config.temperature == 0.7)
     }
 

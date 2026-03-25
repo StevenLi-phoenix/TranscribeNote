@@ -6,7 +6,8 @@ import Foundation
 struct LLMProviderTests {
 
     @Test func allCases() {
-        #expect(LLMProvider.allCases.count == 4)
+        #expect(LLMProvider.allCases.count == 5)
+        #expect(LLMProvider.allCases.contains(.foundationModels))
         #expect(LLMProvider.allCases.contains(.ollama))
         #expect(LLMProvider.allCases.contains(.openAI))
         #expect(LLMProvider.allCases.contains(.anthropic))
@@ -14,6 +15,7 @@ struct LLMProviderTests {
     }
 
     @Test func rawValues() {
+        #expect(LLMProvider.foundationModels.rawValue == "foundationModels")
         #expect(LLMProvider.ollama.rawValue == "ollama")
         #expect(LLMProvider.openAI.rawValue == "openAI")
         #expect(LLMProvider.anthropic.rawValue == "anthropic")
@@ -21,6 +23,7 @@ struct LLMProviderTests {
     }
 
     @Test func defaultBaseURLs() {
+        #expect(LLMProvider.foundationModels.defaultBaseURL == "")
         #expect(LLMProvider.ollama.defaultBaseURL == "http://localhost:11434")
         #expect(LLMProvider.openAI.defaultBaseURL == "https://api.openai.com/v1")
         #expect(LLMProvider.anthropic.defaultBaseURL == "https://api.anthropic.com")

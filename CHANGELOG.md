@@ -10,3 +10,28 @@
 
 - Added 315 new tests across 10 files (5,188 lines) via parallel agent swarm covering AudioExporter, BackgroundSummaryService, RecordingViewModel state machine/dedup/forceQuit, AudioCaptureService+SimpleVAD edge cases, SummarizerService full API, PromptBuilder full API, CrashLogService file lifecycle, LLMConfig/Provider/Profile/Store, TranscriptExporter formatting+clipboard, and SchedulerViewModel scheduling/calendar/repeat; added .serialized to 19 test suites to fix parallel UserDefaults/Keychain contamination; 737/737 tests pass (2 cross-suite race condition tests documented and disabled)
   Files: AudioExporterTests.swift, BackgroundSummaryServiceTests.swift, RecordingViewModelCoverageTests.swift, AudioCaptureServiceExtendedTests.swift, SummarizerServiceExtendedTests.swift, PromptBuilderExtendedTests.swift, CrashLogServiceCoverageTests.swift, LLMConfigCoverageTests.swift, TranscriptExporterExtendedTests.swift, SchedulerViewModelExtendedTests.swift, KeychainServiceTests.swift, KeychainMigrationTests.swift, LLMConfigTests.swift, LLMProviderTests.swift, LLMEngineFactoryTests.swift, LLMHTTPHelpersTests.swift, LLMModelProfileTests.swift, NoopEngineTests.swift, TranscriptExporterTests.swift, SchedulerViewModelTests.swift, VADConfigTests.swift, SummarizerConfigExtendedTests.swift, CalendarServiceTests.swift, CalendarServiceExtendedTests.swift, ScheduledRecordingTests.swift, ScheduledRecordingExtendedTests.swift, KeychainMigrationExtendedTests.swift
+
+## [2026-03-24 22:46]
+
+- Evaluated PROPOSAL.md (106 improvement points across 7 rounds) and generated Chinese translation plan_zh.md; diagnosed and resolved ralph-loop plugin infinite Stop hook loop
+  Files: plan_zh.md, .claude/ralph-loop.local.md
+
+## [2026-03-24 23:19]
+
+- Brainstormed 213 app improvement proposals across 12 rounds (AI intelligence, UX polish, frontend craft, new features, interaction & intelligence, fresh angles, deep integration, emotional craft, content alchemy, final polish, app identity); renamed PLAN.md to PROPOSAL.md to better reflect its purpose
+  Files: PROPOSAL.md
+
+## [2026-03-24 23:47]
+
+- Created 34 detailed GitHub feature issues from plan_zh.md enhancement plan with priority labels, competitive analysis (WebSearch), implementation plans, file impact lists, and acceptance criteria; covers AI features, UX polish, export/integration, local-first, accessibility, platform-native (macOS 26), and automation
+  Files: (GitHub issues #10-#43, no local file changes)
+
+## [2026-03-25 00:25]
+
+- Added two-tier test plan strategy: UnitTests (22 pure-logic suites, 257 tests, <0.2s) for local dev and FullTests (all suites + UI tests) for CI on PR to main; created shared Xcode scheme with test plan associations; UnitTests set as default for Cmd+U
+  Files: UnitTests.xctestplan, FullTests.xctestplan, notetaker.xcodeproj/xcshareddata/xcschemes/notetaker.xcscheme
+
+## [2026-03-25 00:30]
+
+- Integrated Apple Foundation Models as zero-config default LLM engine (#17): added FoundationModelsEngine with safe availability check (never crashes if Apple Intelligence not enabled), .foundationModels provider as new default, async createWithFallback() in LLMEngineFactory, BackgroundSummaryService auto-fallback, and Settings UI with "Apple Intelligence (On-Device)" option hiding irrelevant fields; created #44 for future @Generable structured output
+  Files: FoundationModelsEngine.swift, LLMProvider.swift, LLMConfig.swift, LLMEngineFactory.swift, BackgroundSummaryService.swift, SettingsView.swift, FoundationModelsEngineTests.swift, LLMEngineFactoryFallbackTests.swift, LLMEngineFactoryTests.swift, LLMConfigTests.swift, LLMProviderTests.swift, LLMConfigCoverageTests.swift, LLMModelProfileTests.swift

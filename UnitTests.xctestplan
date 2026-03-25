@@ -1,0 +1,47 @@
+{
+  "configurations" : [
+    {
+      "id" : "A1B2C3D4-E5F6-7890-ABCD-EF1234567890",
+      "name" : "Default",
+      "options" : {}
+    }
+  ],
+  "defaultOptions" : {
+    "testTimeoutsEnabled" : true,
+    "defaultTestExecutionTimeAllowance" : 60
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:notetaker.xcodeproj",
+        "identifier" : "B522917C2F3D4491005D1EBC",
+        "name" : "notetakerTests"
+      },
+      "selectedTests" : [
+        "AudioConfigTests",
+        "AudioExporterTests",
+        "AudioLevelMeterTests",
+        "BufferFactoryTests",
+        "FileAudioSourceTests",
+        "FoundationModelsEngineTests",
+        "LLMHTTPHelpersTests",
+        "NoopEngineTests",
+        "PromptBuilderExtendedTests",
+        "PromptBuilderTests",
+        "RecordingSessionExtendedTests",
+        "RecordingSessionTests",
+        "RecordingViewModelTests",
+        "RingBufferTests",
+        "SimpleVADTests",
+        "SummarizerServiceExtendedTests",
+        "SummarizerServiceTests",
+        "SummaryBlockTests",
+        "SyntheticBufferInjectionTests",
+        "TimeIntervalFormattingTests",
+        "TranscriptSegmentTests",
+        "VADConfigTests"
+      ]
+    }
+  ],
+  "version" : 1
+}

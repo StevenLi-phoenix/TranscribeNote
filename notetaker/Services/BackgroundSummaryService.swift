@@ -55,7 +55,7 @@ final class BackgroundSummaryService {
             let context = container.mainContext
             let llmConfig = LLMProfileStore.resolveConfig(for: .overall)
             let summarizerConfig = SummarizerConfig.fromUserDefaults()
-            let engine = LLMEngineFactory.create(from: llmConfig)
+            let engine = await LLMEngineFactory.createWithFallback(from: llmConfig)
             let service = SummarizerService(engine: engine)
 
             let predicate = #Predicate<RecordingSession> { $0.id == sessionID }
@@ -187,7 +187,7 @@ final class BackgroundSummaryService {
         guard !segments.isEmpty else { return }
 
         let titleConfig = LLMProfileStore.resolveConfig(for: .title)
-        let engine = LLMEngineFactory.create(from: titleConfig)
+        let engine = await LLMEngineFactory.createWithFallback(from: titleConfig)
         let service = SummarizerService(engine: engine)
 
         do {

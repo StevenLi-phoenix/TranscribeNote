@@ -1,4 +1,5 @@
 nonisolated enum LLMProvider: String, Codable, CaseIterable, Sendable {
+    case foundationModels
     case ollama
     case openAI
     case anthropic
@@ -7,6 +8,7 @@ nonisolated enum LLMProvider: String, Codable, CaseIterable, Sendable {
     /// Default base URL for each provider (without trailing path components like /v1).
     var defaultBaseURL: String {
         switch self {
+        case .foundationModels: ""
         case .ollama: "http://localhost:11434"
         case .openAI: "https://api.openai.com/v1"
         case .anthropic: "https://api.anthropic.com"
