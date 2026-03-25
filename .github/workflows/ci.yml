@@ -33,7 +33,21 @@ jobs:
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tail -5
 
+      - name: Check macOS version
+        id: os-check
+        run: |
+          set -euo pipefail
+          MACOS_MAJOR=$(sw_vers -productVersion | cut -d. -f1)
+          echo "macOS major version: $MACOS_MAJOR"
+          if [ "$MACOS_MAJOR" -ge 26 ]; then
+            echo "can_test=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "can_test=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::macOS $MACOS_MAJOR < 26 — skipping tests (deployment target requires macOS 26.2+)"
+          fi
+
       - name: Run Unit Tests
+        if: steps.os-check.outputs.can_test == 'true'
         run: |
           set -euo pipefail
           xcodebuild -scheme notetaker -configuration Debug \
