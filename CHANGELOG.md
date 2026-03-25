@@ -40,3 +40,11 @@
 
 - Injected UserDefaults DI (`defaults: UserDefaults = .standard`) into 5 production files to enable test isolation via `UserDefaults(suiteName:)`; eliminated cross-suite UserDefaults conflicts; moved 6 newly-parallel suites (+73 tests) into UnitTests plan (now 330 tests in 28 suites, 0.22s); fixed `saveAndLoadProfiles` crash with `try #require`; re-enabled 2 previously disabled tests
   Files: LLMConfig.swift, LLMModelProfile.swift, SummarizerConfig.swift, VADConfig.swift, KeychainMigration.swift, LLMConfigTests.swift, LLMConfigCoverageTests.swift, LLMModelProfileTests.swift, LLMProviderTests.swift, SummarizerConfigExtendedTests.swift, VADConfigTests.swift, KeychainMigrationTests.swift, KeychainMigrationExtendedTests.swift, UnitTests.xctestplan
+
+## [2026-03-25 01:28]
+
+- Extracted reusable settings components library (SettingsComponents.swift): SettingsDescription, SettingsSlider, SettingsIntSlider, StatusIndicator, .settingsFooter(), SettingsInfoLabel; restored original 4-tab settings layout (Models/LLM/Summarization/Recording) from monolithic SettingsView.swift into separate tab files; added "Report a Bug" link to About tab
+  Files: SettingsComponents.swift, ModelsSettingsTab.swift, SettingsTab.swift, AboutTab.swift, SettingsView.swift, LLMProvider.swift
+
+- CI: made test and claude-review run sequentially (pre-cleanup → test → claude-review → auto-merge → post-cleanup); fixed PR approval to use PAT instead of GITHUB_TOKEN
+  Files: .github/workflows/auto-merge.yml
