@@ -15,4 +15,15 @@ nonisolated enum LLMProvider: String, Codable, CaseIterable, Sendable {
         case .custom: "http://localhost:1234/v1"
         }
     }
+
+    /// Human-readable display name for the settings UI.
+    var displayName: String {
+        switch self {
+        case .foundationModels: "Apple Intelligence (On-Device)"
+        case .ollama: "Ollama"
+        case .openAI: "OpenAI"
+        case .anthropic: "Anthropic"
+        case .custom: "Custom (OpenAI-compatible)"
+        }
+    }
 }
