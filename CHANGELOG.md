@@ -40,3 +40,18 @@
 
 - Injected UserDefaults DI (`defaults: UserDefaults = .standard`) into 5 production files to enable test isolation via `UserDefaults(suiteName:)`; eliminated cross-suite UserDefaults conflicts; moved 6 newly-parallel suites (+73 tests) into UnitTests plan (now 330 tests in 28 suites, 0.22s); fixed `saveAndLoadProfiles` crash with `try #require`; re-enabled 2 previously disabled tests
   Files: LLMConfig.swift, LLMModelProfile.swift, SummarizerConfig.swift, VADConfig.swift, KeychainMigration.swift, LLMConfigTests.swift, LLMConfigCoverageTests.swift, LLMModelProfileTests.swift, LLMProviderTests.swift, SummarizerConfigExtendedTests.swift, VADConfigTests.swift, KeychainMigrationTests.swift, KeychainMigrationExtendedTests.swift, UnitTests.xctestplan
+
+## [2026-03-25 01:05]
+
+- Added GitHub Actions CI workflow for auto review & merge (#46): uses anthropics/claude-code-action@v1 with CLAUDE_CODE_OAUTH_TOKEN to review PR diffs against CLAUDE.md conventions; auto-merges when tests pass + Claude approves; pre-cleanup cancels redundant runs and removes stale review comments; post-cleanup deletes old workflow runs (>30d) and stale merged branches
+  Files: .github/workflows/auto-merge.yml
+
+## [2026-03-25 01:10]
+
+- Created release branch with GitHub ruleset protection (PR required, 1 approving review, signed commits, no force push, no deletion, required status checks, CodeQL code scanning); added CI workflow (build + conditional test by macOS version) and CodeQL workflow for main/release branches; auto-creates/comments GitHub issue when tests are skipped due to macOS < 26; tagged issues #10–#44 with `feature` label
+  Files: .github/workflows/ci.yml, .github/workflows/codeql.yml, .github/workflows/auto-merge.yml
+
+## [2026-03-25 01:28]
+
+- Extracted reusable settings components library (SettingsComponents.swift): SettingsDescription, SettingsSlider, SettingsIntSlider, StatusIndicator, .settingsFooter(), SettingsInfoLabel; restored original 4-tab settings layout (Models/LLM/Summarization/Recording) from monolithic SettingsView.swift into separate tab files; added "Report a Bug" link to About tab
+  Files: SettingsComponents.swift, ModelsSettingsTab.swift, SettingsTab.swift, AboutTab.swift, SettingsView.swift, LLMProvider.swift
