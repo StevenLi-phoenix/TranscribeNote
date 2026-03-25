@@ -124,6 +124,25 @@ jobs:
     if: needs.claude-review.outputs.decision == 'APPROVE'
     runs-on: ubuntu-latest
     steps:
+      - name: Wait for CI to pass
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          SHA="${{ github.event.pull_request.head.sha }}"
+          REPO="${{ github.repository }}"
+          echo "Waiting for ci.yml build-and-test on $SHA..."
+          for i in $(seq 1 60); do
+            RESULT=$(gh api "repos/$REPO/commits/$SHA/check-runs" \
+              --jq '.check_runs[] | select(.name == "build-and-test") | .conclusion // .status')
+            case "$RESULT" in
+              success) echo "CI passed"; exit 0 ;;
+              failure|cancelled|timed_out) echo "CI failed: $RESULT"; exit 1 ;;
+              *) echo "CI status: ${RESULT:-pending} (attempt $i/60)"; sleep 15 ;;
+            esac
+          done
+          echo "Timed out waiting for CI"; exit 1
+
       - name: Merge PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
