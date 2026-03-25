@@ -183,7 +183,7 @@ jobs:
     steps:
       - name: Approve PR
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           gh pr review ${{ github.event.pull_request.number }} \
             --repo ${{ github.repository }} \
