@@ -6,8 +6,8 @@ nonisolated enum KeychainMigration {
     private static let migrationKey = "keychainMigrationCompleted_v1"
 
     /// One-time migration: extract apiKey from UserDefaults JSON and move to Keychain.
-    static func migrateIfNeeded() {
-        guard !UserDefaults.standard.bool(forKey: migrationKey) else {
+    static func migrateIfNeeded(defaults: UserDefaults = .standard) {
+        guard !defaults.bool(forKey: migrationKey) else {
             logger.debug("Keychain migration already completed")
             return
         }
@@ -17,15 +17,15 @@ nonisolated enum KeychainMigration {
         let configKeys = ["liveLLMConfigJSON", "overallLLMConfigJSON", "llmConfigJSON"]
 
         for configKey in configKeys {
-            migrateKey(configKey)
+            migrateKey(configKey, defaults: defaults)
         }
 
-        UserDefaults.standard.set(true, forKey: migrationKey)
+        defaults.set(true, forKey: migrationKey)
         logger.info("Keychain migration completed")
     }
 
-    private static func migrateKey(_ configKey: String) {
-        guard let json = UserDefaults.standard.string(forKey: configKey),
+    private static func migrateKey(_ configKey: String, defaults: UserDefaults = .standard) {
+        guard let json = defaults.string(forKey: configKey),
               let data = json.data(using: .utf8) else {
             return
         }
@@ -57,11 +57,11 @@ nonisolated enum KeychainMigration {
         )
         if let newData = try? JSONEncoder().encode(config),
            let newJSON = String(data: newData, encoding: .utf8) {
-            UserDefaults.standard.set(newJSON, forKey: configKey)
+            defaults.set(newJSON, forKey: configKey)
             logger.debug("Re-encoded '\(configKey)' without apiKey")
         } else {
             // Remove entire key to prevent plaintext API key from remaining in UserDefaults
-            UserDefaults.standard.removeObject(forKey: configKey)
+            defaults.removeObject(forKey: configKey)
             logger.warning("Removed '\(configKey)' from UserDefaults after re-encode failure")
         }
     }

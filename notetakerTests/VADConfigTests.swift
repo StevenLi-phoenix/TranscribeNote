@@ -5,6 +5,14 @@ import Foundation
 @Suite("VADConfig Tests", .serialized)
 struct VADConfigTests {
 
+    private let testDefaults: UserDefaults
+    private let suiteName = "com.notetaker.test.VADConfigTests"
+
+    init() {
+        testDefaults = UserDefaults(suiteName: suiteName)!
+        testDefaults.removePersistentDomain(forName: suiteName)
+    }
+
     @Test("Default config has expected values")
     func defaultValues() {
         let config = VADConfig.default
@@ -49,7 +57,7 @@ struct VADConfigTests {
 
     @Test("fromUserDefaults returns default for missing key")
     func fromUserDefaultsMissing() {
-        let config = VADConfig.fromUserDefaults(key: "nonExistentVADKey_\(UUID().uuidString)")
+        let config = VADConfig.fromUserDefaults(key: "nonExistentVADKey_\(UUID().uuidString)", defaults: testDefaults)
         #expect(config == .default)
     }
 
@@ -58,10 +66,9 @@ struct VADConfigTests {
         let key = "testVADConfig_\(UUID().uuidString)"
         let config = VADConfig(vadEnabled: false, silenceThreshold: 0.15, silenceTimeoutSeconds: 60)
         let data = try JSONEncoder().encode(config)
-        UserDefaults.standard.set(String(data: data, encoding: .utf8), forKey: key)
-        defer { UserDefaults.standard.removeObject(forKey: key) }
+        testDefaults.set(String(data: data, encoding: .utf8), forKey: key)
 
-        let loaded = VADConfig.fromUserDefaults(key: key)
+        let loaded = VADConfig.fromUserDefaults(key: key, defaults: testDefaults)
         #expect(loaded == config)
     }
 }

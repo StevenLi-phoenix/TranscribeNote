@@ -54,8 +54,8 @@ nonisolated struct SummarizerConfig: Codable, Sendable, Equatable {
     }
 
     /// Load from UserDefaults, falling back to `.default`.
-    static func fromUserDefaults(key: String = "summarizerConfigJSON") -> SummarizerConfig {
-        guard let json = UserDefaults.standard.string(forKey: key),
+    static func fromUserDefaults(key: String = "summarizerConfigJSON", defaults: UserDefaults = .standard) -> SummarizerConfig {
+        guard let json = defaults.string(forKey: key),
               let data = json.data(using: .utf8),
               let config = try? JSONDecoder().decode(SummarizerConfig.self, from: data) else {
             return .default

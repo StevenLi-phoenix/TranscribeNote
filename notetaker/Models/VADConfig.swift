@@ -46,8 +46,8 @@ nonisolated struct VADConfig: Codable, Sendable, Equatable {
     }
 
     /// Load from UserDefaults, falling back to `.default`.
-    static func fromUserDefaults(key: String = "vadConfigJSON") -> VADConfig {
-        guard let json = UserDefaults.standard.string(forKey: key),
+    static func fromUserDefaults(key: String = "vadConfigJSON", defaults: UserDefaults = .standard) -> VADConfig {
+        guard let json = defaults.string(forKey: key),
               let data = json.data(using: .utf8),
               let config = try? JSONDecoder().decode(VADConfig.self, from: data) else {
             return .default

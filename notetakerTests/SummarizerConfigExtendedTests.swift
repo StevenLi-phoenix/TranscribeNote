@@ -5,6 +5,14 @@ import Foundation
 @Suite("SummarizerConfig Extended Tests", .serialized)
 struct SummarizerConfigExtendedTests {
 
+    private let testDefaults: UserDefaults
+    private let suiteName = "com.notetaker.test.SummarizerConfigExtendedTests"
+
+    init() {
+        testDefaults = UserDefaults(suiteName: suiteName)!
+        testDefaults.removePersistentDomain(forName: suiteName)
+    }
+
     // MARK: - Defaults
 
     @Test func defaultValues() {
@@ -76,7 +84,7 @@ struct SummarizerConfigExtendedTests {
 
     @Test func fromUserDefaultsReturnsDefaultWhenEmpty() {
         let key = "testSumConfig_\(UUID().uuidString)"
-        let config = SummarizerConfig.fromUserDefaults(key: key)
+        let config = SummarizerConfig.fromUserDefaults(key: key, defaults: testDefaults)
         #expect(config == .default)
     }
 
@@ -85,10 +93,9 @@ struct SummarizerConfigExtendedTests {
         let json = """
         {"liveSummarizationEnabled":false,"intervalMinutes":10,"minTranscriptLength":500,"summaryLanguage":"ko","summaryStyle":"lectureNotes","includeContext":false,"maxContextTokens":5000,"overallSummaryMode":"rawText"}
         """
-        UserDefaults.standard.set(json, forKey: key)
-        defer { UserDefaults.standard.removeObject(forKey: key) }
+        testDefaults.set(json, forKey: key)
 
-        let config = SummarizerConfig.fromUserDefaults(key: key)
+        let config = SummarizerConfig.fromUserDefaults(key: key, defaults: testDefaults)
         #expect(config.liveSummarizationEnabled == false)
         #expect(config.intervalMinutes == 10)
         #expect(config.summaryStyle == .lectureNotes)
@@ -97,10 +104,9 @@ struct SummarizerConfigExtendedTests {
 
     @Test func fromUserDefaultsReturnsDefaultForInvalidJSON() {
         let key = "testSumConfig_\(UUID().uuidString)"
-        UserDefaults.standard.set("{invalid", forKey: key)
-        defer { UserDefaults.standard.removeObject(forKey: key) }
+        testDefaults.set("{invalid", forKey: key)
 
-        let config = SummarizerConfig.fromUserDefaults(key: key)
+        let config = SummarizerConfig.fromUserDefaults(key: key, defaults: testDefaults)
         #expect(config == .default)
     }
 

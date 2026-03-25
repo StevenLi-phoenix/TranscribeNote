@@ -5,16 +5,12 @@ import Foundation
 @Suite("LLMModelProfile Tests", .serialized)
 struct LLMModelProfileTests {
 
-    /// Helper to clean up all profile-related UserDefaults and Keychain keys.
-    private func cleanUpDefaults() {
-        UserDefaults.standard.removeObject(forKey: "llmModelProfilesJSON")
-        for key in ["liveLLMConfigJSON", "overallLLMConfigJSON", "titleLLMConfigJSON", "llmConfigJSON"] {
-            UserDefaults.standard.removeObject(forKey: key)
-        }
-        for role in LLMRole.allCases {
-            UserDefaults.standard.removeObject(forKey: role.profileIDKey)
-            UserDefaults.standard.removeObject(forKey: role.inheritsLiveKey)
-        }
+    private static let suiteName = "com.notetaker.test.LLMModelProfileTests"
+    private let defaults: UserDefaults
+
+    init() {
+        defaults = UserDefaults(suiteName: Self.suiteName)!
+        defaults.removePersistentDomain(forName: Self.suiteName)
     }
 
     // MARK: - LLMModelProfile
@@ -97,93 +93,63 @@ struct LLMModelProfileTests {
     // MARK: - LLMProfileStore
 
     @Test func assignedProfileIDRoundTrip() {
-        cleanUpDefaults()
-        defer { cleanUpDefaults() }
-
         let id = UUID()
-        LLMProfileStore.setAssignedProfileID(id, for: .live)
-        #expect(LLMProfileStore.assignedProfileID(for: .live) == id)
+        LLMProfileStore.setAssignedProfileID(id, for: .live, defaults: defaults)
+        #expect(LLMProfileStore.assignedProfileID(for: .live, defaults: defaults) == id)
 
         // Clear
-        LLMProfileStore.setAssignedProfileID(nil, for: .live)
-        #expect(LLMProfileStore.assignedProfileID(for: .live) == nil)
+        LLMProfileStore.setAssignedProfileID(nil, for: .live, defaults: defaults)
+        #expect(LLMProfileStore.assignedProfileID(for: .live, defaults: defaults) == nil)
     }
 
     @Test func inheritsLiveDefaultFalse() {
-        cleanUpDefaults()
-        defer { cleanUpDefaults() }
-
-        #expect(LLMProfileStore.inheritsLive(for: .overall) == false)
+        #expect(LLMProfileStore.inheritsLive(for: .overall, defaults: defaults) == false)
     }
 
     @Test func inheritsLiveAlwaysFalseForLive() {
-        cleanUpDefaults()
-        defer { cleanUpDefaults() }
-
         // .live role should always return false regardless of setting
-        LLMProfileStore.setInheritsLive(true, for: .live)
-        #expect(LLMProfileStore.inheritsLive(for: .live) == false)
+        LLMProfileStore.setInheritsLive(true, for: .live, defaults: defaults)
+        #expect(LLMProfileStore.inheritsLive(for: .live, defaults: defaults) == false)
     }
 
     @Test func inheritsLiveRoundTrip() {
-        cleanUpDefaults()
-        defer { cleanUpDefaults() }
-
-        // Use .title role (less commonly used by other test suites) to minimize cross-suite races
-        LLMProfileStore.setInheritsLive(true, for: .title)
-        #expect(LLMProfileStore.inheritsLive(for: .title) == true)
-        LLMProfileStore.setInheritsLive(false, for: .title)
-        #expect(LLMProfileStore.inheritsLive(for: .title) == false)
+        LLMProfileStore.setInheritsLive(true, for: .title, defaults: defaults)
+        #expect(LLMProfileStore.inheritsLive(for: .title, defaults: defaults) == true)
+        LLMProfileStore.setInheritsLive(false, for: .title, defaults: defaults)
+        #expect(LLMProfileStore.inheritsLive(for: .title, defaults: defaults) == false)
     }
 
     @Test func resolveConfigFallsBackToDefault() {
-        // Clear all profiles and assignments
-        UserDefaults.standard.removeObject(forKey: "llmModelProfilesJSON")
-        for role in LLMRole.allCases {
-            UserDefaults.standard.removeObject(forKey: role.profileIDKey)
-            UserDefaults.standard.removeObject(forKey: role.inheritsLiveKey)
-        }
-        // Clear legacy keys too
-        for key in ["liveLLMConfigJSON", "overallLLMConfigJSON", "titleLLMConfigJSON", "llmConfigJSON"] {
-            UserDefaults.standard.removeObject(forKey: key)
-        }
-
-        let config = LLMProfileStore.resolveConfig(for: .live)
+        let config = LLMProfileStore.resolveConfig(for: .live, defaults: defaults)
         // Should get .default config (possibly through migration that creates a default profile)
         #expect(config.provider == .foundationModels)
         #expect(config.model == "Apple Intelligence")
     }
 
-    @Test func saveAndLoadProfiles() {
+    @Test func saveAndLoadProfiles() throws {
         let profiles = [
             LLMModelProfile(name: "Profile1", config: LLMConfig(provider: .ollama, model: "llama3")),
             LLMModelProfile(name: "Profile2", config: LLMConfig(provider: .openAI, model: "gpt-4")),
         ]
-        LLMProfileStore.saveProfiles(profiles)
-        let loaded = LLMProfileStore.loadProfiles()
-        #expect(loaded.count == 2)
+        LLMProfileStore.saveProfiles(profiles, defaults: defaults)
+        let loaded = LLMProfileStore.loadProfiles(defaults: defaults)
+        try #require(loaded.count == 2)
         #expect(loaded[0].name == "Profile1")
         #expect(loaded[1].name == "Profile2")
         #expect(loaded[0].config.provider == .ollama)
         #expect(loaded[1].config.provider == .openAI)
-
-        // Clean up
-        UserDefaults.standard.removeObject(forKey: "llmModelProfilesJSON")
     }
 
     @Test func deleteProfileClearsRoleAssignment() {
         var profiles = [
             LLMModelProfile(name: "ToDelete", config: .default)
         ]
-        LLMProfileStore.saveProfiles(profiles)
+        LLMProfileStore.saveProfiles(profiles, defaults: defaults)
         let id = profiles[0].id
-        LLMProfileStore.setAssignedProfileID(id, for: .live)
+        LLMProfileStore.setAssignedProfileID(id, for: .live, defaults: defaults)
 
-        LLMProfileStore.deleteProfile(id: id, from: &profiles)
+        LLMProfileStore.deleteProfile(id: id, from: &profiles, defaults: defaults)
         #expect(profiles.isEmpty)
-        #expect(LLMProfileStore.assignedProfileID(for: .live) == nil)
-
-        // Clean up
-        UserDefaults.standard.removeObject(forKey: "llmModelProfilesJSON")
+        #expect(LLMProfileStore.assignedProfileID(for: .live, defaults: defaults) == nil)
     }
 }

@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import notetaker
 
-@Suite("LLMProvider Tests", .serialized)
+@Suite("LLMProvider Tests")
 struct LLMProviderTests {
 
     @Test func allCases() {

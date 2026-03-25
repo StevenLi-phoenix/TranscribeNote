@@ -4,7 +4,7 @@ import Foundation
 
 // MARK: - LLMConfig Coverage Tests
 
-@Suite("LLMConfig Coverage Tests", .serialized)
+@Suite("LLMConfig Coverage Tests")
 struct LLMConfigCoverageTests {
 
     // MARK: - JSON Encoding Includes Expected Fields
@@ -225,7 +225,7 @@ struct LLMConfigCoverageTests {
 
 // MARK: - LLMProvider Coverage Tests
 
-@Suite("LLMProvider Coverage Tests", .serialized)
+@Suite("LLMProvider Coverage Tests")
 struct LLMProviderCoverageTests {
 
     @Test func allRawValues() {
@@ -292,7 +292,7 @@ struct LLMProviderCoverageTests {
 
 // MARK: - LLMModelProfile Coverage Tests
 
-@Suite("LLMModelProfile Coverage Tests", .serialized)
+@Suite("LLMModelProfile Coverage Tests")
 struct LLMModelProfileCoverageTests {
 
     // MARK: - Identifiable
@@ -412,7 +412,7 @@ struct LLMModelProfileCoverageTests {
 
 // MARK: - LLMRole Coverage Tests
 
-@Suite("LLMRole Coverage Tests", .serialized)
+@Suite("LLMRole Coverage Tests")
 struct LLMRoleCoverageTests {
 
     @Test func rawValues() {
@@ -445,29 +445,22 @@ struct LLMRoleCoverageTests {
 @Suite("LLMProfileStore Coverage Tests", .serialized)
 struct LLMProfileStoreCoverageTests {
 
-    /// Helper to clean up all profile-related UserDefaults keys.
-    private func cleanUpDefaults() {
-        UserDefaults.standard.removeObject(forKey: "llmModelProfilesJSON")
-        for key in ["liveLLMConfigJSON", "overallLLMConfigJSON", "titleLLMConfigJSON", "llmConfigJSON"] {
-            UserDefaults.standard.removeObject(forKey: key)
-        }
-        for role in LLMRole.allCases {
-            UserDefaults.standard.removeObject(forKey: role.profileIDKey)
-            UserDefaults.standard.removeObject(forKey: role.inheritsLiveKey)
-        }
+    private static let suiteName = "com.notetaker.test.LLMProfileStoreCoverageTests"
+    private let defaults: UserDefaults
+
+    init() {
+        defaults = UserDefaults(suiteName: Self.suiteName)!
+        defaults.removePersistentDomain(forName: Self.suiteName)
     }
 
     @Test func resolveConfigWithAssignedProfile() {
-        cleanUpDefaults()
-        defer { cleanUpDefaults() }
-
         let config = LLMConfig(provider: .anthropic, model: "claude-3", temperature: 0.2, maxTokens: 8192)
         let profile = LLMModelProfile(name: "Claude", config: config)
 
-        LLMProfileStore.saveProfiles([profile])
-        LLMProfileStore.setAssignedProfileID(profile.id, for: .live)
+        LLMProfileStore.saveProfiles([profile], defaults: defaults)
+        LLMProfileStore.setAssignedProfileID(profile.id, for: .live, defaults: defaults)
 
-        let resolved = LLMProfileStore.resolveConfig(for: .live)
+        let resolved = LLMProfileStore.resolveConfig(for: .live, defaults: defaults)
         #expect(resolved.provider == .anthropic)
         #expect(resolved.model == "claude-3")
         #expect(resolved.temperature == 0.2)
@@ -475,23 +468,20 @@ struct LLMProfileStoreCoverageTests {
     }
 
     @Test func resolveConfigInheritsLiveRole() {
-        cleanUpDefaults()
-        defer { cleanUpDefaults() }
-
         let liveConfig = LLMConfig(provider: .ollama, model: "llama3", temperature: 0.9)
         let liveProfile = LLMModelProfile(name: "Live Model", config: liveConfig)
 
         let overallConfig = LLMConfig(provider: .openAI, model: "gpt-4", temperature: 0.3)
         let overallProfile = LLMModelProfile(name: "Overall Model", config: overallConfig)
 
-        LLMProfileStore.saveProfiles([liveProfile, overallProfile])
-        LLMProfileStore.setAssignedProfileID(liveProfile.id, for: .live)
-        LLMProfileStore.setAssignedProfileID(overallProfile.id, for: .overall)
+        LLMProfileStore.saveProfiles([liveProfile, overallProfile], defaults: defaults)
+        LLMProfileStore.setAssignedProfileID(liveProfile.id, for: .live, defaults: defaults)
+        LLMProfileStore.setAssignedProfileID(overallProfile.id, for: .overall, defaults: defaults)
 
         // Enable inherits-live for overall role
-        LLMProfileStore.setInheritsLive(true, for: .overall)
+        LLMProfileStore.setInheritsLive(true, for: .overall, defaults: defaults)
 
-        let resolved = LLMProfileStore.resolveConfig(for: .overall)
+        let resolved = LLMProfileStore.resolveConfig(for: .overall, defaults: defaults)
         // Should get live config, not overall
         #expect(resolved.provider == .ollama)
         #expect(resolved.model == "llama3")
@@ -499,28 +489,22 @@ struct LLMProfileStoreCoverageTests {
     }
 
     @Test func resolveConfigFallsBackToFirstProfileWhenNoAssignment() {
-        cleanUpDefaults()
-        defer { cleanUpDefaults() }
-
         let profiles = [
             LLMModelProfile(name: "First", config: LLMConfig(provider: .ollama, model: "first-model")),
             LLMModelProfile(name: "Second", config: LLMConfig(provider: .openAI, model: "second-model")),
         ]
-        LLMProfileStore.saveProfiles(profiles)
+        LLMProfileStore.saveProfiles(profiles, defaults: defaults)
         // Do NOT assign any profile to .title role
 
-        let resolved = LLMProfileStore.resolveConfig(for: .title)
+        let resolved = LLMProfileStore.resolveConfig(for: .title, defaults: defaults)
         // Should fall back to first profile
         #expect(resolved.provider == .ollama)
         #expect(resolved.model == "first-model")
     }
 
     @Test func resolveConfigWithNoProfilesReturnsValidConfig() {
-        cleanUpDefaults()
-        defer { cleanUpDefaults() }
-
-        // resolveConfig always returns a usable config (may be default or from parallel test state)
-        let resolved = LLMProfileStore.resolveConfig(for: .live)
+        // resolveConfig always returns a usable config (may be default or from migration)
+        let resolved = LLMProfileStore.resolveConfig(for: .live, defaults: defaults)
         #expect(!resolved.model.isEmpty, "Resolved config should have a non-empty model")
         // Foundation Models default has empty baseURL (on-device, no server needed)
         if resolved.provider != .foundationModels {
@@ -529,17 +513,14 @@ struct LLMProfileStoreCoverageTests {
     }
 
     @Test func saveProfilesWithApiKeyStoresInKeychain() {
-        cleanUpDefaults()
-
         let config = LLMConfig(provider: .openAI, model: "gpt-4", apiKey: "sk-test-profile-key")
         let profile = LLMModelProfile(name: "Test", config: config)
 
         defer {
-            cleanUpDefaults()
             KeychainService.delete(key: profile.keychainKey)
         }
 
-        LLMProfileStore.saveProfiles([profile])
+        LLMProfileStore.saveProfiles([profile], defaults: defaults)
 
         // Verify API key is in Keychain
         let storedKey = KeychainService.load(key: profile.keychainKey)
@@ -547,12 +528,9 @@ struct LLMProfileStoreCoverageTests {
     }
 
     @Test func saveProfilesWithEmptyApiKeyDeletesFromKeychain() {
-        cleanUpDefaults()
-
         let profile = LLMModelProfile(name: "Test", config: LLMConfig(provider: .openAI, model: "gpt-4"))
 
         defer {
-            cleanUpDefaults()
             KeychainService.delete(key: profile.keychainKey)
         }
 
@@ -561,90 +539,64 @@ struct LLMProfileStoreCoverageTests {
         #expect(KeychainService.load(key: profile.keychainKey) == "old-key")
 
         // Save profile with empty apiKey
-        LLMProfileStore.saveProfiles([profile])
+        LLMProfileStore.saveProfiles([profile], defaults: defaults)
 
         // Keychain entry should be deleted
         #expect(KeychainService.load(key: profile.keychainKey) == nil)
     }
 
-    // MARK: - Disabled: Cross-suite UserDefaults/Keychain race condition
-    // These tests pass when run in isolation but fail non-deterministically in full
-    // parallel test runs. Swift Testing lacks cross-suite serialization, so suites
-    // that share UserDefaults keys (llmModelProfilesJSON, keychainMigrationCompleted_v1)
-    // can overwrite each other's state. Re-enable when Swift Testing adds cross-suite
-    // serialization or when tests are refactored to use isolated UserDefaults instances.
-    //
-    // To run manually: xcodebuild -scheme notetaker -only-testing:notetakerTests/LLMProfileStoreCoverageTests/loadProfilesHydratesApiKeyFromKeychain test
-
-    /*
     @Test func loadProfilesHydratesApiKeyFromKeychain() {
-        cleanUpDefaults()
-
         let config = LLMConfig(provider: .openAI, model: "gpt-4", apiKey: "sk-hydrated")
         let profile = LLMModelProfile(name: "Hydration Test", config: config)
 
         defer {
-            cleanUpDefaults()
             KeychainService.delete(key: profile.keychainKey)
         }
 
         // Save (stores apiKey in Keychain)
-        LLMProfileStore.saveProfiles([profile])
+        LLMProfileStore.saveProfiles([profile], defaults: defaults)
 
         // Load should hydrate apiKey from Keychain
-        let loaded = LLMProfileStore.loadProfiles()
+        let loaded = LLMProfileStore.loadProfiles(defaults: defaults)
         let match = loaded.first { $0.id == profile.id }
         #expect(match != nil, "Saved profile should appear in loaded profiles")
         #expect(match?.config.apiKey == "sk-hydrated")
     }
-    */
 
     @Test func deleteProfileRemovesKeychainEntry() {
-        cleanUpDefaults()
-        defer { cleanUpDefaults() }
-
         let config = LLMConfig(provider: .openAI, model: "gpt-4", apiKey: "sk-to-delete")
         var profiles = [LLMModelProfile(name: "ToDelete", config: config)]
         let keychainKey = profiles[0].keychainKey
         let id = profiles[0].id
 
-        LLMProfileStore.saveProfiles(profiles)
+        LLMProfileStore.saveProfiles(profiles, defaults: defaults)
         #expect(KeychainService.load(key: keychainKey) == "sk-to-delete")
 
-        LLMProfileStore.deleteProfile(id: id, from: &profiles)
+        LLMProfileStore.deleteProfile(id: id, from: &profiles, defaults: defaults)
         #expect(profiles.isEmpty)
         #expect(KeychainService.load(key: keychainKey) == nil)
     }
 
     @Test func deleteNonExistentProfileIsNoOp() {
-        cleanUpDefaults()
-        defer { cleanUpDefaults() }
-
         var profiles = [LLMModelProfile(name: "Exists", config: .default)]
-        LLMProfileStore.saveProfiles(profiles)
+        LLMProfileStore.saveProfiles(profiles, defaults: defaults)
 
         let bogusID = UUID()
-        LLMProfileStore.deleteProfile(id: bogusID, from: &profiles)
+        LLMProfileStore.deleteProfile(id: bogusID, from: &profiles, defaults: defaults)
         // Should not remove the existing profile
         #expect(profiles.count == 1)
     }
 
     @Test func assignedProfileIDReturnsNilForUnsetRole() {
-        cleanUpDefaults()
-        defer { cleanUpDefaults() }
-
-        #expect(LLMProfileStore.assignedProfileID(for: .title) == nil)
+        #expect(LLMProfileStore.assignedProfileID(for: .title, defaults: defaults) == nil)
     }
 
     @Test func setAssignedProfileIDNilClearsAssignment() {
-        cleanUpDefaults()
-        defer { cleanUpDefaults() }
-
         let id = UUID()
-        LLMProfileStore.setAssignedProfileID(id, for: .overall)
-        #expect(LLMProfileStore.assignedProfileID(for: .overall) == id)
+        LLMProfileStore.setAssignedProfileID(id, for: .overall, defaults: defaults)
+        #expect(LLMProfileStore.assignedProfileID(for: .overall, defaults: defaults) == id)
 
-        LLMProfileStore.setAssignedProfileID(nil, for: .overall)
-        #expect(LLMProfileStore.assignedProfileID(for: .overall) == nil)
+        LLMProfileStore.setAssignedProfileID(nil, for: .overall, defaults: defaults)
+        #expect(LLMProfileStore.assignedProfileID(for: .overall, defaults: defaults) == nil)
     }
 }

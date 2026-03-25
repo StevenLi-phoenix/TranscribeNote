@@ -35,3 +35,8 @@
 
 - Integrated Apple Foundation Models as zero-config default LLM engine (#17): added FoundationModelsEngine with safe availability check (never crashes if Apple Intelligence not enabled), .foundationModels provider as new default, async createWithFallback() in LLMEngineFactory, BackgroundSummaryService auto-fallback, and Settings UI with "Apple Intelligence (On-Device)" option hiding irrelevant fields; created #44 for future @Generable structured output
   Files: FoundationModelsEngine.swift, LLMProvider.swift, LLMConfig.swift, LLMEngineFactory.swift, BackgroundSummaryService.swift, SettingsView.swift, FoundationModelsEngineTests.swift, LLMEngineFactoryFallbackTests.swift, LLMEngineFactoryTests.swift, LLMConfigTests.swift, LLMProviderTests.swift, LLMConfigCoverageTests.swift, LLMModelProfileTests.swift
+
+## [2026-03-25 00:44]
+
+- Injected UserDefaults DI (`defaults: UserDefaults = .standard`) into 5 production files to enable test isolation via `UserDefaults(suiteName:)`; eliminated cross-suite UserDefaults conflicts; moved 6 newly-parallel suites (+73 tests) into UnitTests plan (now 330 tests in 28 suites, 0.22s); fixed `saveAndLoadProfiles` crash with `try #require`; re-enabled 2 previously disabled tests
+  Files: LLMConfig.swift, LLMModelProfile.swift, SummarizerConfig.swift, VADConfig.swift, KeychainMigration.swift, LLMConfigTests.swift, LLMConfigCoverageTests.swift, LLMModelProfileTests.swift, LLMProviderTests.swift, SummarizerConfigExtendedTests.swift, VADConfigTests.swift, KeychainMigrationTests.swift, KeychainMigrationExtendedTests.swift, UnitTests.xctestplan

@@ -5,6 +5,13 @@ import Foundation
 @Suite("KeychainMigration", .serialized)
 struct KeychainMigrationTests {
 
+    private static let suiteName = "com.notetaker.test.KeychainMigrationTests"
+    private let defaults: UserDefaults
+
+    init() {
+        defaults = UserDefaults(suiteName: Self.suiteName)!
+    }
+
     @Test
     func encodedConfigExcludesApiKey() throws {
         let config = LLMConfig(apiKey: "sk-secret-key-12345")
