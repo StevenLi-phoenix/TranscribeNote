@@ -47,11 +47,7 @@ jobs:
             console.log(`Cleaned ${botComments.length} stale review comment(s)`);
 
   # ──────────────────────────────────────────────
-  # Build & Test
-  # NOTE: Requires macOS 26+ with Xcode 26 SDK.
-  # Use self-hosted runner if GitHub-hosted runners
-  # don't support macOS 26 yet:
-  #   runs-on: [self-hosted, macOS, ARM64]
+  # Build & Test (runs after pre-cleanup)
   # ──────────────────────────────────────────────
   test:
     needs: pre-cleanup
@@ -100,14 +96,11 @@ jobs:
             test 2>&1 | tail -20
 
   # ──────────────────────────────────────────────
-  # Claude Code Review via claude-code-action
-  # Uses CLAUDE_CODE_OAUTH_TOKEN for auth.
-  # Claude reads CLAUDE.md for project conventions,
-  # reviews the diff, and posts a comment with
-  # APPROVE or REJECT decision.
+  # Claude Code Review (runs after test passes)
+  # Sequential: test must pass before review starts
   # ──────────────────────────────────────────────
   claude-review:
-    needs: pre-cleanup
+    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -177,7 +170,7 @@ jobs:
   # Auto-merge: only if tests pass AND Claude approves
   # ──────────────────────────────────────────────
   auto-merge:
-    needs: [test, claude-review]
+    needs: claude-review
     if: needs.claude-review.outputs.decision == 'APPROVE'
     runs-on: ubuntu-latest
     steps:
@@ -203,7 +196,7 @@ jobs:
   # Post-cleanup: runs after merge (or on failure)
   # ──────────────────────────────────────────────
   post-cleanup:
-    needs: [auto-merge]
+    needs: [claude-review, auto-merge]
     if: always()
     runs-on: ubuntu-latest
     steps:
