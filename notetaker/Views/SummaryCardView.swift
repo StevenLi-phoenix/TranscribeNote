@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 struct SummaryCardView: View {
     let coveringFrom: TimeInterval
@@ -17,6 +18,9 @@ struct SummaryCardView: View {
     @State private var showRegenerateField = false
     @State private var regenerateInstructions = ""
     @State private var isHovered = false
+    @State private var showCopiedFeedback = false
+
+    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "notetaker", category: "SummaryCardView")
 
     init(
         coveringFrom: TimeInterval,
@@ -94,8 +98,10 @@ struct SummaryCardView: View {
         }
         .padding(.vertical, DS.Spacing.xs)
         .overlay(alignment: .topTrailing) {
-            if !isEditing && !showRegenerateField && isHovered && (onSave != nil || onRegenerate != nil) {
+            if !isEditing && !showRegenerateField && (isHovered || showCopiedFeedback) {
                 HStack(spacing: DS.Spacing.xs) {
+                    copyButton
+
                     if onSave != nil {
                         Button {
                             editText = content
@@ -124,6 +130,43 @@ struct SummaryCardView: View {
             }
         }
         .onHover { isHovered = $0 }
+    }
+
+    // MARK: - Copy
+
+    @ViewBuilder
+    private var copyButton: some View {
+        Button(action: copySummaryAsMarkdown) {
+            Image(systemName: showCopiedFeedback ? "checkmark" : "doc.on.doc")
+                .font(DS.Typography.caption2)
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(showCopiedFeedback ? AnyShapeStyle(.green) : AnyShapeStyle(.tertiary))
+        .help("Copy summary (Markdown)")
+        .accessibilityLabel("Copy summary to clipboard")
+    }
+
+    private func copySummaryAsMarkdown() {
+        let markdown = SummaryMarkdownFormatter.format(
+            content: content,
+            coveringFrom: coveringFrom,
+            coveringTo: coveringTo,
+            isOverall: isOverall
+        )
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(markdown, forType: .string)
+        Self.logger.debug("Copied summary to clipboard (\(markdown.count) chars)")
+
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showCopiedFeedback = true
+        }
+        Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            withAnimation(.easeInOut(duration: 0.2)) {
+                showCopiedFeedback = false
+            }
+        }
     }
 
     // MARK: - Subviews
