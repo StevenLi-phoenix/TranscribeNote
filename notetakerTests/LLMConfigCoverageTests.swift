@@ -229,6 +229,7 @@ struct LLMConfigCoverageTests {
 struct LLMProviderCoverageTests {
 
     @Test func allRawValues() {
+        #expect(LLMProvider.foundationModels.rawValue == "foundationModels")
         #expect(LLMProvider.ollama.rawValue == "ollama")
         #expect(LLMProvider.openAI.rawValue == "openAI")
         #expect(LLMProvider.anthropic.rawValue == "anthropic")
@@ -236,11 +237,12 @@ struct LLMProviderCoverageTests {
     }
 
     @Test func caseIterableCount() {
-        #expect(LLMProvider.allCases.count == 4)
+        #expect(LLMProvider.allCases.count == 5)
     }
 
     @Test func caseIterableContainsAll() {
         let cases = LLMProvider.allCases
+        #expect(cases.contains(.foundationModels))
         #expect(cases.contains(.ollama))
         #expect(cases.contains(.openAI))
         #expect(cases.contains(.anthropic))
@@ -520,7 +522,10 @@ struct LLMProfileStoreCoverageTests {
         // resolveConfig always returns a usable config (may be default or from parallel test state)
         let resolved = LLMProfileStore.resolveConfig(for: .live)
         #expect(!resolved.model.isEmpty, "Resolved config should have a non-empty model")
-        #expect(!resolved.baseURL.isEmpty, "Resolved config should have a non-empty baseURL")
+        // Foundation Models default has empty baseURL (on-device, no server needed)
+        if resolved.provider != .foundationModels {
+            #expect(!resolved.baseURL.isEmpty, "Resolved config should have a non-empty baseURL for network providers")
+        }
     }
 
     @Test func saveProfilesWithApiKeyStoresInKeychain() {

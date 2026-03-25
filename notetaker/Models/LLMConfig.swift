@@ -19,7 +19,7 @@ nonisolated struct LLMConfig: Codable, Sendable, Equatable {
         case provider, model, baseURL, temperature, maxTokens, thinkingEnabled
     }
 
-    init(provider: LLMProvider = .custom, model: String = "qwen3-14b-mlx", apiKey: String = "", baseURL: String = "http://localhost:1234/v1", temperature: Double = 0.7, maxTokens: Int = 4096, thinkingEnabled: Bool = false) {
+    init(provider: LLMProvider = .foundationModels, model: String = "Apple Intelligence", apiKey: String = "", baseURL: String = "", temperature: Double = 0.7, maxTokens: Int = 4096, thinkingEnabled: Bool = false) {
         self.provider = provider
         self.model = model
         self.apiKey = apiKey
@@ -41,10 +41,10 @@ nonisolated struct LLMConfig: Codable, Sendable, Equatable {
     }
 
     static let `default` = LLMConfig(
-        provider: .custom,
-        model: "qwen3-14b-mlx",
+        provider: .foundationModels,
+        model: "Apple Intelligence",
         apiKey: "",
-        baseURL: "http://localhost:1234/v1",
+        baseURL: "",
         temperature: 0.7,
         maxTokens: 4096,
         thinkingEnabled: false

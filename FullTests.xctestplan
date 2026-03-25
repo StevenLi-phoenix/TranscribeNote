@@ -1,0 +1,30 @@
+{
+  "configurations" : [
+    {
+      "id" : "B2C3D4E5-F6A7-8901-BCDE-F12345678901",
+      "name" : "Default",
+      "options" : {}
+    }
+  ],
+  "defaultOptions" : {
+    "testTimeoutsEnabled" : true,
+    "defaultTestExecutionTimeAllowance" : 120
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:notetaker.xcodeproj",
+        "identifier" : "B522917C2F3D4491005D1EBC",
+        "name" : "notetakerTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:notetaker.xcodeproj",
+        "identifier" : "B52291862F3D4491005D1EBC",
+        "name" : "notetakerUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

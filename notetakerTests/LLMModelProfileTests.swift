@@ -150,8 +150,8 @@ struct LLMModelProfileTests {
 
         let config = LLMProfileStore.resolveConfig(for: .live)
         // Should get .default config (possibly through migration that creates a default profile)
-        #expect(config.provider == .custom)
-        #expect(config.model == "qwen3-14b-mlx")
+        #expect(config.provider == .foundationModels)
+        #expect(config.model == "Apple Intelligence")
     }
 
     @Test func saveAndLoadProfiles() {

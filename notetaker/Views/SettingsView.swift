@@ -188,6 +188,16 @@ struct ModelsSettingsTab: View {
         connectionTask?.cancel()
         connectionStatus = .testing
         connectionError = nil
+
+        // Foundation Models: just check availability, no network call needed
+        if config.provider == .foundationModels {
+            let available = FoundationModelsEngine.isModelAvailable
+            connectionStatus = available ? .available : .unavailable
+            if !available { connectionError = "Apple Intelligence not available on this device" }
+            Self.logger.info("Foundation Models availability: \(available)")
+            return
+        }
+
         let engine = LLMEngineFactory.create(from: config)
         let cfg = config
         connectionTask = Task {
@@ -335,42 +345,52 @@ struct LLMConfigSection: View {
                 config.baseURL = newProvider.defaultBaseURL
             }
 
-            TextField("Model", text: $config.model)
+            if config.provider == .foundationModels {
+                Label("Uses Apple's on-device model. No API key or network needed.", systemImage: "apple.intelligence")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if config.provider != .foundationModels {
+                TextField("Model", text: $config.model)
+            }
 
             if config.provider == .openAI || config.provider == .anthropic {
                 SecureField("API Key", text: $config.apiKey)
             }
 
-            HStack {
-                Text("Temperature")
-                Slider(value: $config.temperature, in: 0...2, step: 0.1)
-                Text(String(format: "%.1f", config.temperature))
-                    .frame(width: 30)
-                    .monospacedDigit()
-            }
+            if config.provider != .foundationModels {
+                HStack {
+                    Text("Temperature")
+                    Slider(value: $config.temperature, in: 0...2, step: 0.1)
+                    Text(String(format: "%.1f", config.temperature))
+                        .frame(width: 30)
+                        .monospacedDigit()
+                }
 
-            HStack {
-                Text("Max Tokens")
-                Slider(
-                    value: Binding(
-                        get: { log2(Double(max(config.maxTokens, 256))) },
-                        set: { config.maxTokens = 1 << Int($0.rounded()) }
-                    ),
-                    in: 8...17,
-                    step: 1
-                )
-                Text("\(config.maxTokens)")
-                    .frame(width: 60, alignment: .trailing)
-                    .monospacedDigit()
-            }
+                HStack {
+                    Text("Max Tokens")
+                    Slider(
+                        value: Binding(
+                            get: { log2(Double(max(config.maxTokens, 256))) },
+                            set: { config.maxTokens = 1 << Int($0.rounded()) }
+                        ),
+                        in: 8...17,
+                        step: 1
+                    )
+                    Text("\(config.maxTokens)")
+                        .frame(width: 60, alignment: .trailing)
+                        .monospacedDigit()
+                }
 
-            Toggle("Enable Thinking", isOn: $config.thinkingEnabled)
-                .help("Allow model to use extended thinking (e.g. Qwen3 <think> blocks). Disable to save tokens on simple tasks.")
+                Toggle("Enable Thinking", isOn: $config.thinkingEnabled)
+                    .help("Allow model to use extended thinking (e.g. Qwen3 <think> blocks). Disable to save tokens on simple tasks.")
 
-            DisclosureGroup("Advanced") {
-                TextField("Base URL", text: $config.baseURL)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.caption)
+                DisclosureGroup("Advanced") {
+                    TextField("Base URL", text: $config.baseURL)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.caption)
+                }
             }
         }
     }
@@ -548,6 +568,7 @@ struct RecordingSettingsTab: View {
 extension LLMProvider {
     var displayName: String {
         switch self {
+        case .foundationModels: "Apple Intelligence (On-Device)"
         case .ollama: "Ollama"
         case .openAI: "OpenAI"
         case .anthropic: "Anthropic"

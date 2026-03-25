@@ -5,6 +5,12 @@ import Foundation
 @Suite("LLMEngineFactory Tests", .serialized)
 struct LLMEngineFactoryTests {
 
+    @Test func createsFoundationModelsEngine() {
+        let config = LLMConfig(provider: .foundationModels)
+        let engine = LLMEngineFactory.create(from: config)
+        #expect(engine is FoundationModelsEngine)
+    }
+
     @Test func createsOllamaEngine() {
         let config = LLMConfig(provider: .ollama)
         let engine = LLMEngineFactory.create(from: config)
