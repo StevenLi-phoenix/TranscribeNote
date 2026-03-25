@@ -48,3 +48,8 @@
 
 - CI: made test and claude-review run sequentially (pre-cleanup → test → claude-review → auto-merge → post-cleanup); fixed PR approval to use PAT instead of GITHUB_TOKEN
   Files: .github/workflows/auto-merge.yml
+
+## [2026-03-25 02:34]
+
+- feat: one-click copy summary as Markdown (#38) — hover-to-reveal copy button on SummaryCardView with checkmark animation feedback; SummaryMarkdownFormatter for testable Markdown formatting; 6 unit tests
+  Files: SummaryMarkdownFormatter.swift, SummaryCardView.swift, SummaryMarkdownFormatterTests.swift
