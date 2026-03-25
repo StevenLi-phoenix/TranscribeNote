@@ -66,6 +66,8 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - `AudioCaptureService` records M4A/AAC by default (128kbps) with automatic WAV fallback — old `.wav` files still play fine (`AVAudioPlayer` is format-agnostic)
 - `AudioCaptureService.onAudioLevel` callback in `State` struct — RMS calculated on writeQueue, log-scaled to 0..1 (-50dB→0, 0dB→1); throttle with `OSAllocatedUnfairLock<Float>` on audio thread before dispatching to MainActor
 - `AudioLevelMeter` (`@Observable` in `RecordingViewModel.swift`) — same pattern as `ElapsedTimeClock` to isolate high-frequency audio level updates from invalidating unrelated views
+- **VAD (Voice Activity Detection)**: `SimpleVAD` (`nonisolated final class: @unchecked Sendable`) gates ASR buffer forwarding in `AudioCaptureService`; uses `OSAllocatedUnfairLock` with buffer-count-based thresholds (not timestamps) for zero syscall overhead on audio thread; returns `.forward`/`.suppress`/`.silenceTimeout`; `VADConfig` stored as JSON in `@AppStorage("vadConfigJSON")`; audio file write and level callback always fire regardless of VAD state; `onSilenceTimeout` callback in `AudioCaptureService.State` triggers auto-stop via `RecordingViewModel`
+- **VAD logger gotcha**: `OSAllocatedUnfairLock.withLock` closure captures `inout state` — `Logger` string interpolation of state fields is an escaping autoclosure that captures inout, causing compile error; extract values before logging outside the lock
 
 ### LLM & Summarization
 - `LLMEngine` protocol: `generate(prompt:config:) async throws -> String`, `isAvailable(config:) async -> Bool` — `nonisolated`, `AnyObject`, `Sendable`, injectable `URLSession` for testing; config param ensures engines check user-configured URLs, not hardcoded defaults
@@ -99,6 +101,14 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - **`CrashLogService`**: Uses MetricKit (`MXMetricManagerSubscriber`) to receive crash diagnostics from PREVIOUS session on NEXT launch; `nonisolated final class` inheriting from `NSObject` with singleton `shared` instance; `install()` registers with `MXMetricManager.shared`; `didReceive(_: [MXDiagnosticPayload])` extracts `MXCrashDiagnostic` (termination reason, exception type/code, signal, VM region info, call stack tree JSON); same crash log directory/file (`~/Library/Application Support/notetaker/CrashLogs/last_crash.log`), same `checkPreviousCrash()` behavior
 - `TranscriptExporter` formats segments as timestamped text and copies to `NSPasteboard`; `formatAsText(title:segments:)` supports optional title header
 - Graceful quit: `applicationShouldTerminate` returns `.terminateLater` if recording, waits for `awaitDrainCompletion()`, then replies `true`
+- **Scheduling & Calendar Integration**: `SchedulerViewModel` orchestrates scheduled recordings; `SchedulerService` (singleton, `SchedulerServiceProtocol`) manages `UNUserNotificationCenter`; `CalendarService` reads `EKEvent`s via EventKit
+- **Auto-start**: Timer polling (30s) in `SchedulerViewModel.checkAndFireDueRecordings()` handles foreground auto-start independently of notifications; `willPresent` is pure presentation only
+- **Direct callback**: `handleFire()` calls `RecordingViewModel.startRecording()` directly via weak ref (no notification relay); includes auto-start permission prompt via `NSAlert.showsSuppressionButton` + `UserDefaults("autoStartRecordingAllowed")`
+- **Duration-end timer**: `RecordingViewModel.durationEndTimer` fires after scheduled duration; shows `.alert` asking stop/continue; pauses/resumes with recording; uses `remainingDurationSeconds` tracking
+- **`ScheduledRecordingInfo`**: Lightweight `Sendable` struct decoupling `RecordingViewModel` from SwiftData; carries `id`, `title`, `durationMinutes`
+- **Duplicate import detection**: Uses `calendarEventIdentifier` (EKEvent.eventIdentifier) first, falls back to title+time heuristic (60s tolerance)
+- **Recurrence mapping**: `CalendarService.mapRecurrenceRule()` maps `EKRecurrenceRule` to `RepeatRule`; only `interval == 1`; weekday detection via `Set<EKWeekday>` equality
+- **SchemaV6**: Adds `calendarEventIdentifier: String? = nil` to `ScheduledRecording`, `scheduledRecordingID: UUID? = nil` to `RecordingSession`
 
 ## Architecture
 
@@ -117,6 +127,7 @@ Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Mo
 
 ## Testing Gotchas
 
+- Swift Testing `@Test` functions are always `nonisolated` regardless of `SWIFT_DEFAULT_ACTOR_ISOLATION` — use `@MainActor @Test` when testing MainActor-isolated types (`@Observable` ViewModels, SwiftData `mainContext`); use `ModelContext(container)` instead of `container.mainContext` in test helpers
 - ASR integration tests need `.serialized` — `SpeechAnalyzer` may have concurrent recognition constraints
 - LLM engine tests use per-suite MockURLProtocol subclasses to avoid shared state in parallel execution; each suite uses `.serialized`
 - `URLProtocol` strips `httpBody` during request processing — `MockURLProtocolBase.canonicalRequest` saves it via `URLProtocol.setProperty` before it's lost; `requestWithRestoredBody()` restores it in `startLoading()`
@@ -132,3 +143,4 @@ Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Mo
 ## Known Limitations
 
 - Settings changes require app restart to take effect for LLM engine (engine created at init time); summarizer config changes update timer interval live
+- VAD config changes take effect on next recording (VAD instance created per `startAudioPipeline()` call)

@@ -26,6 +26,13 @@ final class AudioLevelMeter {
     func reset() { level = 0 }
 }
 
+/// Lightweight struct decoupling RecordingViewModel from SwiftData's ScheduledRecording model.
+struct ScheduledRecordingInfo: Sendable {
+    let id: UUID
+    let title: String
+    let durationMinutes: Int?
+}
+
 @Observable
 final class RecordingViewModel {
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "notetaker", category: "RecordingViewModel")
@@ -42,6 +49,10 @@ final class RecordingViewModel {
     private(set) var latestSummary: String?
     private(set) var summaryError: String?
     private(set) var stoppingStatus: String = "Saving..."
+
+    // Duration-end prompt (2c)
+    var showDurationEndPrompt = false
+    private(set) var scheduledInfo: ScheduledRecordingInfo?
 
     var isRecording: Bool { state == .recording }
     var isActive: Bool { state == .recording || state == .paused }
@@ -61,6 +72,12 @@ final class RecordingViewModel {
     private var nextPeriodicCoveringFrom: TimeInterval = 0
     private var periodicWindowCount: Int = 0
     private var llmConfigObserver: NSObjectProtocol?
+    private let vadConfig: VADConfig
+
+    // Duration-end timer state (2c)
+    private var durationEndTimer: Timer?
+    private var remainingDurationSeconds: TimeInterval?
+    private var durationTimerStarted: Date?
 
     // Multi-clip pause/resume state
     private var clipTimeOffset: TimeInterval = 0
@@ -72,13 +89,15 @@ final class RecordingViewModel {
         asrEngine: any ASREngine,
         summarizerService: SummarizerService = SummarizerService(engine: NoopLLMEngine()),
         summarizerConfig: SummarizerConfig = .default,
-        llmConfig: LLMConfig = .default
+        llmConfig: LLMConfig = .default,
+        vadConfig: VADConfig = .default
     ) {
         self.audioCaptureService = audioCaptureService
         self.asrEngine = asrEngine
         self.summarizerService = summarizerService
         self.summarizerConfig = summarizerConfig
         self.llmConfig = llmConfig
+        self.vadConfig = vadConfig
         setupASRCallbacks()
         llmConfigObserver = NotificationCenter.default.addObserver(
             forName: .llmConfigDidSave, object: nil, queue: .main
@@ -90,7 +109,8 @@ final class RecordingViewModel {
     convenience init(
         audioCaptureService: AudioCaptureService = AudioCaptureService(),
         llmConfig: LLMConfig = .default,
-        summarizerConfig: SummarizerConfig = .default
+        summarizerConfig: SummarizerConfig = .default,
+        vadConfig: VADConfig = .default
     ) {
         let engine: any ASREngine
         do {
@@ -106,7 +126,8 @@ final class RecordingViewModel {
             asrEngine: engine,
             summarizerService: summarizer,
             summarizerConfig: summarizerConfig,
-            llmConfig: llmConfig
+            llmConfig: llmConfig,
+            vadConfig: vadConfig
         )
         if engine is NoopASREngine {
             self.errorMessage = "Speech recognition is unavailable. Transcription is disabled."
@@ -116,6 +137,7 @@ final class RecordingViewModel {
     deinit {
         timer?.invalidate()
         summaryTimer?.invalidate()
+        durationEndTimer?.invalidate()
         if let observer = llmConfigObserver {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -144,7 +166,7 @@ final class RecordingViewModel {
         }
     }
 
-    func startRecording(modelContext: ModelContext? = nil) async {
+    func startRecording(modelContext: ModelContext? = nil, scheduledInfo: ScheduledRecordingInfo? = nil) async {
         guard state == .idle || state == .completed else { return }
         if state == .completed {
             dismissCompletedRecording(modelContext: modelContext)
@@ -155,9 +177,16 @@ final class RecordingViewModel {
 
         do {
             let fileURL = try startAudioPipeline()
-            createSession(fileURL: fileURL)
+            createSession(fileURL: fileURL, scheduledInfo: scheduledInfo)
             startElapsedTimer()
             startSummaryTimer()
+
+            // 2c: Start duration-end timer if scheduled with duration
+            self.scheduledInfo = scheduledInfo
+            if let minutes = scheduledInfo?.durationMinutes {
+                remainingDurationSeconds = TimeInterval(minutes * 60)
+                startDurationEndTimer()
+            }
         } catch {
             errorMessage = "Failed to start recording: \(error.localizedDescription)"
         }
@@ -186,6 +215,30 @@ final class RecordingViewModel {
     }
 
     private func startAudioPipeline() throws -> URL {
+        // 0. Configure VAD before audio starts
+        if vadConfig.vadEnabled {
+            let inputFormat = audioCaptureService.audioEngine.inputNode.outputFormat(forBus: 0)
+            // Buffer size matches the tap's hardcoded 1024 in AudioCaptureService.startCapture()
+            let bufferDuration = 1024.0 / inputFormat.sampleRate
+            let suppressBuffers = max(1, Int(2.0 / bufferDuration))
+            let timeoutBuffers = vadConfig.silenceTimeoutSeconds.map { max(1, Int(Double($0) / bufferDuration)) }
+            let vad = SimpleVAD(
+                silenceThreshold: vadConfig.silenceThreshold,
+                silenceBuffersForSuppress: suppressBuffers,
+                silenceBuffersForTimeout: timeoutBuffers
+            )
+            audioCaptureService.configureVAD(vad)
+
+            audioCaptureService.onSilenceTimeout = { [weak self] in
+                Task { @MainActor [weak self] in
+                    guard let self, self.state == .recording else { return }
+                    Self.logger.info("Silence timeout — auto-stopping recording")
+                    self.stopRecording()
+                }
+            }
+            Self.logger.info("VAD enabled: threshold=\(self.vadConfig.silenceThreshold), suppressBuffers=\(suppressBuffers), timeoutBuffers=\(String(describing: timeoutBuffers))")
+        }
+
         // 1. Wire up buffer forwarding BEFORE audio starts
         let engine = asrEngine
         audioCaptureService.onAudioBuffer = { buffer in
@@ -215,9 +268,11 @@ final class RecordingViewModel {
         return try audioCaptureService.startCapture()
     }
 
-    private func createSession(fileURL: URL) {
+    private func createSession(fileURL: URL, scheduledInfo: ScheduledRecordingInfo? = nil) {
+        let title = scheduledInfo?.title ?? "Recording \(Date().formatted(date: .abbreviated, time: .shortened))"
         let session = RecordingSession(
-            title: "Recording \(Date().formatted(date: .abbreviated, time: .shortened))"
+            title: title,
+            scheduledRecordingID: scheduledInfo?.id
         )
         recordedAudioFilePaths = [fileURL.lastPathComponent]
         currentSession = session
@@ -242,13 +297,15 @@ final class RecordingViewModel {
         timer = nil
         summaryTimer?.invalidate()
         summaryTimer = nil
+        pauseDurationEndTimer()
 
         // 2. Disconnect audio callbacks
         audioCaptureService.onAudioBuffer = nil
         audioCaptureService.onAudioLevel = nil
+        audioCaptureService.onSilenceTimeout = nil
         audioMeter.reset()
 
-        // 3. Stop audio capture (saves current clip file)
+        // 3. Stop audio capture (saves current clip file, clears VAD)
         if let savedURL = audioCaptureService.stopCapture() {
             Self.logger.info("Clip saved to \(savedURL.path)")
         }
@@ -302,6 +359,9 @@ final class RecordingViewModel {
         // 4. Restart summary timer
         startSummaryTimer()
 
+        // 5. Resume duration-end timer if active
+        resumeDurationEndTimer()
+
         state = .recording
         Self.logger.info("Recording resumed from \(self.pausedElapsedTime.hhmmss)")
     }
@@ -326,6 +386,41 @@ final class RecordingViewModel {
             self?.triggerPeriodicSummary()
         }
         summaryTimer?.tolerance = 5.0
+    }
+
+    // MARK: - Duration End Timer (2c)
+
+    private func startDurationEndTimer() {
+        guard let remaining = remainingDurationSeconds, remaining > 0 else { return }
+        durationTimerStarted = Date()
+        durationEndTimer = Timer.scheduledTimer(withTimeInterval: remaining, repeats: false) { [weak self] _ in
+            Self.logger.info("Duration timer fired — showing end prompt")
+            self?.showDurationEndPrompt = true
+        }
+        durationEndTimer?.tolerance = 1.0
+        Self.logger.info("Duration-end timer started: \(Int(remaining))s remaining")
+    }
+
+    private func pauseDurationEndTimer() {
+        guard let started = durationTimerStarted, let remaining = remainingDurationSeconds else { return }
+        durationEndTimer?.invalidate()
+        durationEndTimer = nil
+        let elapsed = Date().timeIntervalSince(started)
+        remainingDurationSeconds = max(0, remaining - elapsed)
+        durationTimerStarted = nil
+        Self.logger.info("Duration-end timer paused: \(Int(self.remainingDurationSeconds ?? 0))s remaining")
+    }
+
+    private func resumeDurationEndTimer() {
+        guard remainingDurationSeconds != nil else { return }
+        startDurationEndTimer()
+    }
+
+    private func invalidateDurationEndTimer() {
+        durationEndTimer?.invalidate()
+        durationEndTimer = nil
+        remainingDurationSeconds = nil
+        durationTimerStarted = nil
     }
 
     func triggerPeriodicSummary() {
@@ -389,11 +484,13 @@ final class RecordingViewModel {
         timer = nil
         summaryTimer?.invalidate()
         summaryTimer = nil
+        invalidateDurationEndTimer()
         // Don't cancel summaryTask — let in-flight LLM call finish; drainTask awaits it
 
         if !wasPaused {
             audioCaptureService.onAudioBuffer = nil
             audioCaptureService.onAudioLevel = nil
+            audioCaptureService.onSilenceTimeout = nil
             audioMeter.reset()
 
             if let savedURL = audioCaptureService.stopCapture() {
@@ -531,6 +628,9 @@ final class RecordingViewModel {
         clipTimeOffset = 0
         pausedElapsedTime = 0
         recordedAudioFilePaths = []
+        invalidateDurationEndTimer()
+        showDurationEndPrompt = false
+        scheduledInfo = nil
     }
 
     func clearSummaryError() {
@@ -546,6 +646,7 @@ final class RecordingViewModel {
         timer = nil
         summaryTimer?.invalidate()
         summaryTimer = nil
+        invalidateDurationEndTimer()
         summaryTask?.cancel()
         summaryTask = nil
         drainTask?.cancel()
@@ -555,6 +656,7 @@ final class RecordingViewModel {
         if state == .recording {
             audioCaptureService.onAudioBuffer = nil
             audioCaptureService.onAudioLevel = nil
+            audioCaptureService.onSilenceTimeout = nil
             _ = audioCaptureService.stopCapture()
         }
 

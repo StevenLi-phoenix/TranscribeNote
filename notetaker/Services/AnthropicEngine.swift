@@ -9,9 +9,9 @@ nonisolated final class AnthropicEngine: LLMEngine, @unchecked Sendable {
         self.session = session
     }
 
-    func generate(prompt: String, config: LLMConfig) async throws -> String {
+    func generate(messages: [LLMMessage], config: LLMConfig) async throws -> LLMMessage {
         let raw = config.baseURL.isEmpty ? "https://api.anthropic.com" : config.baseURL
-        let root = LLMHTTPHelpers.normalizeBaseURL(raw, stripV1: true)
+        let root = try LLMHTTPHelpers.validateBaseURL(raw, stripV1: true)
         guard let url = URL(string: "\(root)/v1/messages") else {
             throw LLMEngineError.invalidURL(root)
         }
@@ -24,12 +24,43 @@ nonisolated final class AnthropicEngine: LLMEngine, @unchecked Sendable {
         }
         request.setValue(config.apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        request.setValue("prompt-caching-2024-07-31", forHTTPHeaderField: "anthropic-beta")
 
-        let body: [String: Any] = [
+        // Build system parameter from system messages
+        let systemMessages = messages.filter { $0.role == .system }
+        let userMessages = messages.filter { $0.role != .system }
+
+        var body: [String: Any] = [
             "model": config.model,
             "max_tokens": config.maxTokens,
-            "messages": [["role": "user", "content": prompt]]
         ]
+
+        // System: array of content blocks with optional cache_control
+        if !systemMessages.isEmpty {
+            let systemBlocks: [[String: Any]] = systemMessages.map { msg in
+                var block: [String: Any] = ["type": "text", "text": msg.content]
+                if msg.cacheHint {
+                    block["cache_control"] = ["type": "ephemeral"]
+                }
+                return block
+            }
+            body["system"] = systemBlocks
+        }
+
+        // Messages: user/assistant messages with optional cache_control
+        let apiMessages: [[String: Any]] = userMessages.map { msg in
+            var msgDict: [String: Any] = ["role": msg.role.rawValue]
+            if msg.cacheHint {
+                msgDict["content"] = [
+                    ["type": "text", "text": msg.content, "cache_control": ["type": "ephemeral"]]
+                ]
+            } else {
+                msgDict["content"] = msg.content
+            }
+            return msgDict
+        }
+        body["messages"] = apiMessages
+
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         Self.logger.info("Generating with Anthropic model \(config.model)")
@@ -41,8 +72,15 @@ nonisolated final class AnthropicEngine: LLMEngine, @unchecked Sendable {
             let type: String
             let text: String?
         }
+        struct Usage: Decodable {
+            let input_tokens: Int?
+            let output_tokens: Int?
+            let cache_creation_input_tokens: Int?
+            let cache_read_input_tokens: Int?
+        }
         struct AnthropicResponse: Decodable {
             let content: [ContentBlock]
+            let usage: Usage?
         }
 
         let anthropicResponse = try LLMHTTPHelpers.decodeResponse(AnthropicResponse.self, from: data)
@@ -55,8 +93,21 @@ nonisolated final class AnthropicEngine: LLMEngine, @unchecked Sendable {
         let result = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !result.isEmpty else { throw LLMEngineError.emptyResponse }
 
+        let usage: TokenUsage
+        if let u = anthropicResponse.usage {
+            usage = TokenUsage(
+                inputTokens: u.input_tokens ?? 0,
+                outputTokens: u.output_tokens ?? 0,
+                cacheCreationTokens: u.cache_creation_input_tokens ?? 0,
+                cacheReadTokens: u.cache_read_input_tokens ?? 0
+            )
+            Self.logger.info("Anthropic usage: input=\(usage.inputTokens) output=\(usage.outputTokens) cache_create=\(usage.cacheCreationTokens) cache_read=\(usage.cacheReadTokens)")
+        } else {
+            usage = .zero
+        }
+
         Self.logger.info("Anthropic generation complete (\(result.count) chars)")
-        return result
+        return LLMMessage(role: .assistant, content: result, usage: usage)
     }
 
     func isAvailable(config: LLMConfig) async -> Bool {

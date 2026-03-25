@@ -19,6 +19,10 @@ struct SessionDetailView: View {
     @State private var summaryProgress: String?
     @State private var scrollToTime: TimeInterval?
     @State private var refreshTimer: Timer?
+    @State private var isExportingAudio = false
+    @AppStorage("overallSummaryCollapsed") private var overallCollapsed = false
+    @AppStorage("overallSummaryHeight") private var overallHeight: Double = 300
+    @AppStorage("chunkSummariesHidden") private var chunkSummariesHidden = false
 
     var body: some View {
         if isLoading {
@@ -89,22 +93,17 @@ struct SessionDetailView: View {
                             .disabled(sortedSegments.isEmpty)
                         }
 
-                        if let audioURL = session.audioFileURL,
-                           FileManager.default.fileExists(atPath: audioURL.path) {
-                            Button {
-                                let panel = NSSavePanel()
-                                panel.allowedContentTypes = [audioURL.pathExtension == "m4a" ? .mpeg4Audio : .wav]
-                                panel.nameFieldStringValue = audioURL.lastPathComponent
-                                if panel.runModal() == .OK, let destURL = panel.url {
-                                    do {
-                                        try FileManager.default.copyItem(at: audioURL, to: destURL)
-                                    } catch {
-                                        Self.logger.error("Failed to save audio: \(error.localizedDescription)")
-                                        fetchError = "Failed to save audio: \(error.localizedDescription)"
-                                    }
+                        if session.audioFileURLs.contains(where: { FileManager.default.fileExists(atPath: $0.path) }) {
+                            if isExportingAudio {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .help("Exporting audio…")
+                            } else {
+                                Button {
+                                    exportAudio(session: session)
+                                } label: {
+                                    Label("Save Audio", systemImage: "square.and.arrow.down")
                                 }
-                            } label: {
-                                Label("Save Audio", systemImage: "square.and.arrow.down")
                             }
                         }
                     }
@@ -116,21 +115,47 @@ struct SessionDetailView: View {
                     PlaybackControlView(service: playbackService)
                 }
 
-                // Overall summary (shown above transcript if present)
+                // Overall summary (collapsible + resizable)
                 if let overall = session.summaries.first(where: { $0.isOverall }) {
                     Divider()
-                    SummaryCardView(
-                        block: overall,
-                        onSave: { newContent in
-                            saveEditedSummary(block: overall, content: newContent)
-                        },
-                        onRegenerate: { instructions in
-                            regenerateSummary(block: overall, instructions: instructions)
+                    VStack(spacing: 0) {
+                        Button {
+                            withAnimation { overallCollapsed.toggle() }
+                        } label: {
+                            HStack(spacing: DS.Spacing.xs) {
+                                Image(systemName: overallCollapsed ? "chevron.right" : "chevron.down")
+                                    .font(DS.Typography.caption)
+                                    .frame(width: 12)
+                                Text("Overall Summary")
+                                    .font(DS.Typography.sectionHeader)
+                                Spacer()
+                            }
+                            .contentShape(Rectangle())
                         }
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
-                    .padding(.vertical, DS.Spacing.xs)
+                        .buttonStyle(.plain)
+                        .padding(.horizontal)
+                        .padding(.vertical, DS.Spacing.xs)
+
+                        if !overallCollapsed {
+                            ScrollView {
+                                SummaryCardView(
+                                    block: overall,
+                                    onSave: { newContent in
+                                        saveEditedSummary(block: overall, content: newContent)
+                                    },
+                                    onRegenerate: { instructions in
+                                        regenerateSummary(block: overall, instructions: instructions)
+                                    }
+                                )
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal)
+                                .padding(.vertical, DS.Spacing.xs)
+                            }
+                            .frame(maxHeight: overallHeight)
+
+                            ResizeHandle(height: $overallHeight, minHeight: 80, maxHeight: 600)
+                        }
+                    }
                 }
 
                 if let summaryGenerationError {
@@ -148,7 +173,7 @@ struct SessionDetailView: View {
 
                 Divider()
 
-                // Transcript with inline chunk summaries
+                // Transcript with optional inline chunk summaries
                 if sortedSegments.isEmpty {
                     ContentUnavailableView(
                         "No Transcript",
@@ -157,10 +182,30 @@ struct SessionDetailView: View {
                     )
                     .frame(maxHeight: .infinity)
                 } else {
+                    // Chunk summaries toggle (only shown when chunk summaries exist)
+                    if session.summaries.contains(where: { !$0.isOverall }) {
+                        HStack {
+                            Spacer()
+                            Button {
+                                withAnimation { chunkSummariesHidden.toggle() }
+                            } label: {
+                                Label(
+                                    chunkSummariesHidden ? "Show Summaries" : "Hide Summaries",
+                                    systemImage: chunkSummariesHidden ? "eye.slash" : "eye"
+                                )
+                                .font(DS.Typography.caption)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal)
+                            .padding(.vertical, DS.Spacing.xxs)
+                        }
+                    }
+
                     TranscriptView(
                         segments: sortedSegments,
                         partialText: "",
-                        summaries: session.summaries.filter { !$0.isOverall },
+                        summaries: chunkSummariesHidden ? [] : session.summaries.filter { !$0.isOverall },
                         scrollToTime: $scrollToTime
                     )
                 }
@@ -280,12 +325,39 @@ struct SessionDetailView: View {
                 try? modelContext.save()
 
                 summaryProgress = "Generating complete summary…"
-                let content = try await service.summarize(
-                    segments: segments,
-                    previousSummary: nil,
-                    config: summarizerConfig,
-                    llmConfig: llmConfig
-                )
+                let content: String
+                switch summarizerConfig.overallSummaryMode {
+                case .rawText:
+                    content = try await service.summarize(
+                        segments: segments,
+                        previousSummary: nil,
+                        config: summarizerConfig,
+                        llmConfig: llmConfig
+                    )
+                case .chunkSummaries, .auto:
+                    let chunks = freshSession.summaries
+                        .filter { !$0.isOverall && !$0.isPinned }
+                        .sorted { $0.coveringFrom < $1.coveringFrom }
+                    if !chunks.isEmpty && summarizerConfig.overallSummaryMode != .rawText {
+                        Self.logger.info("Using \(chunks.count) chunk summaries for overall synthesis")
+                        let chunkInputs = chunks.map { (coveringFrom: $0.coveringFrom, coveringTo: $0.coveringTo, content: $0.content) }
+                        content = try await service.summarizeOverall(
+                            chunkSummaries: chunkInputs,
+                            config: summarizerConfig,
+                            llmConfig: llmConfig
+                        )
+                    } else {
+                        if summarizerConfig.overallSummaryMode == .chunkSummaries {
+                            Self.logger.warning("No chunk summaries available, falling back to raw text")
+                        }
+                        content = try await service.summarize(
+                            segments: segments,
+                            previousSummary: nil,
+                            config: summarizerConfig,
+                            llmConfig: llmConfig
+                        )
+                    }
+                }
                 guard !content.isEmpty else {
                     summaryGenerationError = "Summary was empty — transcript may be too short."
                     isGeneratingSummary = false
@@ -477,6 +549,29 @@ struct SessionDetailView: View {
                 summaryGenerationError = error.localizedDescription
             }
             isGeneratingSummary = false
+        }
+    }
+
+    private func exportAudio(session: RecordingSession) {
+        let urls = session.audioFileURLs.filter { FileManager.default.fileExists(atPath: $0.path) }
+        guard !urls.isEmpty else { return }
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.mpeg4Audio]
+        let baseName = urls[0].deletingPathExtension().lastPathComponent
+        panel.nameFieldStringValue = "\(baseName).m4a"
+
+        guard panel.runModal() == .OK, let destURL = panel.url else { return }
+
+        isExportingAudio = true
+        Task {
+            do {
+                try await AudioExporter.mergeAndExport(urls: urls, to: destURL)
+            } catch {
+                Self.logger.error("Audio export failed: \(error.localizedDescription)")
+                fetchError = "Failed to save audio: \(error.localizedDescription)"
+            }
+            isExportingAudio = false
         }
     }
 

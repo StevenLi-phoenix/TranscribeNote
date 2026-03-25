@@ -12,6 +12,8 @@ final class RecordingSession {
     var tags: [String]
     /// True if session was saved during force-quit (transcript may be incomplete).
     var isPartial: Bool = false
+    /// Links session to the triggering scheduled recording.
+    var scheduledRecordingID: UUID? = nil
 
     @Relationship(deleteRule: .cascade)
     var segments: [TranscriptSegment]
@@ -52,7 +54,8 @@ final class RecordingSession {
         tags: [String] = [],
         segments: [TranscriptSegment] = [],
         summaries: [SummaryBlock] = [],
-        isPartial: Bool = false
+        isPartial: Bool = false,
+        scheduledRecordingID: UUID? = nil
     ) {
         self.id = id
         self.startedAt = startedAt
@@ -64,5 +67,6 @@ final class RecordingSession {
         self.segments = segments
         self.summaries = summaries
         self.isPartial = isPartial
+        self.scheduledRecordingID = scheduledRecordingID
     }
 }

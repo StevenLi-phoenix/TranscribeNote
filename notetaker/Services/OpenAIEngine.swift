@@ -9,8 +9,8 @@ nonisolated final class OpenAIEngine: LLMEngine, @unchecked Sendable {
         self.session = session
     }
 
-    func generate(prompt: String, config: LLMConfig) async throws -> String {
-        let baseURL = LLMHTTPHelpers.normalizeBaseURL(
+    func generate(messages: [LLMMessage], config: LLMConfig) async throws -> LLMMessage {
+        let baseURL = try LLMHTTPHelpers.validateBaseURL(
             config.baseURL.isEmpty ? "https://api.openai.com/v1" : config.baseURL
         )
         guard let url = URL(string: "\(baseURL)/chat/completions") else {
@@ -21,12 +21,20 @@ nonisolated final class OpenAIEngine: LLMEngine, @unchecked Sendable {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if !config.apiKey.isEmpty {
+            if let host = url.host, !host.hasSuffix("openai.com") && !host.contains("localhost") && host != "127.0.0.1" {
+                Self.logger.warning("Sending API key to non-OpenAI host: \(host)")
+            }
             request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+        }
+
+        // Map LLMMessage array to OpenAI messages format
+        let apiMessages: [[String: String]] = messages.filter { $0.role != .assistant }.map { msg in
+            ["role": msg.role.rawValue, "content": msg.content]
         }
 
         var body: [String: Any] = [
             "model": config.model,
-            "messages": [["role": "user", "content": prompt]],
+            "messages": apiMessages,
             "temperature": config.temperature,
             "max_tokens": config.maxTokens
         ]
@@ -39,6 +47,14 @@ nonisolated final class OpenAIEngine: LLMEngine, @unchecked Sendable {
         let (data, response) = try await LLMHTTPHelpers.performRequest(request, session: session)
         try LLMHTTPHelpers.validateHTTPResponse(response, data: data)
 
+        struct PromptTokensDetails: Decodable {
+            let cached_tokens: Int?
+        }
+        struct Usage: Decodable {
+            let prompt_tokens: Int?
+            let completion_tokens: Int?
+            let prompt_tokens_details: PromptTokensDetails?
+        }
         struct Choice: Decodable {
             struct Message: Decodable {
                 let content: String
@@ -47,6 +63,7 @@ nonisolated final class OpenAIEngine: LLMEngine, @unchecked Sendable {
         }
         struct OpenAIResponse: Decodable {
             let choices: [Choice]
+            let usage: Usage?
         }
 
         let openAIResponse = try LLMHTTPHelpers.decodeResponse(OpenAIResponse.self, from: data)
@@ -60,14 +77,27 @@ nonisolated final class OpenAIEngine: LLMEngine, @unchecked Sendable {
         let result = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !result.isEmpty else { throw LLMEngineError.emptyResponse }
 
+        let usage: TokenUsage
+        if let u = openAIResponse.usage {
+            usage = TokenUsage(
+                inputTokens: u.prompt_tokens ?? 0,
+                outputTokens: u.completion_tokens ?? 0,
+                cacheCreationTokens: 0,
+                cacheReadTokens: u.prompt_tokens_details?.cached_tokens ?? 0
+            )
+            Self.logger.info("OpenAI usage: input=\(usage.inputTokens) output=\(usage.outputTokens) cache_read=\(usage.cacheReadTokens)")
+        } else {
+            usage = .zero
+        }
+
         Self.logger.info("OpenAI generation complete (\(result.count) chars)")
-        return result
+        return LLMMessage(role: .assistant, content: result, usage: usage)
     }
 
     func isAvailable(config: LLMConfig) async -> Bool {
-        let baseURL = LLMHTTPHelpers.normalizeBaseURL(
+        guard let baseURL = try? LLMHTTPHelpers.validateBaseURL(
             config.baseURL.isEmpty ? "https://api.openai.com/v1" : config.baseURL
-        )
+        ) else { return false }
         guard let url = URL(string: "\(baseURL)/models") else { return false }
         do {
             var request = URLRequest(url: url)

@@ -7,13 +7,64 @@ struct PromptBuilderTests {
         TranscriptSegment(startTime: startTime, endTime: endTime, text: text)
     }
 
+    /// Concatenate all message content for text assertions.
+    private func fullText(_ messages: [LLMMessage]) -> String {
+        messages.map(\.content).joined(separator: "\n\n")
+    }
+
+    /// Get just the system message content.
+    private func systemContent(_ messages: [LLMMessage]) -> String {
+        messages.filter { $0.role == .system }.map(\.content).joined(separator: "\n\n")
+    }
+
+    /// Get just the user message content.
+    private func userContent(_ messages: [LLMMessage]) -> String {
+        messages.filter { $0.role == .user }.map(\.content).joined(separator: "\n\n")
+    }
+
+    // MARK: - Message structure
+
+    @Test func returnsSystemAndUserMessages() {
+        let segments = [makeSegment(startTime: 0, endTime: 5, text: "Hello world")]
+        let config = SummarizerConfig.default
+
+        let messages = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: nil, config: config)
+
+        let systemMsgs = messages.filter { $0.role == .system }
+        let userMsgs = messages.filter { $0.role == .user }
+        #expect(systemMsgs.count == 1)
+        #expect(userMsgs.count >= 1)
+    }
+
+    @Test func systemMessageHasCacheHint() {
+        let segments = [makeSegment(startTime: 0, endTime: 5, text: "Hello world")]
+        let config = SummarizerConfig.default
+
+        let messages = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: nil, config: config)
+
+        let systemMsg = messages.first { $0.role == .system }!
+        #expect(systemMsg.cacheHint == true)
+    }
+
+    @Test func transcriptMessageHasNoCacheHint() {
+        let segments = [makeSegment(startTime: 0, endTime: 5, text: "Hello world")]
+        let config = SummarizerConfig.default
+
+        let messages = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: nil, config: config)
+
+        let lastUserMsg = messages.last { $0.role == .user }!
+        #expect(lastUserMsg.cacheHint == false)
+    }
+
+    // MARK: - Style tests
+
     @Test func bulletsStyleContainsBulletPoints() {
         let segments = [makeSegment(startTime: 0, endTime: 5, text: "Hello world")]
         var config = SummarizerConfig.default
         config.summaryStyle = .bullets
 
-        let prompt = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: nil, config: config)
-        #expect(prompt.contains("bullet points"))
+        let messages = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: nil, config: config)
+        #expect(fullText(messages).contains("bullet points"))
     }
 
     @Test func paragraphStyleContainsParagraph() {
@@ -21,8 +72,8 @@ struct PromptBuilderTests {
         var config = SummarizerConfig.default
         config.summaryStyle = .paragraph
 
-        let prompt = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: nil, config: config)
-        #expect(prompt.contains("paragraph"))
+        let messages = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: nil, config: config)
+        #expect(fullText(messages).contains("paragraph"))
     }
 
     @Test func actionItemsStyleContainsChecklist() {
@@ -30,8 +81,9 @@ struct PromptBuilderTests {
         var config = SummarizerConfig.default
         config.summaryStyle = .actionItems
 
-        let prompt = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: nil, config: config)
-        #expect(prompt.contains("checklist") || prompt.contains("action items"))
+        let messages = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: nil, config: config)
+        let text = fullText(messages)
+        #expect(text.contains("checklist") || text.contains("action items"))
     }
 
     @Test func includesPreviousSummary() {
@@ -39,8 +91,18 @@ struct PromptBuilderTests {
         var config = SummarizerConfig.default
         config.includeContext = true
 
-        let prompt = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: "Previous notes here", config: config)
-        #expect(prompt.contains("Previous notes here"))
+        let messages = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: "Previous notes here", config: config)
+        #expect(fullText(messages).contains("Previous notes here"))
+    }
+
+    @Test func previousSummaryHasCacheHint() {
+        let segments = [makeSegment(startTime: 0, endTime: 5, text: "Hello")]
+        var config = SummarizerConfig.default
+        config.includeContext = true
+
+        let messages = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: "Previous notes here", config: config)
+        let contextMsg = messages.first { $0.role == .user && $0.content.contains("Previous notes here") }
+        #expect(contextMsg?.cacheHint == true)
     }
 
     @Test func excludesPreviousSummaryWhenDisabled() {
@@ -48,8 +110,8 @@ struct PromptBuilderTests {
         var config = SummarizerConfig.default
         config.includeContext = false
 
-        let prompt = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: "Previous notes here", config: config)
-        #expect(!prompt.contains("Previous notes here"))
+        let messages = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: "Previous notes here", config: config)
+        #expect(!fullText(messages).contains("Previous notes here"))
     }
 
     @Test func languageInstructionWhenNotAuto() {
@@ -57,16 +119,16 @@ struct PromptBuilderTests {
         var config = SummarizerConfig.default
         config.summaryLanguage = "Japanese"
 
-        let prompt = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: nil, config: config)
-        #expect(prompt.contains("Japanese"))
+        let messages = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: nil, config: config)
+        #expect(fullText(messages).contains("Japanese"))
     }
 
     @Test func noLanguageInstructionWhenAuto() {
         let segments = [makeSegment(startTime: 0, endTime: 5, text: "Hello")]
         let config = SummarizerConfig.default
 
-        let prompt = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: nil, config: config)
-        #expect(!prompt.contains("Respond in"))
+        let messages = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: nil, config: config)
+        #expect(!fullText(messages).contains("Respond in"))
     }
 
     @Test func segmentsFormattedWithTimestamps() {
@@ -76,16 +138,17 @@ struct PromptBuilderTests {
         ]
         let config = SummarizerConfig.default
 
-        let prompt = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: nil, config: config)
-        #expect(prompt.contains("[01:05] First segment"))
-        #expect(prompt.contains("[02:10] Second segment"))
+        let messages = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: nil, config: config)
+        let text = fullText(messages)
+        #expect(text.contains("[01:05] First segment"))
+        #expect(text.contains("[02:10] Second segment"))
     }
 
     @Test func emptySegmentsDoesNotCrash() {
         let config = SummarizerConfig.default
-        let prompt = PromptBuilder.buildSummarizationPrompt(segments: [], previousSummary: nil, config: config)
-        #expect(!prompt.isEmpty)
-        #expect(!prompt.contains("Transcript:"))
+        let messages = PromptBuilder.buildSummarizationPrompt(segments: [], previousSummary: nil, config: config)
+        #expect(!messages.isEmpty) // At least system message
+        #expect(!fullText(messages).contains("Transcript:"))
     }
 
     @Test func lectureNotesStyleContainsDetailedInstructions() {
@@ -93,9 +156,10 @@ struct PromptBuilderTests {
         var config = SummarizerConfig.default
         config.summaryStyle = .lectureNotes
 
-        let prompt = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: nil, config: config)
-        #expect(prompt.contains("lecture note-taker"))
-        #expect(prompt.contains("**Topic:**"))
+        let messages = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: nil, config: config)
+        let text = fullText(messages)
+        #expect(text.contains("lecture note-taker"))
+        #expect(text.contains("**Topic:**"))
     }
 
     @Test func lectureNotesUsesNotesContextLabel() {
@@ -104,9 +168,10 @@ struct PromptBuilderTests {
         config.summaryStyle = .lectureNotes
         config.includeContext = true
 
-        let prompt = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: "Prior notes", config: config)
-        #expect(prompt.contains("Previous notes for context:"))
-        #expect(prompt.contains("Prior notes"))
+        let messages = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: "Prior notes", config: config)
+        let text = fullText(messages)
+        #expect(text.contains("Previous notes for context:"))
+        #expect(text.contains("Prior notes"))
     }
 
     @Test func bulletsStyleUsesSummaryContextLabel() {
@@ -115,8 +180,8 @@ struct PromptBuilderTests {
         config.summaryStyle = .bullets
         config.includeContext = true
 
-        let prompt = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: "Previous data", config: config)
-        #expect(prompt.contains("Previous summary for context:"))
+        let messages = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: "Previous data", config: config)
+        #expect(fullText(messages).contains("Previous summary for context:"))
     }
 
     // MARK: - additionalInstructions
@@ -125,55 +190,57 @@ struct PromptBuilderTests {
         let segments = [makeSegment(startTime: 0, endTime: 5, text: "Hello")]
         let config = SummarizerConfig.default
 
-        let prompt = PromptBuilder.buildSummarizationPrompt(
+        let messages = PromptBuilder.buildSummarizationPrompt(
             segments: segments,
             previousSummary: nil,
             config: config,
             additionalInstructions: "Focus on action items"
         )
-        #expect(prompt.contains("Additional user instructions:"))
-        #expect(prompt.contains("Focus on action items"))
+        let text = fullText(messages)
+        #expect(text.contains("Additional user instructions:"))
+        #expect(text.contains("Focus on action items"))
     }
 
     @Test func additionalInstructionsOmittedWhenNil() {
         let segments = [makeSegment(startTime: 0, endTime: 5, text: "Hello")]
         let config = SummarizerConfig.default
 
-        let prompt = PromptBuilder.buildSummarizationPrompt(
+        let messages = PromptBuilder.buildSummarizationPrompt(
             segments: segments,
             previousSummary: nil,
             config: config,
             additionalInstructions: nil
         )
-        #expect(!prompt.contains("Additional user instructions"))
+        #expect(!fullText(messages).contains("Additional user instructions"))
     }
 
     @Test func additionalInstructionsOmittedWhenEmpty() {
         let segments = [makeSegment(startTime: 0, endTime: 5, text: "Hello")]
         let config = SummarizerConfig.default
 
-        let prompt = PromptBuilder.buildSummarizationPrompt(
+        let messages = PromptBuilder.buildSummarizationPrompt(
             segments: segments,
             previousSummary: nil,
             config: config,
             additionalInstructions: ""
         )
-        #expect(!prompt.contains("Additional user instructions"))
+        #expect(!fullText(messages).contains("Additional user instructions"))
     }
 
     @Test func additionalInstructionsSanitized() {
         let segments = [makeSegment(startTime: 0, endTime: 5, text: "Hello")]
         let config = SummarizerConfig.default
 
-        let prompt = PromptBuilder.buildSummarizationPrompt(
+        let messages = PromptBuilder.buildSummarizationPrompt(
             segments: segments,
             previousSummary: nil,
             config: config,
             additionalInstructions: "Line1\nLine2\rLine3"
         )
+        let text = fullText(messages)
         // Newlines should be replaced with spaces
-        #expect(!prompt.contains("Line1\n"))
-        #expect(prompt.contains("Line1 Line2 Line3"))
+        #expect(!text.contains("Line1\n"))
+        #expect(text.contains("Line1 Line2 Line3"))
     }
 
     @Test func additionalInstructionsTruncatedAt500Chars() {
@@ -181,17 +248,36 @@ struct PromptBuilderTests {
         let config = SummarizerConfig.default
         let longInstructions = String(repeating: "x", count: 600)
 
-        let prompt = PromptBuilder.buildSummarizationPrompt(
+        let messages = PromptBuilder.buildSummarizationPrompt(
             segments: segments,
             previousSummary: nil,
             config: config,
             additionalInstructions: longInstructions
         )
-        // Should contain at most 500 x's
-        let instructionsLine = prompt.components(separatedBy: "\n\n")
-            .first { $0.contains("Additional user instructions") } ?? ""
-        let xCount = instructionsLine.filter { $0 == "x" }.count
+        // Additional instructions are in a user message (not system) to reduce prompt injection risk
+        let instructionsMsg = messages.first { $0.role == .user && $0.content.contains("Additional user instructions") }!
+        let xCount = instructionsMsg.content.filter { $0 == "x" }.count
         #expect(xCount == 500)
+    }
+
+    @Test func additionalInstructionsNotInSystemMessage() {
+        let segments = [makeSegment(startTime: 0, endTime: 5, text: "Hello")]
+        let config = SummarizerConfig.default
+
+        let messages = PromptBuilder.buildSummarizationPrompt(
+            segments: segments,
+            previousSummary: nil,
+            config: config,
+            additionalInstructions: "Focus on action items"
+        )
+        // Additional instructions must NOT appear in the system message
+        let sysText = systemContent(messages)
+        #expect(!sysText.contains("Additional user instructions"))
+        #expect(!sysText.contains("Focus on action items"))
+        // They should be in a user message instead
+        let instructionsMsg = messages.first { $0.role == .user && $0.content.contains("Additional user instructions") }
+        #expect(instructionsMsg != nil)
+        #expect(instructionsMsg?.content.contains("Focus on action items") == true)
     }
 
     // MARK: - buildOverallSummaryPrompt
@@ -203,12 +289,13 @@ struct PromptBuilderTests {
         ]
         let config = SummarizerConfig.default
 
-        let prompt = PromptBuilder.buildOverallSummaryPrompt(chunkSummaries: chunks, config: config)
-        #expect(prompt.contains("Synthesize"))
-        #expect(prompt.contains("First section summary"))
-        #expect(prompt.contains("Second section summary"))
-        #expect(prompt.contains("[00:00 – 01:00]"))
-        #expect(prompt.contains("[01:00 – 02:00]"))
+        let messages = PromptBuilder.buildOverallSummaryPrompt(chunkSummaries: chunks, config: config)
+        let text = fullText(messages)
+        #expect(text.contains("Synthesize"))
+        #expect(text.contains("First section summary"))
+        #expect(text.contains("Second section summary"))
+        #expect(text.contains("[00:00 – 01:00]"))
+        #expect(text.contains("[01:00 – 02:00]"))
     }
 
     @Test func overallPromptRespectsLanguage() {
@@ -218,8 +305,8 @@ struct PromptBuilderTests {
         var config = SummarizerConfig.default
         config.summaryLanguage = "Japanese"
 
-        let prompt = PromptBuilder.buildOverallSummaryPrompt(chunkSummaries: chunks, config: config)
-        #expect(prompt.contains("Japanese"))
+        let messages = PromptBuilder.buildOverallSummaryPrompt(chunkSummaries: chunks, config: config)
+        #expect(fullText(messages).contains("Japanese"))
     }
 
     @Test func overallPromptLectureNotesStyle() {
@@ -229,9 +316,36 @@ struct PromptBuilderTests {
         var config = SummarizerConfig.default
         config.summaryStyle = .lectureNotes
 
-        let prompt = PromptBuilder.buildOverallSummaryPrompt(chunkSummaries: chunks, config: config)
-        #expect(prompt.contains("lecture note-taker"))
-        #expect(prompt.contains("**Topic:**"))
-        #expect(prompt.contains("Synthesize"))
+        let messages = PromptBuilder.buildOverallSummaryPrompt(chunkSummaries: chunks, config: config)
+        let text = fullText(messages)
+        #expect(text.contains("lecture note-taker"))
+        #expect(text.contains("**Topic:**"))
+        #expect(text.contains("Synthesize"))
+    }
+
+    @Test func overallPromptSystemHasCacheHint() {
+        let chunks: [(coveringFrom: TimeInterval, coveringTo: TimeInterval, content: String)] = [
+            (coveringFrom: 0, coveringTo: 60, content: "Summary"),
+        ]
+        let config = SummarizerConfig.default
+
+        let messages = PromptBuilder.buildOverallSummaryPrompt(chunkSummaries: chunks, config: config)
+        let systemMsg = messages.first { $0.role == .system }!
+        #expect(systemMsg.cacheHint == true)
+    }
+
+    // MARK: - buildTitlePrompt
+
+    @Test func titlePromptStructure() {
+        let segments = [makeSegment(startTime: 0, endTime: 5, text: "Hello world")]
+        let config = SummarizerConfig.default
+
+        let messages = PromptBuilder.buildTitlePrompt(segments: segments, config: config)
+        let systemMsgs = messages.filter { $0.role == .system }
+        let userMsgs = messages.filter { $0.role == .user }
+        #expect(systemMsgs.count == 1)
+        #expect(userMsgs.count == 1)
+        #expect(systemMsgs[0].cacheHint == true)
+        #expect(fullText(messages).contains("title"))
     }
 }

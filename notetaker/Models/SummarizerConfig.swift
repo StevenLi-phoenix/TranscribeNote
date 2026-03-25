@@ -8,6 +8,7 @@ nonisolated struct SummarizerConfig: Codable, Sendable, Equatable {
     var summaryStyle: SummaryStyle
     var includeContext: Bool
     var maxContextTokens: Int
+    var overallSummaryMode: OverallSummaryMode
 
     static let `default` = SummarizerConfig(
         liveSummarizationEnabled: true,
@@ -16,7 +17,8 @@ nonisolated struct SummarizerConfig: Codable, Sendable, Equatable {
         summaryLanguage: "auto",
         summaryStyle: .bullets,
         includeContext: true,
-        maxContextTokens: 2000
+        maxContextTokens: 2000,
+        overallSummaryMode: .auto
     )
 
     init(
@@ -26,7 +28,8 @@ nonisolated struct SummarizerConfig: Codable, Sendable, Equatable {
         summaryLanguage: String = "auto",
         summaryStyle: SummaryStyle = .bullets,
         includeContext: Bool = true,
-        maxContextTokens: Int = 2000
+        maxContextTokens: Int = 2000,
+        overallSummaryMode: OverallSummaryMode = .auto
     ) {
         self.liveSummarizationEnabled = liveSummarizationEnabled
         self.intervalMinutes = intervalMinutes
@@ -35,6 +38,7 @@ nonisolated struct SummarizerConfig: Codable, Sendable, Equatable {
         self.summaryStyle = summaryStyle
         self.includeContext = includeContext
         self.maxContextTokens = maxContextTokens
+        self.overallSummaryMode = overallSummaryMode
     }
 
     init(from decoder: Decoder) throws {
@@ -46,6 +50,7 @@ nonisolated struct SummarizerConfig: Codable, Sendable, Equatable {
         summaryStyle = try container.decode(SummaryStyle.self, forKey: .summaryStyle)
         includeContext = try container.decode(Bool.self, forKey: .includeContext)
         maxContextTokens = try container.decode(Int.self, forKey: .maxContextTokens)
+        overallSummaryMode = try container.decodeIfPresent(OverallSummaryMode.self, forKey: .overallSummaryMode) ?? .auto
     }
 
     /// Load from UserDefaults, falling back to `.default`.

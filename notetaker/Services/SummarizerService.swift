@@ -12,16 +12,19 @@ nonisolated final class SummarizerService: @unchecked Sendable {
     }
 
     /// Core retry logic for LLM generation with exponential backoff.
-    private func retryableGenerate(prompt: String, llmConfig: LLMConfig, label: String = "generation") async throws -> String {
+    private func retryableGenerate(messages: [LLMMessage], llmConfig: LLMConfig, label: String = "generation") async throws -> LLMMessage {
         var lastError: Error?
 
         for attempt in 0..<3 {
             try Task.checkCancellation()
             do {
-                let result = try await engine.generate(prompt: prompt, config: llmConfig)
-                let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
-                Self.logger.info("\(label) succeeded on attempt \(attempt + 1) (\(trimmed.count) chars)")
-                return trimmed
+                let result = try await engine.generate(messages: messages, config: llmConfig)
+                let trimmedContent = result.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                Self.logger.info("\(label) succeeded on attempt \(attempt + 1) (\(trimmedContent.count) chars)")
+                if let usage = result.usage {
+                    Self.logger.info("\(label) tokens: input=\(usage.inputTokens) output=\(usage.outputTokens) cache_create=\(usage.cacheCreationTokens) cache_read=\(usage.cacheReadTokens)")
+                }
+                return LLMMessage(role: .assistant, content: trimmedContent, usage: result.usage)
             } catch is CancellationError {
                 Self.logger.info("\(label) cancelled on attempt \(attempt + 1)")
                 throw CancellationError()
@@ -59,14 +62,15 @@ nonisolated final class SummarizerService: @unchecked Sendable {
             return ""
         }
 
-        let prompt = PromptBuilder.buildSummarizationPrompt(
+        let messages = PromptBuilder.buildSummarizationPrompt(
             segments: segments,
             previousSummary: previousSummary,
             config: config
         )
 
         Self.logger.info("Starting summarization (\(segments.count) segments, \(totalText.count) chars)")
-        return try await retryableGenerate(prompt: prompt, llmConfig: llmConfig, label: "summarization")
+        let result = try await retryableGenerate(messages: messages, llmConfig: llmConfig, label: "summarization")
+        return result.content
     }
 
     /// Regenerate a summary with additional user instructions (guided regeneration).
@@ -76,7 +80,7 @@ nonisolated final class SummarizerService: @unchecked Sendable {
         config: SummarizerConfig,
         llmConfig: LLMConfig
     ) async throws -> String {
-        let prompt = PromptBuilder.buildSummarizationPrompt(
+        let messages = PromptBuilder.buildSummarizationPrompt(
             segments: segments,
             previousSummary: nil,
             config: config,
@@ -84,7 +88,8 @@ nonisolated final class SummarizerService: @unchecked Sendable {
         )
 
         Self.logger.info("Starting guided regeneration (\(segments.count) segments, instructions: \(instructions.prefix(60)))")
-        return try await retryableGenerate(prompt: prompt, llmConfig: llmConfig, label: "guided regeneration")
+        let result = try await retryableGenerate(messages: messages, llmConfig: llmConfig, label: "guided regeneration")
+        return result.content
     }
 
     /// Generate a short descriptive title from transcript segments.
@@ -95,19 +100,21 @@ nonisolated final class SummarizerService: @unchecked Sendable {
     ) async throws -> String {
         guard !segments.isEmpty else { return "" }
 
-        let prompt = PromptBuilder.buildTitlePrompt(segments: segments, config: config)
+        let messages = PromptBuilder.buildTitlePrompt(segments: segments, config: config)
         Self.logger.info("Starting title generation (\(segments.count) segments)")
-        let result = try await retryableGenerate(prompt: prompt, llmConfig: llmConfig, label: "title generation")
+        let result = try await retryableGenerate(messages: messages, llmConfig: llmConfig, label: "title generation")
         // Clean up: remove surrounding quotes if any
-        let cleaned = result.trimmingCharacters(in: CharacterSet(charactersIn: "\"'\u{201C}\u{201D}\u{2018}\u{2019}"))
+        let cleaned = result.content.trimmingCharacters(in: CharacterSet(charactersIn: "\"'\u{201C}\u{201D}\u{2018}\u{2019}"))
         return cleaned
     }
 
     private static func isRetryable(_ error: Error) -> Bool {
         if let llmError = error as? LLMEngineError {
             switch llmError {
-            case .networkError, .httpError:
+            case .networkError:
                 return true
+            case .httpError(let statusCode, _):
+                return statusCode >= 500 || statusCode == 429
             case .invalidURL, .decodingError, .emptyResponse, .notConfigured:
                 return false
             }
@@ -239,13 +246,14 @@ nonisolated final class SummarizerService: @unchecked Sendable {
             return ""
         }
 
-        let prompt = PromptBuilder.buildOverallSummaryPrompt(
+        let messages = PromptBuilder.buildOverallSummaryPrompt(
             chunkSummaries: chunkSummaries,
             config: config
         )
 
         Self.logger.info("Starting overall summarization (\(chunkSummaries.count) chunks, \(totalText.count) chars)")
-        return try await retryableGenerate(prompt: prompt, llmConfig: llmConfig, label: "overall summarization")
+        let result = try await retryableGenerate(messages: messages, llmConfig: llmConfig, label: "overall summarization")
+        return result.content
     }
 }
 

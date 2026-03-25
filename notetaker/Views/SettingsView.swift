@@ -12,6 +12,9 @@ struct SettingsView: View {
 
             SummarizationSettingsTab()
                 .tabItem { Label("Summarization", systemImage: "text.badge.star") }
+
+            RecordingSettingsTab()
+                .tabItem { Label("Recording", systemImage: "mic") }
         }
         .frame(width: 500, height: 500)
     }
@@ -189,12 +192,13 @@ struct ModelsSettingsTab: View {
         let cfg = config
         connectionTask = Task {
             do {
-                let result = try await engine.generate(prompt: "Reply with exactly: OK", config: cfg)
+                let testMessages = [LLMMessage(role: .user, content: "Reply with exactly: OK")]
+                let result = try await engine.generate(messages: testMessages, config: cfg)
                 guard !Task.isCancelled else { return }
-                let ok = !result.isEmpty
+                let ok = !result.content.isEmpty
                 connectionStatus = ok ? .available : .unavailable
                 if !ok { connectionError = "Empty response" }
-                Self.logger.info("LLM test: \(ok ? "success" : "empty") — \(result.prefix(100))")
+                Self.logger.info("LLM test: \(ok ? "success" : "empty") (\(result.content.count) chars)")
             } catch {
                 guard !Task.isCancelled else { return }
                 connectionStatus = .unavailable
@@ -414,6 +418,13 @@ struct SummarizationSettingsTab: View {
                 Text("Lecture Notes").tag(SummaryStyle.lectureNotes)
             }
 
+            Picker("Overall Summary Mode", selection: $config.overallSummaryMode) {
+                Text("Auto (chunks if available)").tag(OverallSummaryMode.auto)
+                Text("Raw Text (full transcript)").tag(OverallSummaryMode.rawText)
+                Text("Chunk Summaries Only").tag(OverallSummaryMode.chunkSummaries)
+            }
+            .help("Controls whether overall summary is generated from raw transcript text or from existing chunk summaries.")
+
             Picker("Language", selection: $pickerSelection) {
                 ForEach(Self.languageOptions, id: \.value) { option in
                     Text(option.label).tag(option.value)
@@ -469,6 +480,68 @@ struct SummarizationSettingsTab: View {
         guard let data = try? JSONEncoder().encode(config),
               let json = String(data: data, encoding: .utf8) else { return }
         summarizerConfigJSON = json
+    }
+}
+
+// MARK: - Recording Settings Tab
+
+struct RecordingSettingsTab: View {
+    @AppStorage("vadConfigJSON") private var vadConfigJSON: String = ""
+    @State private var config: VADConfig = .default
+
+    var body: some View {
+        Form {
+            Toggle("Voice Activity Detection", isOn: $config.vadEnabled)
+                .help("Skip feeding silence to ASR to save CPU. Audio is always recorded in full regardless of this setting.")
+
+            HStack {
+                Text("Silence Threshold")
+                Slider(value: $config.silenceThreshold, in: 0.01...0.30, step: 0.01)
+                Text(String(format: "%.2f", config.silenceThreshold))
+                    .frame(width: 40)
+                    .monospacedDigit()
+            }
+            .disabled(!config.vadEnabled)
+
+            let autoStopEnabled = Binding<Bool>(
+                get: { config.silenceTimeoutSeconds != nil },
+                set: { config.silenceTimeoutSeconds = $0 ? 300 : nil }
+            )
+            Toggle("Auto-stop on silence", isOn: autoStopEnabled)
+                .disabled(!config.vadEnabled)
+                .help("Automatically stop recording after sustained silence.")
+
+            if let timeout = config.silenceTimeoutSeconds {
+                let timeoutBinding = Binding<Int>(
+                    get: { timeout },
+                    set: { config.silenceTimeoutSeconds = $0 }
+                )
+                Stepper("Timeout: \(timeout)s", value: timeoutBinding, in: 30...600, step: 30)
+                    .disabled(!config.vadEnabled)
+            }
+        }
+        .padding()
+        .onAppear { loadConfig() }
+        .onChange(of: config) { _, newValue in saveConfig(newValue) }
+        .safeAreaInset(edge: .bottom) {
+            Label("Changes take effect on next recording.", systemImage: "arrow.clockwise")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 8)
+        }
+    }
+
+    private func loadConfig() {
+        guard !vadConfigJSON.isEmpty,
+              let data = vadConfigJSON.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode(VADConfig.self, from: data) else { return }
+        config = decoded
+    }
+
+    private func saveConfig(_ config: VADConfig) {
+        guard let data = try? JSONEncoder().encode(config),
+              let json = String(data: data, encoding: .utf8) else { return }
+        vadConfigJSON = json
     }
 }
 

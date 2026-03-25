@@ -59,6 +59,10 @@ nonisolated enum KeychainMigration {
            let newJSON = String(data: newData, encoding: .utf8) {
             UserDefaults.standard.set(newJSON, forKey: configKey)
             logger.debug("Re-encoded '\(configKey)' without apiKey")
+        } else {
+            // Remove entire key to prevent plaintext API key from remaining in UserDefaults
+            UserDefaults.standard.removeObject(forKey: configKey)
+            logger.warning("Removed '\(configKey)' from UserDefaults after re-encode failure")
         }
     }
 }

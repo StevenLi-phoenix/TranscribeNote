@@ -50,6 +50,12 @@ struct ScheduleView: View {
             .sheet(isPresented: $showCalendarImport) {
                 CalendarImportView(schedulerViewModel: schedulerViewModel)
             }
+            // 4b: Refresh after import sheet dismisses
+            .onChange(of: showCalendarImport) { _, isPresented in
+                if !isPresented {
+                    schedulerViewModel.load(context: modelContext)
+                }
+            }
             .onAppear {
                 schedulerViewModel.load(context: modelContext)
             }
@@ -188,6 +194,9 @@ private struct CalendarImportView: View {
     var schedulerViewModel: SchedulerViewModel
 
     @State private var selectedIDs: Set<UUID> = []
+    // 4a: Configurable import window
+    @State private var importDays: Int = 7
+    private let dayOptions = [1, 3, 7, 14, 30]
 
     var body: some View {
         NavigationStack {
@@ -205,7 +214,7 @@ private struct CalendarImportView: View {
                     ContentUnavailableView(
                         "No Upcoming Meetings",
                         systemImage: "calendar",
-                        description: Text("No meetings found in the next 7 days.")
+                        description: Text("No meetings found in the next \(importDays) day(s).")
                     )
                 } else {
                     List(schedulerViewModel.calendarEvents, selection: $selectedIDs) { item in
@@ -215,6 +224,11 @@ private struct CalendarImportView: View {
                             HStack(spacing: DS.Spacing.xs) {
                                 Text(item.startDate, style: .date)
                                 Text(item.startDate, style: .time)
+                                if let endDate = item.endDate {
+                                    Text("–")
+                                        .foregroundStyle(.tertiary)
+                                    Text(endDate, style: .time)
+                                }
                                 if !item.calendarName.isEmpty {
                                     Text("·").foregroundStyle(.tertiary)
                                     Text(item.calendarName).foregroundStyle(.secondary)
@@ -222,6 +236,22 @@ private struct CalendarImportView: View {
                             }
                             .font(.caption)
                             .foregroundStyle(.secondary)
+
+                            // 4c: Show location and notes for context
+                            if let location = item.location, !location.isEmpty {
+                                HStack(spacing: DS.Spacing.xs) {
+                                    Image(systemName: "mappin")
+                                    Text(location)
+                                }
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                            }
+                            if let notes = item.notes, !notes.isEmpty {
+                                Text(notes)
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                                    .lineLimit(2)
+                            }
                         }
                     }
                 }
@@ -230,6 +260,15 @@ private struct CalendarImportView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                }
+                // 4a: Import range picker — separate ToolbarItem to avoid macOS sheet toolbar clipping
+                ToolbarItem(placement: .primaryAction) {
+                    Picker("Range", selection: $importDays) {
+                        ForEach(dayOptions, id: \.self) { days in
+                            Text(days == 1 ? "Today" : "\(days) days").tag(days)
+                        }
+                    }
+                    .pickerStyle(.menu)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Import (\(selectedIDs.count))") {
@@ -240,10 +279,11 @@ private struct CalendarImportView: View {
                     .disabled(selectedIDs.isEmpty)
                 }
             }
-            .task {
-                await schedulerViewModel.importFromCalendar(context: modelContext)
+            .task(id: importDays) {
+                // Re-fetch when import range changes (4a) or on initial appear
+                await schedulerViewModel.importFromCalendar(context: modelContext, days: importDays)
             }
         }
-        .frame(minWidth: 360, minHeight: 320)
+        .frame(minWidth: 400, minHeight: 360)
     }
 }

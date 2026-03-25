@@ -6,13 +6,21 @@ extension Notification.Name {
     static let scheduledRecordingDidFire = Notification.Name("notetaker.scheduledRecordingDidFire")
 }
 
+/// Protocol for notification scheduling — enables testing without real `UNUserNotificationCenter`.
+protocol SchedulerServiceProtocol: AnyObject, Sendable {
+    func schedule(_ recording: ScheduledRecording)
+    func cancel(_ recording: ScheduledRecording)
+    func cancelAll()
+    func requestAuthorization() async -> Bool
+}
+
 /// Manages `UNUserNotificationCenter` scheduling for timed recordings.
 ///
 /// - Requests `.alert + .sound` authorization on first use.
 /// - Schedules two notifications per `ScheduledRecording`: a reminder (N minutes before) and the start trigger.
 /// - On receiving the `START_RECORDING` category action, posts `scheduledRecordingDidFire` with the recording's `UUID`.
 /// - Follows the same pattern as `CrashLogService`: `nonisolated final class: NSObject, @unchecked Sendable`.
-nonisolated final class SchedulerService: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
+nonisolated final class SchedulerService: NSObject, SchedulerServiceProtocol, UNUserNotificationCenterDelegate, @unchecked Sendable {
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "notetaker", category: "Scheduler")
 
     static let shared = SchedulerService()
@@ -143,6 +151,12 @@ nonisolated final class SchedulerService: NSObject, UNUserNotificationCenterDele
             withIdentifiers: ["start-\(idStr)", "reminder-\(idStr)"]
         )
         Self.logger.info("Cancelled notifications for '\(recording.title)'")
+    }
+
+    /// Remove all pending notification requests. Called before re-scheduling to prevent duplicates.
+    func cancelAll() {
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        Self.logger.info("Cancelled all pending notifications")
     }
 
     // MARK: - UNUserNotificationCenterDelegate

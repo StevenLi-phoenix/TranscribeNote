@@ -130,9 +130,18 @@ struct SummaryCardView: View {
 
     @ViewBuilder
     private var contentView: some View {
-        Text(content)
-            .font(DS.Typography.callout)
-            .textSelection(.enabled)
+        if let attributed = try? AttributedString(
+            markdown: content,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        ) {
+            Text(attributed)
+                .font(DS.Typography.callout)
+                .textSelection(.enabled)
+        } else {
+            Text(content)
+                .font(DS.Typography.callout)
+                .textSelection(.enabled)
+        }
     }
 
     private var editingView: some View {

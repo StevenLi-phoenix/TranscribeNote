@@ -150,10 +150,19 @@ struct InlineSummaryRow: View {
                 .foregroundStyle(.secondary)
                 .frame(width: DS.Layout.timestampWidth, alignment: .leading)
 
-            Text(content)
-                .font(DS.Typography.callout)
-                .foregroundStyle(.primary)
-                .textSelection(.enabled)
+            Group {
+                if let attributed = try? AttributedString(
+                    markdown: content,
+                    options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+                ) {
+                    Text(attributed)
+                } else {
+                    Text(content)
+                }
+            }
+            .font(DS.Typography.callout)
+            .foregroundStyle(.primary)
+            .textSelection(.enabled)
         }
         .padding(.vertical, DS.Spacing.xs)
     }

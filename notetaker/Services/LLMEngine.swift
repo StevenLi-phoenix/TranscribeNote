@@ -11,7 +11,7 @@ nonisolated enum LLMEngineError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidURL(let url): "Invalid URL: \(url)"
-        case .httpError(let code, let body): "HTTP \(code): \(body)"
+        case .httpError(let code, _): "LLM request failed (HTTP \(code)). Check your configuration."
         case .decodingError(let msg): "Decoding error: \(msg)"
         case .networkError(let err): "Network error: \(err.localizedDescription)"
         case .emptyResponse: "Empty response from LLM"
@@ -20,8 +20,43 @@ nonisolated enum LLMEngineError: Error, LocalizedError {
     }
 }
 
+/// Token usage statistics parsed from LLM API responses.
+nonisolated struct TokenUsage: Sendable, Equatable {
+    let inputTokens: Int
+    let outputTokens: Int
+    /// Tokens written to cache (Anthropic: first request that populates cache).
+    let cacheCreationTokens: Int
+    /// Tokens read from cache (Anthropic: subsequent requests; OpenAI: cached prefix tokens).
+    let cacheReadTokens: Int
+
+    static let zero = TokenUsage(inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0)
+}
+
+/// A structured message for LLM API calls.
+nonisolated struct LLMMessage: Sendable {
+    enum Role: String, Sendable {
+        case system
+        case user
+        case assistant
+    }
+
+    let role: Role
+    let content: String
+    /// Hint that this message's content is stable across calls and is a good candidate for prompt caching.
+    let cacheHint: Bool
+    /// Token usage statistics from the API response (populated on assistant messages returned by engines).
+    let usage: TokenUsage?
+
+    init(role: Role, content: String, cacheHint: Bool = false, usage: TokenUsage? = nil) {
+        self.role = role
+        self.content = content
+        self.cacheHint = cacheHint
+        self.usage = usage
+    }
+}
+
 nonisolated protocol LLMEngine: AnyObject, Sendable {
-    func generate(prompt: String, config: LLMConfig) async throws -> String
+    func generate(messages: [LLMMessage], config: LLMConfig) async throws -> LLMMessage
     func isAvailable(config: LLMConfig) async -> Bool
 }
 
@@ -44,7 +79,8 @@ nonisolated enum LLMHTTPHelpers {
         guard let httpResponse = response as? HTTPURLResponse else { return }
         guard (200...299).contains(httpResponse.statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw LLMEngineError.httpError(statusCode: httpResponse.statusCode, body: body)
+            let truncated = String(body.prefix(200))
+            throw LLMEngineError.httpError(statusCode: httpResponse.statusCode, body: truncated)
         }
     }
 
@@ -52,7 +88,7 @@ nonisolated enum LLMHTTPHelpers {
         do {
             return try JSONDecoder().decode(T.self, from: data)
         } catch {
-            throw LLMEngineError.decodingError(error.localizedDescription)
+            throw LLMEngineError.decodingError("Unexpected response format from LLM server")
         }
     }
 
@@ -64,6 +100,17 @@ nonisolated enum LLMHTTPHelpers {
         while url.hasSuffix("/") { url = String(url.dropLast()) }
         if stripV1 && url.hasSuffix("/v1") { url = String(url.dropLast(3)) }
         return url
+    }
+
+    /// Validate that a base URL uses http or https scheme, and normalize it.
+    static func validateBaseURL(_ raw: String, stripV1: Bool = false) throws -> String {
+        let normalized = normalizeBaseURL(raw, stripV1: stripV1)
+        guard let url = URL(string: normalized),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            throw LLMEngineError.invalidURL(raw)
+        }
+        return normalized
     }
 
     /// Strip `<think>...</think>` blocks from model output when thinking is disabled.

@@ -18,6 +18,8 @@ final class ScheduledRecording {
     var reminderMinutes: Int = 1
     var isEnabled: Bool = true
     var lastTriggeredAt: Date? = nil
+    /// EKEvent.eventIdentifier for robust calendar dedup.
+    var calendarEventIdentifier: String? = nil
 
     init(
         id: UUID = UUID(),
@@ -28,7 +30,8 @@ final class ScheduledRecording {
         repeatRule: RepeatRule = .once,
         reminderMinutes: Int = 1,
         isEnabled: Bool = true,
-        lastTriggeredAt: Date? = nil
+        lastTriggeredAt: Date? = nil,
+        calendarEventIdentifier: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -39,30 +42,45 @@ final class ScheduledRecording {
         self.reminderMinutes = reminderMinutes
         self.isEnabled = isEnabled
         self.lastTriggeredAt = lastTriggeredAt
+        self.calendarEventIdentifier = calendarEventIdentifier
     }
 
     var rule: RepeatRule {
         RepeatRule(rawValue: repeatRule) ?? .once
     }
 
-    /// Next fire time accounting for repeat rules. Returns `nil` if already past and `once`.
+    /// Next fire time accounting for repeat rules. Returns `nil` if already past and `once`,
+    /// or if `Calendar.date(byAdding:)` fails repeatedly (safety bound: 1000 iterations).
     var nextFireTime: Date? {
         let now = Date()
         var candidate = startTime
+        // Safety bound: prevent infinite loop if Calendar.date(byAdding:) returns nil
+        let maxIterations = 1000
 
         switch rule {
         case .once:
             return candidate > now ? candidate : nil
         case .daily:
-            while candidate <= now {
+            var i = 0
+            while candidate <= now, i < maxIterations {
                 candidate = Calendar.current.date(byAdding: .day, value: 1, to: candidate) ?? candidate
+                i += 1
             }
-            return candidate
+            return i < maxIterations ? candidate : nil
+        case .weekly:
+            var i = 0
+            while candidate <= now, i < maxIterations {
+                candidate = Calendar.current.date(byAdding: .weekOfYear, value: 1, to: candidate) ?? candidate
+                i += 1
+            }
+            return i < maxIterations ? candidate : nil
         case .weekdays:
-            while candidate <= now || !Calendar.current.isDateInWeekday(candidate) {
+            var i = 0
+            while (candidate <= now || !Calendar.current.isDateInWeekday(candidate)), i < maxIterations {
                 candidate = Calendar.current.date(byAdding: .day, value: 1, to: candidate) ?? candidate
+                i += 1
             }
-            return candidate
+            return i < maxIterations ? candidate : nil
         }
     }
 }

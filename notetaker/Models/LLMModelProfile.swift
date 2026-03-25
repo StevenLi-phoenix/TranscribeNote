@@ -74,9 +74,13 @@ enum LLMProfileStore {
             return
         }
         UserDefaults.standard.set(json, forKey: profilesKey)
-        // Save each API key to Keychain
+        // Save each API key to Keychain (delete entry if empty to avoid storing blank secrets)
         for profile in profiles {
-            KeychainService.save(key: profile.keychainKey, value: profile.config.apiKey)
+            if profile.config.apiKey.isEmpty {
+                KeychainService.delete(key: profile.keychainKey)
+            } else {
+                KeychainService.save(key: profile.keychainKey, value: profile.config.apiKey)
+            }
         }
         logger.debug("Saved \(profiles.count) LLM profiles")
     }

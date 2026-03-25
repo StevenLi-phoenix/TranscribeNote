@@ -82,7 +82,12 @@ nonisolated struct LLMConfig: Codable, Sendable, Equatable {
             return
         }
         UserDefaults.standard.set(json, forKey: key)
-        KeychainService.save(key: keychainKey(for: key), value: config.apiKey)
+        // Delete Keychain entry if empty to avoid storing blank secrets
+        if config.apiKey.isEmpty {
+            KeychainService.delete(key: keychainKey(for: key))
+        } else {
+            KeychainService.save(key: keychainKey(for: key), value: config.apiKey)
+        }
         logger.debug("Saved LLMConfig to '\(key)' (apiKey in Keychain)")
     }
 }

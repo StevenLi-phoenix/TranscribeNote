@@ -82,5 +82,14 @@ struct LiveRecordingView: View {
                 )
             }
         }
+        // 2c: Duration-end prompt
+        .alert("Scheduled event ended", isPresented: $viewModel.showDurationEndPrompt) {
+            Button("Stop Recording", role: .destructive) {
+                onStop()
+            }
+            Button("Continue Recording", role: .cancel) { }
+        } message: {
+            Text("\"\(viewModel.scheduledInfo?.title ?? "Event")\" has reached its scheduled duration.")
+        }
     }
 }

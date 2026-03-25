@@ -22,6 +22,10 @@ struct AnthropicEngineTests {
         LLMConfig(provider: .anthropic, model: model, apiKey: apiKey, baseURL: baseURL, temperature: 0.7, maxTokens: 1024)
     }
 
+    private func makeMessages(_ prompt: String) -> [LLMMessage] {
+        [LLMMessage(role: .user, content: prompt)]
+    }
+
     @Test("Successful generation returns text content")
     func successfulGeneration() async throws {
         let responseJSON = """
@@ -33,8 +37,9 @@ struct AnthropicEngineTests {
             return (response, responseJSON)
         }
 
-        let result = try await engine.generate(prompt: "Hello", config: makeConfig())
-        #expect(result == "Hello from Anthropic")
+        let result = try await engine.generate(messages: makeMessages("Hello"), config: makeConfig())
+        #expect(result.content == "Hello from Anthropic")
+        #expect(result.role == .assistant)
     }
 
     @Test("x-api-key header is set")
@@ -50,14 +55,14 @@ struct AnthropicEngineTests {
             return (response, responseJSON)
         }
 
-        _ = try await engine.generate(prompt: "test", config: makeConfig(apiKey: "sk-ant-my-key"))
+        _ = try await engine.generate(messages: makeMessages("test"), config: makeConfig(apiKey: "sk-ant-my-key"))
 
         let request = try #require(capturedRequest)
         #expect(request.value(forHTTPHeaderField: "x-api-key") == "sk-ant-my-key")
     }
 
-    @Test("anthropic-version header is set")
-    func versionHeader() async throws {
+    @Test("anthropic-version and anthropic-beta headers are set")
+    func headers() async throws {
         let responseJSON = """
         {"content": [{"type": "text", "text": "ok"}]}
         """.data(using: .utf8)!
@@ -69,14 +74,15 @@ struct AnthropicEngineTests {
             return (response, responseJSON)
         }
 
-        _ = try await engine.generate(prompt: "test", config: makeConfig())
+        _ = try await engine.generate(messages: makeMessages("test"), config: makeConfig())
 
         let request = try #require(capturedRequest)
         #expect(request.value(forHTTPHeaderField: "anthropic-version") == "2023-06-01")
+        #expect(request.value(forHTTPHeaderField: "anthropic-beta") == "prompt-caching-2024-07-31")
     }
 
-    @Test("Request URL and format correct")
-    func requestFormat() async throws {
+    @Test("System messages sent as system parameter with cache_control")
+    func systemMessagesWithCaching() async throws {
         let responseJSON = """
         {"content": [{"type": "text", "text": "ok"}]}
         """.data(using: .utf8)!
@@ -88,20 +94,113 @@ struct AnthropicEngineTests {
             return (response, responseJSON)
         }
 
-        _ = try await engine.generate(prompt: "test prompt", config: makeConfig(model: "claude-sonnet-4-5-20250929"))
+        let messages = [
+            LLMMessage(role: .system, content: "You are helpful", cacheHint: true),
+            LLMMessage(role: .user, content: "test prompt"),
+        ]
+        _ = try await engine.generate(messages: messages, config: makeConfig())
 
-        let request = try #require(capturedRequest)
-        #expect(request.url?.absoluteString == "https://api.anthropic.com/v1/messages")
-        #expect(request.httpMethod == "POST")
-        #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
-
-        let body = try #require(request.httpBody)
+        let body = try #require(capturedRequest?.httpBody)
         let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
-        #expect(json["model"] as? String == "claude-sonnet-4-5-20250929")
-        #expect(json["max_tokens"] as? Int == 1024)
-        let messages = try #require(json["messages"] as? [[String: String]])
-        #expect(messages.first?["role"] == "user")
-        #expect(messages.first?["content"] == "test prompt")
+
+        // System should be array of blocks with cache_control
+        let system = try #require(json["system"] as? [[String: Any]])
+        #expect(system.count == 1)
+        #expect(system[0]["text"] as? String == "You are helpful")
+        let cacheControl = try #require(system[0]["cache_control"] as? [String: String])
+        #expect(cacheControl["type"] == "ephemeral")
+
+        // Messages should only contain user messages
+        let apiMessages = try #require(json["messages"] as? [[String: Any]])
+        #expect(apiMessages.count == 1)
+        #expect(apiMessages[0]["role"] as? String == "user")
+        #expect(apiMessages[0]["content"] as? String == "test prompt")
+    }
+
+    @Test("User messages with cacheHint get cache_control")
+    func userCacheHint() async throws {
+        let responseJSON = """
+        {"content": [{"type": "text", "text": "ok"}]}
+        """.data(using: .utf8)!
+
+        var capturedRequest: URLRequest?
+        AnthropicMockProtocol.requestHandler = { request in
+            capturedRequest = request
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        let messages = [
+            LLMMessage(role: .user, content: "cached context", cacheHint: true),
+            LLMMessage(role: .user, content: "new content"),
+        ]
+        _ = try await engine.generate(messages: messages, config: makeConfig())
+
+        let body = try #require(capturedRequest?.httpBody)
+        let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let apiMessages = try #require(json["messages"] as? [[String: Any]])
+
+        // First user message should have content as array with cache_control
+        let firstContent = try #require(apiMessages[0]["content"] as? [[String: Any]])
+        #expect(firstContent[0]["text"] as? String == "cached context")
+        let cc = try #require(firstContent[0]["cache_control"] as? [String: String])
+        #expect(cc["type"] == "ephemeral")
+
+        // Second user message should have plain string content
+        #expect(apiMessages[1]["content"] as? String == "new content")
+    }
+
+    @Test("Token usage with cache stats parsed from response")
+    func tokenUsageWithCache() async throws {
+        let responseJSON = """
+        {"content": [{"type": "text", "text": "ok"}], "usage": {"input_tokens": 100, "output_tokens": 50, "cache_creation_input_tokens": 80, "cache_read_input_tokens": 0}}
+        """.data(using: .utf8)!
+
+        AnthropicMockProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        let result = try await engine.generate(messages: makeMessages("test"), config: makeConfig())
+        let usage = try #require(result.usage)
+        #expect(usage.inputTokens == 100)
+        #expect(usage.outputTokens == 50)
+        #expect(usage.cacheCreationTokens == 80)
+        #expect(usage.cacheReadTokens == 0)
+    }
+
+    @Test("Cache read tokens on subsequent request")
+    func cacheReadTokens() async throws {
+        let responseJSON = """
+        {"content": [{"type": "text", "text": "ok"}], "usage": {"input_tokens": 20, "output_tokens": 50, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 80}}
+        """.data(using: .utf8)!
+
+        AnthropicMockProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        let result = try await engine.generate(messages: makeMessages("test"), config: makeConfig())
+        let usage = try #require(result.usage)
+        #expect(usage.cacheCreationTokens == 0)
+        #expect(usage.cacheReadTokens == 80)
+    }
+
+    @Test("Request URL correct")
+    func requestURL() async throws {
+        let responseJSON = """
+        {"content": [{"type": "text", "text": "ok"}]}
+        """.data(using: .utf8)!
+
+        var capturedURL: URL?
+        AnthropicMockProtocol.requestHandler = { request in
+            capturedURL = request.url
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        _ = try await engine.generate(messages: makeMessages("test"), config: makeConfig())
+        #expect(capturedURL?.absoluteString == "https://api.anthropic.com/v1/messages")
     }
 
     @Test("Custom baseURL is used")
@@ -117,7 +216,7 @@ struct AnthropicEngineTests {
             return (response, responseJSON)
         }
 
-        _ = try await engine.generate(prompt: "test", config: makeConfig(baseURL: "https://custom.anthropic.com"))
+        _ = try await engine.generate(messages: makeMessages("test"), config: makeConfig(baseURL: "https://custom.anthropic.com"))
         #expect(capturedURL?.absoluteString == "https://custom.anthropic.com/v1/messages")
     }
 
@@ -129,7 +228,7 @@ struct AnthropicEngineTests {
         }
 
         await #expect(throws: LLMEngineError.self) {
-            try await engine.generate(prompt: "Hello", config: makeConfig())
+            try await engine.generate(messages: makeMessages("Hello"), config: makeConfig())
         }
     }
 
@@ -141,7 +240,7 @@ struct AnthropicEngineTests {
         }
 
         await #expect(throws: LLMEngineError.self) {
-            try await engine.generate(prompt: "Hello", config: makeConfig())
+            try await engine.generate(messages: makeMessages("Hello"), config: makeConfig())
         }
     }
 
@@ -157,7 +256,7 @@ struct AnthropicEngineTests {
         }
 
         await #expect(throws: LLMEngineError.self) {
-            try await engine.generate(prompt: "Hello", config: makeConfig())
+            try await engine.generate(messages: makeMessages("Hello"), config: makeConfig())
         }
     }
 
@@ -174,7 +273,7 @@ struct AnthropicEngineTests {
             return (response, responseJSON)
         }
 
-        _ = try await engine.generate(prompt: "test", config: makeConfig(baseURL: ""))
+        _ = try await engine.generate(messages: makeMessages("test"), config: makeConfig(baseURL: ""))
         #expect(capturedURL?.absoluteString == "https://api.anthropic.com/v1/messages")
     }
 }

@@ -43,7 +43,7 @@ nonisolated final class CrashLogService: NSObject, MXMetricManagerSubscriber, @u
             if let crashDiagnostics = payload.crashDiagnostics {
                 for diagnostic in crashDiagnostics {
                     let report = Self.formatCrashDiagnostic(diagnostic)
-                    Self.logger.warning("Crash diagnostic:\n\(report)")
+                    Self.logger.warning("Crash diagnostic: exception=\(diagnostic.exceptionType ?? 0) signal=\(diagnostic.signal ?? 0) reason=\(diagnostic.terminationReason ?? "unknown")")
                     Self.writeCrashLog(report)
                 }
             }
@@ -92,7 +92,7 @@ nonisolated final class CrashLogService: NSObject, MXMetricManagerSubscriber, @u
 
         do {
             let content = try String(contentsOf: file, encoding: .utf8)
-            logger.warning("Previous crash detected:\n\(content)")
+            logger.warning("Previous crash detected (\(content.utf8.count) bytes)")
             try FileManager.default.removeItem(at: file)
         } catch {
             logger.error("Failed to read/clean crash log: \(error.localizedDescription)")

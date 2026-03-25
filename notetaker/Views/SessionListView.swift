@@ -116,25 +116,8 @@ struct SessionListView: View {
                     ContentUnavailableView.search(text: searchText)
                 }
             }
-            .toolbar {
-                ToolbarItem(placement: .automatic) {
-                    Menu {
-                        ForEach(DateFilter.allCases, id: \.self) { filter in
-                            Button {
-                                dateFilter = filter
-                            } label: {
-                                if dateFilter == filter {
-                                    Label(filter.rawValue, systemImage: "checkmark")
-                                } else {
-                                    Text(filter.rawValue)
-                                }
-                            }
-                        }
-                    } label: {
-                        Image(systemName: dateFilter == .all ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
-                    }
-                    .help("Filter by date")
-                }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                DateFilterBar(selection: $dateFilter)
             }
     }
 
@@ -170,7 +153,7 @@ struct SessionListView: View {
         let count = ids.count
         for id in ids {
             if let session = sessions.first(where: { $0.id == id }) {
-                if let audioURL = session.audioFileURL {
+                for audioURL in session.audioFileURLs {
                     do {
                         try FileManager.default.removeItem(at: audioURL)
                     } catch {
@@ -248,5 +231,54 @@ private struct SessionRowView: View {
             parts.append("\(session.segments.count) segments")
         }
         return parts.joined(separator: ", ")
+    }
+}
+
+// MARK: - Date Filter Bar
+
+/// Compact inline filter bar — understated pill chips that sit flush below the search field.
+private struct DateFilterBar: View {
+    @Binding var selection: DateFilter
+
+    var body: some View {
+        HStack(spacing: DS.Spacing.xs) {
+            ForEach(DateFilter.allCases, id: \.self) { filter in
+                DateFilterChip(
+                    label: filter.rawValue,
+                    isSelected: selection == filter
+                ) {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        selection = filter
+                    }
+                }
+            }
+            Spacer()
+        }
+        .padding(.horizontal, DS.Spacing.sm)
+        .padding(.vertical, DS.Spacing.xs)
+    }
+}
+
+private struct DateFilterChip: View {
+    let label: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                .foregroundStyle(isSelected ? .primary : .secondary)
+                .padding(.horizontal, DS.Spacing.sm)
+                .padding(.vertical, 3)
+                .background {
+                    if isSelected {
+                        Capsule()
+                            .fill(.quaternary)
+                    }
+                }
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }

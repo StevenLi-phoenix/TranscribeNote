@@ -65,13 +65,57 @@ nonisolated final class CalendarService: @unchecked Sendable {
             durationMinutes = nil
         }
 
+        // 3b: Map recurrence rules from EKEvent
+        let repeatRule = mapRecurrenceRule(event.recurrenceRules)
+
+        // Map alarms to reminderMinutes (use first alarm's relative offset, or default 1)
+        let reminderMinutes: Int
+        if let alarm = event.alarms?.first {
+            let offsetMinutes = Int(abs(alarm.relativeOffset) / 60)
+            reminderMinutes = offsetMinutes > 0 ? offsetMinutes : 1
+        } else {
+            reminderMinutes = 1
+        }
+
         return ScheduledRecording(
             title: event.title ?? "Untitled Meeting",
             label: event.calendar?.title ?? "",
             startTime: event.startDate,
             durationMinutes: durationMinutes,
-            repeatRule: .once,
-            reminderMinutes: 1
+            repeatRule: repeatRule,
+            reminderMinutes: reminderMinutes,
+            calendarEventIdentifier: event.eventIdentifier
         )
+    }
+
+    // MARK: - Recurrence Mapping (3b)
+
+    /// Map EKRecurrenceRule to RepeatRule. Internal for testability.
+    /// Uses stable EKKit API, NOT FoundationPreview Calendar.RecurrenceRule.
+    func mapRecurrenceRule(_ rules: [EKRecurrenceRule]?) -> RepeatRule {
+        guard let rule = rules?.first else { return .once }
+
+        // Only map interval == 1 — "every 2 days" or "every 2 weeks" falls to .once
+        guard rule.interval == 1 else {
+            Self.logger.warning("Unsupported recurrence interval: \(rule.interval) for freq=\(rule.frequency.rawValue)")
+            return .once
+        }
+
+        switch rule.frequency {
+        case .daily:
+            return .daily
+        case .weekly:
+            if let days = rule.daysOfTheWeek {
+                let daySet = Set(days.map(\.dayOfTheWeek))
+                let weekdaySet: Set<EKWeekday> = [.monday, .tuesday, .wednesday, .thursday, .friday]
+                if daySet == weekdaySet {
+                    return .weekdays
+                }
+            }
+            return .weekly
+        default:
+            Self.logger.warning("Unsupported recurrence frequency: \(rule.frequency.rawValue)")
+            return .once
+        }
     }
 }

@@ -14,6 +14,8 @@ nonisolated final class AudioCaptureService: @unchecked Sendable {
         var audioFile: AVAudioFile?
         var onAudioBuffer: (@Sendable (AVAudioPCMBuffer) -> Void)?
         var onAudioLevel: (@Sendable (Float) -> Void)?
+        var onSilenceTimeout: (@Sendable () -> Void)?
+        var vad: SimpleVAD?
     }
 
     /// External subscribers receive audio buffers (e.g., ASR engine).
@@ -26,6 +28,16 @@ nonisolated final class AudioCaptureService: @unchecked Sendable {
     var onAudioLevel: (@Sendable (Float) -> Void)? {
         get { lock.withLock { $0.onAudioLevel } }
         set { lock.withLock { $0.onAudioLevel = newValue } }
+    }
+
+    /// Fires when VAD detects sustained silence exceeding the timeout threshold.
+    var onSilenceTimeout: (@Sendable () -> Void)? {
+        get { lock.withLock { $0.onSilenceTimeout } }
+        set { lock.withLock { $0.onSilenceTimeout = newValue } }
+    }
+
+    func configureVAD(_ vad: SimpleVAD?) {
+        lock.withLock { $0.vad = vad }
     }
 
     enum AudioCaptureError: Error {
@@ -76,8 +88,8 @@ nonisolated final class AudioCaptureService: @unchecked Sendable {
             // Offload file I/O and ASR forwarding to background queue
             self.writeQueue.async {
                 // Snapshot shared state under lock
-                let (file, bufferCallback, levelCallback) = self.lock.withLock { state in
-                    (state.audioFile, state.onAudioBuffer, state.onAudioLevel)
+                let (file, bufferCallback, levelCallback, silenceTimeoutCallback, vad) = self.lock.withLock { state in
+                    (state.audioFile, state.onAudioBuffer, state.onAudioLevel, state.onSilenceTimeout, state.vad)
                 }
 
                 // Write audio archive
@@ -87,8 +99,9 @@ nonisolated final class AudioCaptureService: @unchecked Sendable {
                     Self.logger.error("Audio file write failed: \(error.localizedDescription)")
                 }
 
-                // Calculate RMS audio level for metering
-                if let levelCallback, let channelData = bufferCopy.floatChannelData {
+                // Calculate RMS audio level (used for metering UI and VAD)
+                var level: Float = 0
+                if let channelData = bufferCopy.floatChannelData {
                     let frameCount = Int(bufferCopy.frameLength)
                     if frameCount > 0 {
                         var sumOfSquares: Float = 0
@@ -100,13 +113,19 @@ nonisolated final class AudioCaptureService: @unchecked Sendable {
                         let rms = sqrtf(sumOfSquares / Float(frameCount))
                         // Convert to 0..1 log scale: -50dB → 0, 0dB → 1
                         let db = 20 * log10f(max(rms, 1e-10))
-                        let level = max(0, min(1, (db + 50) / 50))
-                        levelCallback(level)
+                        level = max(0, min(1, (db + 50) / 50))
+                        levelCallback?(level)
                     }
                 }
 
-                // Forward to subscribers (ASR engine)
-                bufferCallback?(bufferCopy)
+                // VAD gating: decide whether to forward buffer to ASR
+                let vadDecision = vad?.processLevel(level) ?? .forward
+                if vadDecision == .silenceTimeout {
+                    silenceTimeoutCallback?()
+                }
+                if vadDecision == .forward {
+                    bufferCallback?(bufferCopy)
+                }
             }
         }
 
@@ -122,6 +141,8 @@ nonisolated final class AudioCaptureService: @unchecked Sendable {
             state.audioFile = nil
             state.onAudioBuffer = nil
             state.onAudioLevel = nil
+            state.onSilenceTimeout = nil
+            state.vad = nil
             return fileURL
         }
         ringBuffer.reset()

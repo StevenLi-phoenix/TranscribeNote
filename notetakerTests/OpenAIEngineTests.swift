@@ -22,6 +22,10 @@ struct OpenAIEngineTests {
         LLMConfig(provider: .openAI, model: model, apiKey: apiKey, baseURL: baseURL, temperature: 0.7, maxTokens: 1024)
     }
 
+    private func makeMessages(_ prompt: String) -> [LLMMessage] {
+        [LLMMessage(role: .user, content: prompt)]
+    }
+
     @Test("Successful generation returns content")
     func successfulGeneration() async throws {
         let responseJSON = """
@@ -33,8 +37,9 @@ struct OpenAIEngineTests {
             return (response, responseJSON)
         }
 
-        let result = try await engine.generate(prompt: "Hello", config: makeConfig())
-        #expect(result == "Hello from OpenAI")
+        let result = try await engine.generate(messages: makeMessages("Hello"), config: makeConfig())
+        #expect(result.content == "Hello from OpenAI")
+        #expect(result.role == .assistant)
     }
 
     @Test("Bearer auth header present when apiKey set")
@@ -50,7 +55,7 @@ struct OpenAIEngineTests {
             return (response, responseJSON)
         }
 
-        _ = try await engine.generate(prompt: "test", config: makeConfig(apiKey: "sk-my-key"))
+        _ = try await engine.generate(messages: makeMessages("test"), config: makeConfig(apiKey: "sk-my-key"))
 
         let request = try #require(capturedRequest)
         #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer sk-my-key")
@@ -69,7 +74,7 @@ struct OpenAIEngineTests {
             return (response, responseJSON)
         }
 
-        _ = try await engine.generate(prompt: "test", config: makeConfig(apiKey: ""))
+        _ = try await engine.generate(messages: makeMessages("test"), config: makeConfig(apiKey: ""))
 
         let request = try #require(capturedRequest)
         #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
@@ -88,11 +93,11 @@ struct OpenAIEngineTests {
             return (response, responseJSON)
         }
 
-        _ = try await engine.generate(prompt: "test", config: makeConfig(baseURL: "https://custom.api.com/v1"))
+        _ = try await engine.generate(messages: makeMessages("test"), config: makeConfig(baseURL: "https://custom.api.com/v1"))
         #expect(capturedURL?.absoluteString == "https://custom.api.com/v1/chat/completions")
     }
 
-    @Test("Request body format is correct")
+    @Test("Request body format is correct with system and user messages")
     func requestFormat() async throws {
         let responseJSON = """
         {"choices": [{"message": {"content": "ok"}}]}
@@ -105,7 +110,11 @@ struct OpenAIEngineTests {
             return (response, responseJSON)
         }
 
-        _ = try await engine.generate(prompt: "test prompt", config: makeConfig(model: "gpt-4"))
+        let messages = [
+            LLMMessage(role: .system, content: "Be helpful"),
+            LLMMessage(role: .user, content: "test prompt"),
+        ]
+        _ = try await engine.generate(messages: messages, config: makeConfig(model: "gpt-4"))
 
         let request = try #require(capturedRequest)
         #expect(request.httpMethod == "POST")
@@ -114,9 +123,31 @@ struct OpenAIEngineTests {
         let body = try #require(request.httpBody)
         let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
         #expect(json["model"] as? String == "gpt-4")
-        let messages = try #require(json["messages"] as? [[String: String]])
-        #expect(messages.first?["role"] == "user")
-        #expect(messages.first?["content"] == "test prompt")
+        let apiMessages = try #require(json["messages"] as? [[String: String]])
+        #expect(apiMessages.count == 2)
+        #expect(apiMessages[0]["role"] == "system")
+        #expect(apiMessages[0]["content"] == "Be helpful")
+        #expect(apiMessages[1]["role"] == "user")
+        #expect(apiMessages[1]["content"] == "test prompt")
+    }
+
+    @Test("Token usage parsed from response")
+    func tokenUsage() async throws {
+        let responseJSON = """
+        {"choices": [{"message": {"content": "ok"}}], "usage": {"prompt_tokens": 50, "completion_tokens": 20, "prompt_tokens_details": {"cached_tokens": 30}}}
+        """.data(using: .utf8)!
+
+        OpenAIMockProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        let result = try await engine.generate(messages: makeMessages("test"), config: makeConfig())
+        let usage = try #require(result.usage)
+        #expect(usage.inputTokens == 50)
+        #expect(usage.outputTokens == 20)
+        #expect(usage.cacheReadTokens == 30)
+        #expect(usage.cacheCreationTokens == 0)
     }
 
     @Test("HTTP error throws httpError")
@@ -127,7 +158,7 @@ struct OpenAIEngineTests {
         }
 
         await #expect(throws: LLMEngineError.self) {
-            try await engine.generate(prompt: "Hello", config: makeConfig())
+            try await engine.generate(messages: makeMessages("Hello"), config: makeConfig())
         }
     }
 
@@ -139,7 +170,7 @@ struct OpenAIEngineTests {
         }
 
         await #expect(throws: LLMEngineError.self) {
-            try await engine.generate(prompt: "Hello", config: makeConfig())
+            try await engine.generate(messages: makeMessages("Hello"), config: makeConfig())
         }
     }
 
@@ -155,7 +186,7 @@ struct OpenAIEngineTests {
         }
 
         await #expect(throws: LLMEngineError.self) {
-            try await engine.generate(prompt: "Hello", config: makeConfig())
+            try await engine.generate(messages: makeMessages("Hello"), config: makeConfig())
         }
     }
 }

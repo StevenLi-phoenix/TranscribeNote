@@ -1,12 +1,16 @@
 import Foundation
 
 enum PromptBuilder {
-    /// Sanitize user-provided language string: strip newlines, limit length.
+    /// Sanitize user-provided language string: strip newlines, filter to letters/spaces only, limit length.
     private static func sanitizeLanguage(_ raw: String) -> String {
-        let cleaned = raw.replacingOccurrences(of: "\n", with: " ")
+        let cleaned = raw
+            .replacingOccurrences(of: "\n", with: " ")
             .replacingOccurrences(of: "\r", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return String(cleaned.prefix(50))
+        let filtered = String(cleaned.unicodeScalars.filter {
+            CharacterSet.letters.union(.whitespaces).contains($0)
+        })
+        return String(filtered.prefix(50))
     }
 
     /// Sanitize user-provided instructions: strip control characters, limit length.
@@ -64,63 +68,73 @@ enum PromptBuilder {
         previousSummary: String?,
         config: SummarizerConfig,
         additionalInstructions: String? = nil
-    ) -> String {
-        var parts: [String] = []
+    ) -> [LLMMessage] {
+        var messages: [LLMMessage] = []
 
+        // System message: role + format + constraints (stable across calls, cache candidate)
         let task = config.summaryStyle == .lectureNotes
             ? "Create detailed, structured notes from the following transcript segment."
             : "Summarize the following transcript."
         let (role, format) = styleInstructions(style: config.summaryStyle, task: task)
-        parts.append(role)
-        parts.append(format)
 
-        // Constraints: no preamble + language
-        parts.append(constraintBlock(config: config))
+        let systemParts = [role, format, constraintBlock(config: config)]
 
-        // Additional user instructions for guided regeneration
+        messages.append(LLMMessage(role: .system, content: systemParts.joined(separator: "\n\n"), cacheHint: true))
+
+        // Additional user instructions placed in user message to reduce prompt injection risk
         if let additionalInstructions, !additionalInstructions.isEmpty {
             let sanitized = sanitizeInstructions(additionalInstructions)
-            parts.append("Additional user instructions: \(sanitized)")
+            messages.append(LLMMessage(role: .user, content: "Additional user instructions: \(sanitized)"))
         }
 
-        // Previous context — label varies by style
+        // Previous context as a separate user message (stable for retries, cache candidate)
         if config.includeContext, let previousSummary, !previousSummary.isEmpty {
             let truncated = String(previousSummary.prefix(config.maxContextTokens))
             let contextLabel = config.summaryStyle == .lectureNotes
                 ? "Previous notes for context:"
                 : "Previous summary for context:"
-            parts.append("\(contextLabel)\n\(truncated)")
+            messages.append(LLMMessage(role: .user, content: "\(contextLabel)\n\(truncated)", cacheHint: true))
         }
 
-        // Timestamped transcript
+        // Transcript content (changes each call)
+        var transcriptParts: [String] = []
         if !segments.isEmpty {
-            parts.append("Transcript:")
+            transcriptParts.append("Transcript:")
             for segment in segments {
                 let timestamp = segment.startTime.mmss
-                parts.append("[\(timestamp)] \(segment.text)")
+                transcriptParts.append("[\(timestamp)] \(segment.text)")
             }
         }
+        if !transcriptParts.isEmpty {
+            messages.append(LLMMessage(role: .user, content: transcriptParts.joined(separator: "\n\n")))
+        }
 
-        return parts.joined(separator: "\n\n")
+        return messages
     }
 
     /// Build a prompt to generate a concise session title from transcript segments.
     static func buildTitlePrompt(
         segments: [TranscriptSegment],
         config: SummarizerConfig
-    ) -> String {
-        var parts: [String] = []
+    ) -> [LLMMessage] {
+        var messages: [LLMMessage] = []
 
-        parts.append("You are a concise title generator. Generate a short, descriptive title (5-10 words max) for the following transcript.")
-        parts.append("Output ONLY the title text. Do not include quotes, punctuation at the end, or any preamble.")
+        // System instructions (stable, cache candidate)
+        var systemParts = [
+            "You are a concise title generator. Generate a short, descriptive title (5-10 words max) for the following transcript.",
+            "Output ONLY the title text. Do not include quotes, punctuation at the end, or any preamble."
+        ]
 
         if config.summaryLanguage != "auto" {
             let lang = sanitizeLanguage(config.summaryLanguage)
-            parts.append("IMPORTANT: Write the title in \(lang).")
+            systemParts.append("IMPORTANT: Write the title in \(lang).")
         }
 
+        messages.append(LLMMessage(role: .system, content: systemParts.joined(separator: "\n\n"), cacheHint: true))
+
+        // Transcript content
         if !segments.isEmpty {
-            parts.append("Transcript:")
+            var parts = ["Transcript:"]
             for segment in segments.prefix(50) {
                 let timestamp = segment.startTime.mmss
                 parts.append("[\(timestamp)] \(segment.text)")
@@ -128,37 +142,38 @@ enum PromptBuilder {
             if segments.count > 50 {
                 parts.append("... (\(segments.count - 50) more segments)")
             }
+            messages.append(LLMMessage(role: .user, content: parts.joined(separator: "\n\n")))
         }
 
-        return parts.joined(separator: "\n\n")
+        return messages
     }
 
     static func buildOverallSummaryPrompt(
         chunkSummaries: [(coveringFrom: TimeInterval, coveringTo: TimeInterval, content: String)],
         config: SummarizerConfig
-    ) -> String {
-        var parts: [String] = []
+    ) -> [LLMMessage] {
+        var messages: [LLMMessage] = []
 
+        // System instructions (stable, cache candidate)
         let task = config.summaryStyle == .lectureNotes
             ? "Synthesize the following section summaries into comprehensive, structured notes."
             : "Synthesize the following section summaries into a single cohesive overall summary."
         let (role, format) = styleInstructions(style: config.summaryStyle, task: task)
-        parts.append(role)
-        parts.append(format)
 
-        // Constraints: no preamble + language
-        parts.append(constraintBlock(config: config))
+        let systemContent = [role, format, constraintBlock(config: config)].joined(separator: "\n\n")
+        messages.append(LLMMessage(role: .system, content: systemContent, cacheHint: true))
 
-        // Section summaries with time ranges
+        // Section summaries as user content
         if !chunkSummaries.isEmpty {
-            parts.append("Section summaries:")
+            var parts = ["Section summaries:"]
             for chunk in chunkSummaries {
                 let from = chunk.coveringFrom.mmss
                 let to = chunk.coveringTo.mmss
                 parts.append("[\(from) – \(to)]\n\(chunk.content)")
             }
+            messages.append(LLMMessage(role: .user, content: parts.joined(separator: "\n\n")))
         }
 
-        return parts.joined(separator: "\n\n")
+        return messages
     }
 }

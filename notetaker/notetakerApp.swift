@@ -44,7 +44,8 @@ struct notetakerApp: App {
 
         let llmConfig = LLMProfileStore.resolveConfig(for: .live)
         let summarizerConfig = SummarizerConfig.fromUserDefaults()
-        let vm = RecordingViewModel(llmConfig: llmConfig, summarizerConfig: summarizerConfig)
+        let vadConfig = VADConfig.fromUserDefaults()
+        let vm = RecordingViewModel(llmConfig: llmConfig, summarizerConfig: summarizerConfig, vadConfig: vadConfig)
         _viewModel = State(initialValue: vm)
         let schedulerVM = SchedulerViewModel()
         schedulerVM.recordingViewModel = vm
@@ -71,19 +72,8 @@ struct notetakerApp: App {
         appDelegate.schedulerViewModel = schedulerVM
         appDelegate.modelContainer = sharedModelContainer
 
-        // Register auto-start observer once at launch (not in onAppear, which can fire multiple times).
-        if let container = sharedModelContainer {
-            NotificationCenter.default.addObserver(
-                forName: .scheduledRecordingAutoStart,
-                object: nil,
-                queue: .main
-            ) { [weak vm] _ in
-                guard let vm, !vm.isActive else { return }
-                Task { @MainActor in
-                    await vm.startRecording(modelContext: container.mainContext)
-                }
-            }
-        }
+        // 3c: Auto-start is now handled directly by SchedulerViewModel.handleFire()
+        // via direct callback to RecordingViewModel (no notification relay needed).
     }
 
     @ViewBuilder

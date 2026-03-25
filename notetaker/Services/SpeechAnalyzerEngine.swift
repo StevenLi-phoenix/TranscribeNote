@@ -178,7 +178,7 @@ extension SpeechAnalyzerEngine: ASREngine {
         // Timeout is safety net only — normal path completes fast.
         if let capturedResultTask {
             Self.log.info("stopRecognition Phase 3: draining results")
-            await withUnsafeContinuation { (continuation: UnsafeContinuation<Void, Never>) in
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                 let resumed = OSAllocatedUnfairLock(initialState: false)
                 let handles = OSAllocatedUnfairLock<(drain: Task<Void, Never>?, timeout: Task<Void, Never>?)>(initialState: (nil, nil))
 
@@ -195,7 +195,8 @@ extension SpeechAnalyzerEngine: ASREngine {
                     try? await Task.sleep(for: .seconds(2))
                     if resumed.withLock({ let old = $0; $0 = true; return !old }) {
                         handles.withLock { $0.drain?.cancel() }
-                        Self.log.warning("stopRecognition Phase 3: drain timed out")
+                        capturedResultTask.cancel()
+                        Self.log.warning("stopRecognition Phase 3: drain timed out, cancelled resultTask")
                         continuation.resume()
                     }
                 }

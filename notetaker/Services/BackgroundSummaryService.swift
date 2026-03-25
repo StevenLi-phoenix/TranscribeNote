@@ -75,26 +75,53 @@ final class BackgroundSummaryService {
 
             do {
                 let content: String
-                if chunkSummaries.isEmpty {
-                    // No live chunks succeeded — generate a complete summary from transcript
-                    Self.logger.info("No chunk summaries, generating complete summary for \(sessionID)")
+                let sortedChunks = chunkSummaries
+                    .sorted { $0.coveringFrom < $1.coveringFrom }
+                    .map { (coveringFrom: $0.coveringFrom, coveringTo: $0.coveringTo, content: $0.content) }
+
+                switch summarizerConfig.overallSummaryMode {
+                case .rawText:
+                    Self.logger.info("Mode: rawText — generating from transcript for \(sessionID)")
                     content = try await service.summarize(
                         segments: segments,
                         previousSummary: nil,
                         config: summarizerConfig,
                         llmConfig: llmConfig
                     )
-                } else {
-                    // Synthesize chunk summaries into an overall summary
-                    Self.logger.info("Synthesizing \(chunkSummaries.count) chunks into overall summary for \(sessionID)")
-                    let chunkInputs = chunkSummaries
-                        .sorted { $0.coveringFrom < $1.coveringFrom }
-                        .map { (coveringFrom: $0.coveringFrom, coveringTo: $0.coveringTo, content: $0.content) }
-                    content = try await service.summarizeOverall(
-                        chunkSummaries: chunkInputs,
-                        config: summarizerConfig,
-                        llmConfig: llmConfig
-                    )
+                case .chunkSummaries:
+                    if sortedChunks.isEmpty {
+                        Self.logger.warning("Mode: chunkSummaries but no chunks available, falling back to raw text for \(sessionID)")
+                        content = try await service.summarize(
+                            segments: segments,
+                            previousSummary: nil,
+                            config: summarizerConfig,
+                            llmConfig: llmConfig
+                        )
+                    } else {
+                        Self.logger.info("Mode: chunkSummaries — synthesizing \(sortedChunks.count) chunks for \(sessionID)")
+                        content = try await service.summarizeOverall(
+                            chunkSummaries: sortedChunks,
+                            config: summarizerConfig,
+                            llmConfig: llmConfig
+                        )
+                    }
+                case .auto:
+                    if chunkSummaries.isEmpty {
+                        Self.logger.info("Mode: auto, no chunks — generating from transcript for \(sessionID)")
+                        content = try await service.summarize(
+                            segments: segments,
+                            previousSummary: nil,
+                            config: summarizerConfig,
+                            llmConfig: llmConfig
+                        )
+                    } else {
+                        Self.logger.info("Mode: auto — synthesizing \(sortedChunks.count) chunks for \(sessionID)")
+                        content = try await service.summarizeOverall(
+                            chunkSummaries: sortedChunks,
+                            config: summarizerConfig,
+                            llmConfig: llmConfig
+                        )
+                    }
                 }
 
                 guard !Task.isCancelled, !content.isEmpty else { return }
@@ -179,7 +206,7 @@ final class BackgroundSummaryService {
 
             currentSession.title = title
             try context.save()
-            logger.info("Title generated for session \(sessionID): \(title)")
+            logger.info("Title generated for session \(sessionID) (\(title.count) chars)")
         } catch is CancellationError {
             logger.info("Title generation cancelled for \(sessionID)")
         } catch {
