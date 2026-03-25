@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import notetaker
 
-@Suite("ScheduledRecording")
+@Suite("ScheduledRecording", .serialized)
 struct ScheduledRecordingTests {
 
     // MARK: - nextFireTime

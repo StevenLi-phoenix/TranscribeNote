@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import notetaker
 
-@Suite("VADConfig Tests")
+@Suite("VADConfig Tests", .serialized)
 struct VADConfigTests {
 
     @Test("Default config has expected values")

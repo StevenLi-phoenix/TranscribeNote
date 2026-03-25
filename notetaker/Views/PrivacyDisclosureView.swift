@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct PrivacyDisclosureView: View {
-    static let privacyPolicyURL = URL(string: "https://github.com/niconi21/notetaker/blob/main/docs/PRIVACY_POLICY.md")!
+    static let privacyPolicyURL = URL(string: "https://github.com/StevenLi-phoenix/notetaker/blob/main/docs/PRIVACY_POLICY.md")!
 
     let onDismiss: () -> Void
 

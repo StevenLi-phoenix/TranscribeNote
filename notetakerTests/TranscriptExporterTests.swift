@@ -3,6 +3,7 @@ import Foundation
 import AppKit
 @testable import notetaker
 
+@Suite(.serialized)
 struct TranscriptExporterTests {
 
     @Test func formatEmptySegments() {

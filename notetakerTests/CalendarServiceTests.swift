@@ -3,7 +3,7 @@ import Foundation
 import EventKit
 @testable import notetaker
 
-@Suite("CalendarService")
+@Suite("CalendarService", .serialized)
 struct CalendarServiceTests {
 
     let service = CalendarService()

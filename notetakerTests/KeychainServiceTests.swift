@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import notetaker
 
-@Suite("KeychainService")
+@Suite("KeychainService", .serialized)
 struct KeychainServiceTests {
 
     private func cleanup(_ key: String) {

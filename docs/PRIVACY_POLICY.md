@@ -102,4 +102,4 @@ We may update this policy when new features are added. Significant changes will 
 
 For questions about this privacy policy:
 
-- GitHub Issues: [github.com/niconi21/notetaker/issues](https://github.com/niconi21/notetaker/issues)
+- GitHub Issues: [github.com/StevenLi-phoenix/notetaker/issues](https://github.com/StevenLi-phoenix/notetaker/issues)

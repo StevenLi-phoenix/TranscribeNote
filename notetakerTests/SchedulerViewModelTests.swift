@@ -8,7 +8,7 @@ import SwiftData
 /// All tests are `@MainActor` because `SchedulerViewModel` is `@Observable` (MainActor-isolated
 /// under `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`). Swift Testing's `@Test` macro explicitly
 /// strips default actor isolation, so each test must opt in individually.
-@Suite("SchedulerViewModel")
+@Suite("SchedulerViewModel", .serialized)
 struct SchedulerViewModelTests {
 
     /// Create an in-memory SwiftData container + context for testing.

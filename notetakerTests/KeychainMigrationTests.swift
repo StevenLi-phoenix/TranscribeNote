@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import notetaker
 
-@Suite("KeychainMigration")
+@Suite("KeychainMigration", .serialized)
 struct KeychainMigrationTests {
 
     @Test
