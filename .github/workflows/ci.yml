@@ -30,6 +30,14 @@ jobs:
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
 
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData/notetaker-*
+          key: deriveddata-${{ runner.os }}-${{ hashFiles('notetaker.xcodeproj/**', 'notetaker/**/*.swift') }}
+          restore-keys: |
+            deriveddata-${{ runner.os }}-
+
       - name: Build
         run: |
           set -euo pipefail
