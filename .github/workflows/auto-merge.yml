@@ -176,7 +176,7 @@ jobs:
           set -euo pipefail
           gh api repos/${{ github.repository }}/branches --paginate -q '.[].name' | while read -r branch; do
             case "$branch" in main|master|develop) continue ;; esac
-            MERGED=$(gh pr list --head "$branch" --state merged --json number --jq 'length')
+            MERGED=$(gh pr list --repo ${{ github.repository }} --head "$branch" --state merged --json number --jq 'length')
             if [ "$MERGED" -gt 0 ]; then
               echo "Deleting stale merged branch: $branch"
               gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/$branch" 2>/dev/null || true
