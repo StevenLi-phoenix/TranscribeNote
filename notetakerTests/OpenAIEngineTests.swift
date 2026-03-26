@@ -189,4 +189,145 @@ struct OpenAIEngineTests {
             try await engine.generate(messages: makeMessages("Hello"), config: makeConfig())
         }
     }
+
+    // MARK: - Structured Output Tests
+
+    private func makeSchema() -> JSONSchema {
+        let schemaDict: [String: Any] = [
+            "type": "object",
+            "properties": ["name": ["type": "string"], "age": ["type": "number"]],
+            "required": ["name", "age"],
+            "additionalProperties": false
+        ]
+        let data = try! JSONSerialization.data(withJSONObject: schemaDict)
+        return JSONSchema(name: "person", description: "A person", schemaData: data)
+    }
+
+    @Test("supportsStructuredOutput returns true")
+    func supportsStructuredOutput() {
+        #expect(engine.supportsStructuredOutput == true)
+    }
+
+    @Test("Structured output success decodes correctly")
+    func structuredOutputSuccess() async throws {
+        let responseJSON = """
+        {"choices": [{"message": {"content": "{\\"name\\": \\"Jane\\", \\"age\\": 30}"}}]}
+        """.data(using: .utf8)!
+
+        OpenAIMockProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        let result = try await engine.generateStructured(
+            messages: makeMessages("Extract person"),
+            schema: makeSchema(),
+            config: makeConfig()
+        )
+
+        struct Person: Decodable, Equatable {
+            let name: String
+            let age: Int
+        }
+        let person = try result.decode(Person.self)
+        #expect(person.name == "Jane")
+        #expect(person.age == 30)
+    }
+
+    @Test("Structured output request format contains response_format with schema")
+    func structuredOutputRequestFormat() async throws {
+        let responseJSON = """
+        {"choices": [{"message": {"content": "{\\"name\\": \\"Jane\\", \\"age\\": 30}"}}]}
+        """.data(using: .utf8)!
+
+        var capturedRequest: URLRequest?
+        OpenAIMockProtocol.requestHandler = { request in
+            capturedRequest = request
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        _ = try await engine.generateStructured(
+            messages: makeMessages("Extract person"),
+            schema: makeSchema(),
+            config: makeConfig()
+        )
+
+        let request = try #require(capturedRequest)
+        let body = try #require(request.httpBody)
+        let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+
+        let responseFormat = try #require(json["response_format"] as? [String: Any])
+        #expect(responseFormat["type"] as? String == "json_schema")
+
+        let jsonSchema = try #require(responseFormat["json_schema"] as? [String: Any])
+        #expect(jsonSchema["name"] as? String == "person")
+        #expect(jsonSchema["strict"] as? Bool == true)
+
+        let schema = try #require(jsonSchema["schema"] as? [String: Any])
+        #expect(schema["type"] as? String == "object")
+        let properties = try #require(schema["properties"] as? [String: Any])
+        #expect(properties.keys.contains("name"))
+        #expect(properties.keys.contains("age"))
+    }
+
+    @Test("Structured output token usage extraction")
+    func structuredOutputTokenUsage() async throws {
+        let responseJSON = """
+        {"choices": [{"message": {"content": "{\\"name\\": \\"Jane\\", \\"age\\": 30}"}}], "usage": {"prompt_tokens": 100, "completion_tokens": 15, "prompt_tokens_details": {"cached_tokens": 40}}}
+        """.data(using: .utf8)!
+
+        OpenAIMockProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        let result = try await engine.generateStructured(
+            messages: makeMessages("Extract person"),
+            schema: makeSchema(),
+            config: makeConfig()
+        )
+
+        let usage = try #require(result.usage)
+        #expect(usage.inputTokens == 100)
+        #expect(usage.outputTokens == 15)
+        #expect(usage.cacheReadTokens == 40)
+        #expect(usage.cacheCreationTokens == 0)
+    }
+
+    @Test("Structured output empty content throws emptyResponse")
+    func structuredOutputEmptyContent() async throws {
+        let responseJSON = """
+        {"choices": [{"message": {"content": ""}}]}
+        """.data(using: .utf8)!
+
+        OpenAIMockProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        await #expect(throws: LLMEngineError.self) {
+            try await engine.generateStructured(
+                messages: makeMessages("Extract person"),
+                schema: makeSchema(),
+                config: makeConfig()
+            )
+        }
+    }
+
+    @Test("Structured output HTTP error throws httpError")
+    func structuredOutputHTTPError() async throws {
+        OpenAIMockProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!
+            return (response, "Internal Server Error".data(using: .utf8)!)
+        }
+
+        await #expect(throws: LLMEngineError.self) {
+            try await engine.generateStructured(
+                messages: makeMessages("Extract person"),
+                schema: makeSchema(),
+                config: makeConfig()
+            )
+        }
+    }
 }

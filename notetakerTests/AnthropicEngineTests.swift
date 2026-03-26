@@ -276,4 +276,136 @@ struct AnthropicEngineTests {
         _ = try await engine.generate(messages: makeMessages("test"), config: makeConfig(baseURL: ""))
         #expect(capturedURL?.absoluteString == "https://api.anthropic.com/v1/messages")
     }
+
+    // MARK: - Structured Output Tests
+
+    private func makeSchema() -> JSONSchema {
+        let schemaDict: [String: Any] = [
+            "type": "object",
+            "properties": ["name": ["type": "string"], "age": ["type": "number"]],
+            "required": ["name", "age"],
+            "additionalProperties": false,
+        ]
+        let data = try! JSONSerialization.data(withJSONObject: schemaDict)
+        return JSONSchema(name: "person", description: "A person", schemaData: data)
+    }
+
+    @Test("supportsStructuredOutput returns true")
+    func supportsStructuredOutput() {
+        #expect(engine.supportsStructuredOutput == true)
+    }
+
+    @Test("Structured output success decodes correctly")
+    func structuredOutputSuccess() async throws {
+        let responseJSON = """
+        {"content": [{"type": "text", "text": "{\\"name\\": \\"Jane\\", \\"age\\": 30}"}]}
+        """.data(using: .utf8)!
+
+        AnthropicMockProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        let result = try await engine.generateStructured(
+            messages: makeMessages("Generate a person"),
+            schema: makeSchema(),
+            config: makeConfig()
+        )
+
+        struct Person: Decodable {
+            let name: String
+            let age: Int
+        }
+        let person = try result.decode(Person.self)
+        #expect(person.name == "Jane")
+        #expect(person.age == 30)
+    }
+
+    @Test("Structured output request contains output_config with schema")
+    func structuredOutputRequestFormat() async throws {
+        let responseJSON = """
+        {"content": [{"type": "text", "text": "{\\"name\\": \\"Test\\", \\"age\\": 1}"}]}
+        """.data(using: .utf8)!
+
+        var capturedBody: Data?
+        AnthropicMockProtocol.requestHandler = { request in
+            capturedBody = request.httpBody
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        _ = try await engine.generateStructured(
+            messages: makeMessages("test"),
+            schema: makeSchema(),
+            config: makeConfig()
+        )
+
+        let body = try #require(capturedBody)
+        let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+
+        let outputConfig = try #require(json["output_config"] as? [String: Any])
+        let format = try #require(outputConfig["format"] as? [String: Any])
+        #expect(format["type"] as? String == "json_schema")
+
+        let schema = try #require(format["schema"] as? [String: Any])
+        #expect(schema["type"] as? String == "object")
+        let properties = try #require(schema["properties"] as? [String: Any])
+        #expect(properties.keys.contains("name"))
+        #expect(properties.keys.contains("age"))
+    }
+
+    @Test("Structured output parses token usage")
+    func structuredOutputTokenUsage() async throws {
+        let responseJSON = """
+        {"content": [{"type": "text", "text": "{\\"name\\": \\"Test\\", \\"age\\": 1}"}], "usage": {"input_tokens": 200, "output_tokens": 30, "cache_creation_input_tokens": 150, "cache_read_input_tokens": 10}}
+        """.data(using: .utf8)!
+
+        AnthropicMockProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        let result = try await engine.generateStructured(
+            messages: makeMessages("test"),
+            schema: makeSchema(),
+            config: makeConfig()
+        )
+
+        let usage = try #require(result.usage)
+        #expect(usage.inputTokens == 200)
+        #expect(usage.outputTokens == 30)
+        #expect(usage.cacheCreationTokens == 150)
+        #expect(usage.cacheReadTokens == 10)
+    }
+
+    @Test("Structured output with empty text throws emptyResponse")
+    func structuredOutputEmptyContent() async throws {
+        let responseJSON = """
+        {"content": [{"type": "text", "text": ""}]}
+        """.data(using: .utf8)!
+
+        AnthropicMockProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        await #expect(throws: LLMEngineError.self) {
+            try await engine.generateStructured(
+                messages: makeMessages("test"),
+                schema: makeSchema(),
+                config: makeConfig()
+            )
+        }
+    }
+
+    @Test("Structured output with missing apiKey throws notConfigured")
+    func structuredOutputMissingApiKey() async throws {
+        await #expect(throws: LLMEngineError.self) {
+            try await engine.generateStructured(
+                messages: makeMessages("test"),
+                schema: makeSchema(),
+                config: makeConfig(apiKey: "")
+            )
+        }
+    }
 }

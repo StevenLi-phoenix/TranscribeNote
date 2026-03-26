@@ -5,6 +5,8 @@ nonisolated final class OpenAIEngine: LLMEngine, @unchecked Sendable {
     private static let logger = Logger(subsystem: "com.notetaker", category: "OpenAIEngine")
     private let session: URLSession
 
+    var supportsStructuredOutput: Bool { true }
+
     init(session: URLSession = .shared) {
         self.session = session
     }
@@ -92,6 +94,103 @@ nonisolated final class OpenAIEngine: LLMEngine, @unchecked Sendable {
 
         Self.logger.info("OpenAI generation complete (\(result.count) chars)")
         return LLMMessage(role: .assistant, content: result, usage: usage)
+    }
+
+    func generateStructured(messages: [LLMMessage], schema: JSONSchema, config: LLMConfig) async throws -> StructuredOutput {
+        let baseURL = try LLMHTTPHelpers.validateBaseURL(
+            config.baseURL.isEmpty ? "https://api.openai.com/v1" : config.baseURL
+        )
+        guard let url = URL(string: "\(baseURL)/chat/completions") else {
+            throw LLMEngineError.invalidURL(baseURL)
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if !config.apiKey.isEmpty {
+            if let host = url.host, !host.hasSuffix("openai.com") && !host.contains("localhost") && host != "127.0.0.1" {
+                Self.logger.warning("Sending API key to non-OpenAI host: \(host)")
+            }
+            request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+        }
+
+        let apiMessages: [[String: String]] = messages.filter { $0.role != .assistant }.map { msg in
+            ["role": msg.role.rawValue, "content": msg.content]
+        }
+
+        // Deserialize schema data to JSON object for embedding in request
+        let schemaObject: Any
+        do {
+            schemaObject = try JSONSerialization.jsonObject(with: schema.schemaData)
+        } catch {
+            throw LLMEngineError.schemaError("Failed to deserialize schema data: \(error.localizedDescription)")
+        }
+
+        var body: [String: Any] = [
+            "model": config.model,
+            "messages": apiMessages,
+            "temperature": config.temperature,
+            "max_tokens": config.maxTokens,
+            "response_format": [
+                "type": "json_schema",
+                "json_schema": [
+                    "name": schema.name,
+                    "strict": schema.strict,
+                    "schema": schemaObject
+                ] as [String: Any]
+            ] as [String: Any]
+        ]
+        body["chat_template_kwargs"] = ["enable_thinking": false]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        Self.logger.info("Generating structured output with OpenAI model \(config.model), schema: \(schema.name)")
+
+        let (data, response) = try await LLMHTTPHelpers.performRequest(request, session: session)
+        try LLMHTTPHelpers.validateHTTPResponse(response, data: data)
+
+        struct PromptTokensDetails: Decodable {
+            let cached_tokens: Int?
+        }
+        struct Usage: Decodable {
+            let prompt_tokens: Int?
+            let completion_tokens: Int?
+            let prompt_tokens_details: PromptTokensDetails?
+        }
+        struct Choice: Decodable {
+            struct Message: Decodable {
+                let content: String
+            }
+            let message: Message
+        }
+        struct OpenAIResponse: Decodable {
+            let choices: [Choice]
+            let usage: Usage?
+        }
+
+        let openAIResponse = try LLMHTTPHelpers.decodeResponse(OpenAIResponse.self, from: data)
+        guard let content = openAIResponse.choices.first?.message.content, !content.isEmpty else {
+            throw LLMEngineError.emptyResponse
+        }
+
+        guard let outputData = content.data(using: .utf8) else {
+            throw LLMEngineError.emptyResponse
+        }
+
+        let usage: TokenUsage
+        if let u = openAIResponse.usage {
+            usage = TokenUsage(
+                inputTokens: u.prompt_tokens ?? 0,
+                outputTokens: u.completion_tokens ?? 0,
+                cacheCreationTokens: 0,
+                cacheReadTokens: u.prompt_tokens_details?.cached_tokens ?? 0
+            )
+            Self.logger.info("OpenAI structured usage: input=\(usage.inputTokens) output=\(usage.outputTokens) cache_read=\(usage.cacheReadTokens)")
+        } else {
+            usage = .zero
+        }
+
+        Self.logger.info("OpenAI structured generation complete (\(content.count) chars)")
+        return StructuredOutput(data: outputData, usage: usage)
     }
 
     func isAvailable(config: LLMConfig) async -> Bool {

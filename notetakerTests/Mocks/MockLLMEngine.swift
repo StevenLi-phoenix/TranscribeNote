@@ -51,6 +51,18 @@ nonisolated final class MockLLMEngine: LLMEngine, @unchecked Sendable {
         set { lock.withLock { _isAvailableResult = newValue } }
     }
 
+    private var _stubbedStructuredOutput: StructuredOutput?
+    var stubbedStructuredOutput: StructuredOutput? {
+        get { lock.withLock { _stubbedStructuredOutput } }
+        set { lock.withLock { _stubbedStructuredOutput = newValue } }
+    }
+
+    private var _generateStructuredCallCount = 0
+    var generateStructuredCallCount: Int { lock.withLock { _generateStructuredCallCount } }
+
+    private var _lastSchema: JSONSchema?
+    var lastSchema: JSONSchema? { lock.withLock { _lastSchema } }
+
     func generate(messages: [LLMMessage], config: LLMConfig) async throws -> LLMMessage {
         let callIndex = lock.withLock { () -> Int in
             _generateCallCount += 1
@@ -73,5 +85,23 @@ nonisolated final class MockLLMEngine: LLMEngine, @unchecked Sendable {
 
     func isAvailable(config: LLMConfig) async -> Bool {
         isAvailableResult
+    }
+
+    var supportsStructuredOutput: Bool { stubbedStructuredOutput != nil }
+
+    func generateStructured(messages: [LLMMessage], schema: JSONSchema, config: LLMConfig) async throws -> StructuredOutput {
+        lock.withLock {
+            _generateStructuredCallCount += 1
+            _lastMessages = messages
+            _lastConfig = config
+            _lastSchema = schema
+        }
+        if let error = stubbedError {
+            throw error
+        }
+        guard let output = stubbedStructuredOutput else {
+            throw LLMEngineError.notSupported
+        }
+        return output
     }
 }
