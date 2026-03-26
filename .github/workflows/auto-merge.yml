@@ -143,7 +143,58 @@ jobs:
           done
           echo "Timed out waiting for CI"; exit 1
 
+      - name: Check all checkboxes are completed
+        id: checkbox
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          PR_BODY=$(gh pr view ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} --json body --jq '.body')
+          UNCHECKED=$(echo "$PR_BODY" | grep -c '^\s*- \[ \]' || true)
+          CHECKED=$(echo "$PR_BODY" | grep -c '^\s*- \[x\]' || true)
+          echo "Checkboxes: $CHECKED checked, $UNCHECKED unchecked"
+          if [ "$UNCHECKED" -gt 0 ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "unchecked=$UNCHECKED" >> "$GITHUB_OUTPUT"
+            echo "::notice::$UNCHECKED unchecked checkbox(es). Skipping merge — PR stays open."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comment on incomplete checkboxes
+        if: steps.checkbox.outputs.ready == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `⏸️ **Auto-merge paused**: ${{ steps.checkbox.outputs.unchecked }} unchecked checkbox(es) in PR body. Merge will proceed automatically once all tasks are checked and a new push triggers the workflow.`,
+            });
+
+      - name: Resolve merge conflicts (update branch)
+        if: steps.checkbox.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          MERGEABLE=$(gh pr view ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} --json mergeable --jq '.mergeable')
+          if [ "$MERGEABLE" != "MERGEABLE" ]; then
+            echo "PR not mergeable ($MERGEABLE), attempting rebase..."
+            gh pr update-branch ${{ github.event.pull_request.number }} \
+              --repo ${{ github.repository }} --rebase || {
+              echo "::error::Failed to resolve merge conflicts. Manual rebase required."
+              exit 1
+            }
+            echo "Branch updated, waiting for CI re-run..."
+            sleep 30
+          fi
+
       - name: Merge PR
+        if: steps.checkbox.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -153,6 +204,7 @@ jobs:
             --delete-branch
 
       - name: Close linked issues
+        if: steps.checkbox.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -225,7 +277,7 @@ jobs:
             const decision = '${{ needs.claude-review.outputs.decision }}';
             const reason = decision !== 'APPROVE'
               ? 'Claude Code review did not approve'
-              : 'Tests or merge failed';
+              : 'Tests, unchecked checkboxes, merge conflicts, or merge step failed';
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
