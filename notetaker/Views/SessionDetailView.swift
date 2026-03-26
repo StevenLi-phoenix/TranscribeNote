@@ -23,12 +23,15 @@ struct SessionDetailView: View {
     @AppStorage("overallSummaryCollapsed") private var overallCollapsed = false
     @AppStorage("overallSummaryHeight") private var overallHeight: Double = 300
     @AppStorage("chunkSummariesHidden") private var chunkSummariesHidden = false
+    @State private var showChatPanel = false
+    @AppStorage("chatPanelWidth") private var chatPanelWidth: Double = 320
 
     var body: some View {
         if isLoading {
             ProgressView()
                 .onAppear { fetchSession() }
         } else if let session {
+            HStack(spacing: 0) {
             VStack(spacing: 0) {
                 // Header
                 VStack(alignment: .leading, spacing: DS.Spacing.xs) {
@@ -106,6 +109,14 @@ struct SessionDetailView: View {
                                 }
                             }
                         }
+
+                        Button {
+                            withAnimation { showChatPanel.toggle() }
+                        } label: {
+                            Label("Chat", systemImage: showChatPanel ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
+                        }
+                        .disabled(sortedSegments.isEmpty)
+                        .help("Ask questions about this transcript")
                     }
                 }
 
@@ -210,6 +221,14 @@ struct SessionDetailView: View {
                     )
                 }
             }
+            .frame(maxWidth: .infinity)
+
+            if showChatPanel {
+                VerticalResizeHandle(width: $chatPanelWidth, minWidth: 250, maxWidth: 500)
+                ChatView(segments: sortedSegments, sessionID: sessionID)
+                    .frame(width: chatPanelWidth)
+            }
+            }
             .onAppear {
                 loadAudio(for: session)
                 startRefreshTimerIfNeeded()
@@ -225,6 +244,7 @@ struct SessionDetailView: View {
                 summaryGenerationError = nil
                 summaryProgress = nil
                 scrollToTime = nil
+                showChatPanel = false
                 fetchSession()
             }
             .onDisappear {
