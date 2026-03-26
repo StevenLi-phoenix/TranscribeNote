@@ -46,9 +46,17 @@ jobs:
 
       - name: Run Full Tests
         run: |
-          set -euo pipefail
+          set -uo pipefail
           xcodebuild -scheme notetaker -configuration Debug \
             -testPlan FullTests \
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO \
-            test 2>&1 | tail -20
+            test 2>&1 | tee /tmp/test-output.txt | \
+            grep -E '(Test Case|Test Suite|Executed|FAIL|error:|passed|failed|\*\*|Testing)' || true
+          EXIT_CODE=${PIPESTATUS[0]}
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo ""
+            echo "=== LAST 50 LINES ==="
+            tail -50 /tmp/test-output.txt
+          fi
+          exit $EXIT_CODE
