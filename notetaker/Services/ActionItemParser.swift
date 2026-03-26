@@ -13,6 +13,33 @@ enum ActionItemParser {
         let dueDate: String?  // "YYYY-MM-DD" format
     }
 
+    /// JSON Schema for structured output (used by engines that support it).
+    static var jsonSchema: JSONSchema? {
+        let schema = """
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "content": { "type": "string", "description": "Description of the action item" },
+              "category": { "type": "string", "enum": ["task", "decision", "followUp"] },
+              "assignee": { "type": ["string", "null"], "description": "Person responsible, or null" },
+              "dueDate": { "type": ["string", "null"], "description": "Due date in YYYY-MM-DD format, or null" }
+            },
+            "required": ["content", "category"],
+            "additionalProperties": false
+          }
+        }
+        """
+        guard let data = schema.data(using: .utf8) else { return nil }
+        return JSONSchema(
+            name: "action_items",
+            description: "Array of action items extracted from a transcript",
+            schemaData: data,
+            strict: true
+        )
+    }
+
     /// Parse LLM output into action items. Tries JSON first, falls back to markdown checklist.
     static func parse(_ rawOutput: String) -> [RawActionItem] {
         let cleaned = stripNoise(rawOutput)

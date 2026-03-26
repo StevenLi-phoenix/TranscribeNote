@@ -109,6 +109,7 @@ nonisolated final class SummarizerService: @unchecked Sendable {
     }
 
     /// Extract action items from transcript segments using LLM.
+    /// Prefers structured output (JSON schema) when the engine supports it; falls back to free-text + parser.
     func extractActionItems(
         segments: [TranscriptSegment],
         config: SummarizerConfig,
@@ -124,6 +125,23 @@ nonisolated final class SummarizerService: @unchecked Sendable {
 
         let messages = PromptBuilder.buildActionItemExtractionPrompt(segments: segments, config: config)
         Self.logger.info("Starting action item extraction (\(segments.count) segments, \(totalText.count) chars)")
+
+        // Try structured output first for reliable JSON
+        if engine.supportsStructuredOutput, let schema = ActionItemParser.jsonSchema {
+            do {
+                let structured = try await engine.generateStructured(messages: messages, schema: schema, config: llmConfig)
+                if let usage = structured.usage {
+                    Self.logger.info("action item extraction (structured) tokens: input=\(usage.inputTokens) output=\(usage.outputTokens)")
+                }
+                let items = try structured.decode([ActionItemParser.RawActionItem].self)
+                Self.logger.info("Structured output: \(items.count) action items")
+                return items.filter { !$0.content.isEmpty }
+            } catch {
+                Self.logger.warning("Structured output failed, falling back to free-text: \(error.localizedDescription)")
+            }
+        }
+
+        // Fallback: free-text generation + parser
         let result = try await retryableGenerate(messages: messages, llmConfig: llmConfig, label: "action item extraction")
         return ActionItemParser.parse(result.content)
     }
