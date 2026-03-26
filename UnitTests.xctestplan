@@ -45,6 +45,8 @@
         "SummarizerConfigExtendedTests",
         "SummarizerServiceExtendedTests",
         "SummarizerServiceTests",
+        "StructuredSummaryTests",
+        "SummarizerStructuredTests",
         "SummaryBlockTests",
         "ToolCallingTypeTests",
         "ToolCallingErrorTests",

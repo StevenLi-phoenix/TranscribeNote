@@ -14,9 +14,17 @@ final class SummaryBlock {
     var userEdited: Bool
     var isOverall: Bool = false
     var editedContent: String? = nil
+    /// JSON-encoded StructuredSummary for rich display (key points, action items, sentiment).
+    var structuredContent: String? = nil
 
     /// Returns edited content if available, otherwise the original generated content.
     var displayContent: String { editedContent ?? content }
+
+    /// Decoded structured summary, if available.
+    var structuredSummary: StructuredSummary? {
+        guard let json = structuredContent else { return nil }
+        return StructuredSummary.fromJSON(json)
+    }
 
     @Relationship(inverse: \RecordingSession.summaries)
     var session: RecordingSession?
@@ -32,7 +40,8 @@ final class SummaryBlock {
         isPinned: Bool = false,
         userEdited: Bool = false,
         isOverall: Bool = false,
-        editedContent: String? = nil
+        editedContent: String? = nil,
+        structuredContent: String? = nil
     ) {
         self.id = id
         self.generatedAt = generatedAt
@@ -45,6 +54,7 @@ final class SummaryBlock {
         self.userEdited = userEdited
         self.isOverall = isOverall
         self.editedContent = editedContent
+        self.structuredContent = structuredContent
     }
 
     var summaryStyle: SummaryStyle {

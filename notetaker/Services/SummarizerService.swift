@@ -49,6 +49,43 @@ nonisolated final class SummarizerService: @unchecked Sendable {
         throw lastError!
     }
 
+    /// Core retry logic for structured LLM generation with exponential backoff.
+    private func retryableGenerateStructured(messages: [LLMMessage], schema: JSONSchema, llmConfig: LLMConfig, label: String = "structured generation") async throws -> StructuredOutput {
+        var lastError: Error?
+
+        for attempt in 0..<3 {
+            try Task.checkCancellation()
+            do {
+                let result = try await engine.generateStructured(messages: messages, schema: schema, config: llmConfig)
+                Self.logger.info("\(label) succeeded on attempt \(attempt + 1) (\(result.data.count) bytes)")
+                if let usage = result.usage {
+                    Self.logger.info("\(label) tokens: input=\(usage.inputTokens) output=\(usage.outputTokens) cache_create=\(usage.cacheCreationTokens) cache_read=\(usage.cacheReadTokens)")
+                }
+                return result
+            } catch is CancellationError {
+                Self.logger.info("\(label) cancelled on attempt \(attempt + 1)")
+                throw CancellationError()
+            } catch {
+                lastError = error
+                Self.logger.warning("\(label) attempt \(attempt + 1) failed: \(error.localizedDescription)")
+
+                if !Self.isRetryable(error) {
+                    Self.logger.error("Non-retryable error in \(label), aborting")
+                    throw error
+                }
+
+                if attempt < 2 {
+                    let delay = Self.retryDelays[attempt]
+                    Self.logger.info("Retrying \(label) in \(Int(delay))s...")
+                    try await Task.sleep(for: .seconds(delay))
+                }
+            }
+        }
+
+        Self.logger.error("All 3 \(label) attempts failed")
+        throw lastError!
+    }
+
     func summarize(
         segments: [TranscriptSegment],
         previousSummary: String?,
@@ -144,6 +181,75 @@ nonisolated final class SummarizerService: @unchecked Sendable {
         // Fallback: free-text generation + parser
         let result = try await retryableGenerate(messages: messages, llmConfig: llmConfig, label: "action item extraction")
         return ActionItemParser.parse(result.content)
+    }
+
+    /// Try structured summary generation. Returns nil if engine doesn't support it or generation fails.
+    func summarizeStructured(
+        segments: [TranscriptSegment],
+        previousSummary: String?,
+        config: SummarizerConfig,
+        llmConfig: LLMConfig
+    ) async throws -> StructuredSummary? {
+        guard engine.supportsStructuredOutput else {
+            Self.logger.info("Engine does not support structured output, skipping")
+            return nil
+        }
+
+        let totalText = segments.map(\.text).joined(separator: " ")
+        guard totalText.count >= config.minTranscriptLength else {
+            Self.logger.info("Transcript too short for structured summarization (\(totalText.count) < \(config.minTranscriptLength))")
+            return nil
+        }
+
+        let messages = PromptBuilder.buildStructuredSummarizationPrompt(
+            segments: segments,
+            previousSummary: previousSummary,
+            config: config
+        )
+
+        Self.logger.info("Starting structured summarization (\(segments.count) segments, \(totalText.count) chars)")
+        let output = try await retryableGenerateStructured(
+            messages: messages,
+            schema: SummarySchemaProvider.schema,
+            llmConfig: llmConfig,
+            label: "structured summarization"
+        )
+        return try output.decode(StructuredSummary.self)
+    }
+
+    /// Summarize with structured output when available, falling back to plain text.
+    /// Returns (content, structuredSummary?) — content is always populated.
+    func summarizeWithFallback(
+        segments: [TranscriptSegment],
+        previousSummary: String?,
+        config: SummarizerConfig,
+        llmConfig: LLMConfig
+    ) async throws -> (content: String, structured: StructuredSummary?) {
+        // Try structured output first
+        do {
+            if let structured = try await summarizeStructured(
+                segments: segments,
+                previousSummary: previousSummary,
+                config: config,
+                llmConfig: llmConfig
+            ) {
+                Self.logger.info("Structured summarization succeeded, using structured.summary as content")
+                return (content: structured.summary, structured: structured)
+            }
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            Self.logger.warning("Structured summarization failed, falling back to plain text: \(error.localizedDescription)")
+        }
+
+        // Fallback to plain text
+        let content = try await summarize(
+            segments: segments,
+            previousSummary: previousSummary,
+            config: config,
+            llmConfig: llmConfig
+        )
+        return (content: content, structured: nil)
     }
 
     private static func isRetryable(_ error: Error) -> Bool {

@@ -209,6 +209,39 @@ enum PromptBuilder {
         return messages
     }
 
+    /// Build a prompt for structured summary generation (no format instructions — schema enforces structure).
+    static func buildStructuredSummarizationPrompt(
+        segments: [TranscriptSegment],
+        previousSummary: String?,
+        config: SummarizerConfig
+    ) -> [LLMMessage] {
+        var messages: [LLMMessage] = []
+
+        let systemParts = [
+            "You are a meeting/note summarizer. Analyze the following transcript and produce a structured summary.",
+            "Include a concise summary (2-5 sentences), key points, and an overall sentiment assessment (positive/neutral/negative/mixed).",
+            constraintBlock(config: config)
+        ]
+
+        messages.append(LLMMessage(role: .system, content: systemParts.joined(separator: "\n\n"), cacheHint: true))
+
+        if config.includeContext, let previousSummary, !previousSummary.isEmpty {
+            let truncated = String(previousSummary.prefix(config.maxContextTokens))
+            messages.append(LLMMessage(role: .user, content: "Previous summary for context:\n\(truncated)", cacheHint: true))
+        }
+
+        if !segments.isEmpty {
+            var parts = ["Transcript:"]
+            for segment in segments {
+                let timestamp = segment.startTime.mmss
+                parts.append("[\(timestamp)] \(segment.text)")
+            }
+            messages.append(LLMMessage(role: .user, content: parts.joined(separator: "\n")))
+        }
+
+        return messages
+    }
+
     static func buildOverallSummaryPrompt(
         chunkSummaries: [(coveringFrom: TimeInterval, coveringTo: TimeInterval, content: String)],
         config: SummarizerConfig
