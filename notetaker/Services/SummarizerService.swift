@@ -108,6 +108,26 @@ nonisolated final class SummarizerService: @unchecked Sendable {
         return cleaned
     }
 
+    /// Extract action items from transcript segments using LLM.
+    func extractActionItems(
+        segments: [TranscriptSegment],
+        config: SummarizerConfig,
+        llmConfig: LLMConfig
+    ) async throws -> [ActionItemParser.RawActionItem] {
+        guard !segments.isEmpty else { return [] }
+
+        let totalText = segments.map(\.text).joined(separator: " ")
+        guard totalText.count >= config.minTranscriptLength else {
+            Self.logger.info("Transcript too short for action item extraction (\(totalText.count) chars)")
+            return []
+        }
+
+        let messages = PromptBuilder.buildActionItemExtractionPrompt(segments: segments, config: config)
+        Self.logger.info("Starting action item extraction (\(segments.count) segments, \(totalText.count) chars)")
+        let result = try await retryableGenerate(messages: messages, llmConfig: llmConfig, label: "action item extraction")
+        return ActionItemParser.parse(result.content)
+    }
+
     private static func isRetryable(_ error: Error) -> Bool {
         if let llmError = error as? LLMEngineError {
             switch llmError {

@@ -90,6 +90,12 @@ struct SessionDetailView: View {
                                 } label: {
                                     Label("Chunked Summary", systemImage: "text.badge.star")
                                 }
+                                Divider()
+                                Button {
+                                    extractActionItems()
+                                } label: {
+                                    Label("Extract Action Items", systemImage: "checklist")
+                                }
                             } label: {
                                 Label("Generate Summary", systemImage: "text.badge.star")
                             }
@@ -180,6 +186,17 @@ struct SessionDetailView: View {
                             guard !Task.isCancelled else { return }
                             self.summaryGenerationError = nil
                         }
+                }
+
+                // Action items (between summary and transcript)
+                if !session.actionItems.isEmpty {
+                    Divider()
+                    ActionItemListView(
+                        actionItems: session.actionItems.sorted { $0.createdAt < $1.createdAt },
+                        sessionTitle: session.title,
+                        onExportReminders: { exportActionItemsToReminders() },
+                        onExportCalendar: { exportActionItemsToCalendar() }
+                    )
                 }
 
                 Divider()
@@ -299,13 +316,15 @@ struct SessionDetailView: View {
 
     /// Poll for background summary completion and refresh the view when new summaries arrive.
     private func startRefreshTimerIfNeeded() {
-        guard BackgroundSummaryService.shared.isRunning(for: sessionID) else { return }
+        let bgService = BackgroundSummaryService.shared
+        guard bgService.isRunning(for: sessionID) || bgService.isExtractingActionItems(for: sessionID) else { return }
         isGeneratingSummary = true
         summaryProgress = "Generating summary in background..."
         refreshTimer?.invalidate()
         let id = sessionID
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak refreshTimer] _ in
-            if !BackgroundSummaryService.shared.isRunning(for: id) {
+            let stillRunning = bgService.isRunning(for: id) || bgService.isExtractingActionItems(for: id)
+            if !stillRunning {
                 refreshTimer?.invalidate()
                 self.refreshTimer = nil
                 self.isGeneratingSummary = false
@@ -569,6 +588,112 @@ struct SessionDetailView: View {
                 summaryGenerationError = error.localizedDescription
             }
             isGeneratingSummary = false
+        }
+    }
+
+    // MARK: - Action Items
+
+    private func extractActionItems() {
+        guard let session else { return }
+        let id = sessionID
+        let capturedSegments = sortedSegments
+
+        isGeneratingSummary = true
+        summaryGenerationError = nil
+
+        summaryTask = Task { @MainActor in
+            do {
+                let llmConfig = LLMProfileStore.resolveConfig(for: .actionItems)
+                let summarizerConfig = SummarizerConfig.fromUserDefaults()
+                let engine = LLMEngineFactory.create(from: llmConfig)
+                let service = SummarizerService(engine: engine)
+
+                let rawItems = try await service.extractActionItems(
+                    segments: capturedSegments,
+                    config: summarizerConfig,
+                    llmConfig: llmConfig
+                )
+
+                guard !Task.isCancelled else {
+                    isGeneratingSummary = false
+                    return
+                }
+
+                // Re-fetch session after await
+                let predicate = #Predicate<RecordingSession> { $0.id == id }
+                guard let currentSession = try? modelContext.fetch(FetchDescriptor(predicate: predicate)).first else {
+                    summaryGenerationError = "Session was deleted during extraction."
+                    isGeneratingSummary = false
+                    return
+                }
+
+                // Remove old action items
+                for existing in currentSession.actionItems {
+                    modelContext.delete(existing)
+                }
+
+                for raw in rawItems {
+                    let item = ActionItem(
+                        content: raw.content,
+                        dueDate: ActionItemParser.parseDate(raw.dueDate),
+                        assignee: raw.assignee,
+                        category: ActionItemCategory(rawValue: raw.category) ?? .task
+                    )
+                    item.session = currentSession
+                    modelContext.insert(item)
+                }
+
+                try modelContext.save()
+                fetchSession()
+                Self.logger.info("Extracted \(rawItems.count) action items manually")
+            } catch {
+                Self.logger.error("Action item extraction failed: \(error.localizedDescription)")
+                summaryGenerationError = error.localizedDescription
+            }
+            isGeneratingSummary = false
+        }
+    }
+
+    private func exportActionItemsToReminders() {
+        guard let session else { return }
+        let items = session.actionItems.filter { !$0.isCompleted }
+        guard !items.isEmpty else { return }
+
+        Task {
+            let service = RemindersExportService()
+            do {
+                let count = try await service.exportToReminders(
+                    actionItems: items,
+                    sessionTitle: session.title
+                )
+                Self.logger.info("Exported \(count) action items to Reminders")
+            } catch {
+                Self.logger.error("Reminders export failed: \(error.localizedDescription)")
+                summaryGenerationError = "Reminders export failed: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func exportActionItemsToCalendar() {
+        guard let session else { return }
+        let items = session.actionItems.filter { !$0.isCompleted && $0.dueDate != nil }
+        guard !items.isEmpty else {
+            summaryGenerationError = "No action items with due dates to export."
+            return
+        }
+
+        Task {
+            let service = RemindersExportService()
+            do {
+                let count = try await service.exportToCalendar(
+                    actionItems: items,
+                    sessionTitle: session.title
+                )
+                Self.logger.info("Exported \(count) action items to Calendar")
+            } catch {
+                Self.logger.error("Calendar export failed: \(error.localizedDescription)")
+                summaryGenerationError = "Calendar export failed: \(error.localizedDescription)"
+            }
         }
     }
 

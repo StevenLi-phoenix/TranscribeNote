@@ -148,6 +148,57 @@ enum PromptBuilder {
         return messages
     }
 
+    /// Build a prompt to extract structured action items from transcript segments as JSON.
+    static func buildActionItemExtractionPrompt(
+        segments: [TranscriptSegment],
+        config: SummarizerConfig
+    ) -> [LLMMessage] {
+        var messages: [LLMMessage] = []
+
+        // System: instruct JSON array output (stable, cache candidate)
+        var systemParts = [
+            "You are an action item extractor. Analyze the transcript and extract all action items, decisions, and follow-up tasks.",
+            """
+            Output a JSON array with this exact structure (no other text, no code fences):
+            [
+              {
+                "content": "description of the action item",
+                "category": "task" or "decision" or "followUp",
+                "assignee": "person name" or null,
+                "dueDate": "YYYY-MM-DD" or null
+              }
+            ]
+            """,
+            """
+            Categories:
+            - "task": concrete actions someone needs to do
+            - "decision": decisions that were made during the discussion
+            - "followUp": items that need future follow-up or checking
+            """,
+            "If there are no action items, return an empty array: []"
+        ]
+
+        if config.summaryLanguage != "auto" {
+            let lang = sanitizeLanguage(config.summaryLanguage)
+            systemParts.append("IMPORTANT: Write the action item content in \(lang).")
+        }
+
+        messages.append(LLMMessage(role: .system, content: systemParts.joined(separator: "\n\n"), cacheHint: true))
+
+        // Transcript content
+        if !segments.isEmpty {
+            var parts = ["Transcript:"]
+            for segment in segments {
+                let timestamp = segment.startTime.mmss
+                let speaker = segment.speakerLabel.map { "[\($0)] " } ?? ""
+                parts.append("[\(timestamp)] \(speaker)\(segment.text)")
+            }
+            messages.append(LLMMessage(role: .user, content: parts.joined(separator: "\n")))
+        }
+
+        return messages
+    }
+
     static func buildOverallSummaryPrompt(
         chunkSummaries: [(coveringFrom: TimeInterval, coveringTo: TimeInterval, content: String)],
         config: SummarizerConfig
