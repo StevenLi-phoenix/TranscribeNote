@@ -7,6 +7,8 @@ nonisolated enum LLMEngineError: Error, LocalizedError {
     case networkError(Error)
     case emptyResponse
     case notConfigured
+    case notSupported
+    case schemaError(String)
 
     var errorDescription: String? {
         switch self {
@@ -16,6 +18,8 @@ nonisolated enum LLMEngineError: Error, LocalizedError {
         case .networkError(let err): "Network error: \(err.localizedDescription)"
         case .emptyResponse: "Empty response from LLM"
         case .notConfigured: "LLM not configured"
+        case .notSupported: "Operation not supported by this engine"
+        case .schemaError(let msg): "Schema error: \(msg)"
         }
     }
 }
@@ -55,9 +59,48 @@ nonisolated struct LLMMessage: Sendable {
     }
 }
 
+/// A JSON Schema definition for structured LLM output.
+nonisolated struct JSONSchema: Sendable {
+    let name: String
+    let description: String
+    /// Raw JSON Schema bytes (e.g. `{"type": "object", "properties": {...}}`).
+    let schemaData: Data
+    let strict: Bool
+
+    init(name: String, description: String, schemaData: Data, strict: Bool = true) {
+        self.name = name
+        self.description = description
+        self.schemaData = schemaData
+        self.strict = strict
+    }
+}
+
+/// Result of structured output generation — raw JSON bytes from the LLM.
+nonisolated struct StructuredOutput: Sendable {
+    let data: Data
+    let usage: TokenUsage?
+
+    func decode<T: Decodable>(_ type: T.Type) throws -> T {
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            throw LLMEngineError.schemaError("Failed to decode structured output: \(error.localizedDescription)")
+        }
+    }
+}
+
 nonisolated protocol LLMEngine: AnyObject, Sendable {
     func generate(messages: [LLMMessage], config: LLMConfig) async throws -> LLMMessage
     func isAvailable(config: LLMConfig) async -> Bool
+    var supportsStructuredOutput: Bool { get }
+    func generateStructured(messages: [LLMMessage], schema: JSONSchema, config: LLMConfig) async throws -> StructuredOutput
+}
+
+extension LLMEngine {
+    var supportsStructuredOutput: Bool { false }
+    func generateStructured(messages: [LLMMessage], schema: JSONSchema, config: LLMConfig) async throws -> StructuredOutput {
+        throw LLMEngineError.notSupported
+    }
 }
 
 /// Shared HTTP helpers for LLM engine implementations.

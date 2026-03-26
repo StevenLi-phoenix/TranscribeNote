@@ -115,7 +115,7 @@ nonisolated final class SummarizerService: @unchecked Sendable {
                 return true
             case .httpError(let statusCode, _):
                 return statusCode >= 500 || statusCode == 429
-            case .invalidURL, .decodingError, .emptyResponse, .notConfigured:
+            case .invalidURL, .decodingError, .emptyResponse, .notConfigured, .notSupported, .schemaError:
                 return false
             }
         }

@@ -182,4 +182,141 @@ struct OllamaEngineTests {
         _ = try await engine.generate(messages: makeMessages("test"), config: makeConfig(baseURL: ""))
         #expect(capturedURL?.absoluteString == "http://localhost:11434/api/generate")
     }
+
+    // MARK: - Structured Output Tests
+
+    private func makeSchema() -> JSONSchema {
+        let schemaDict: [String: Any] = [
+            "type": "object",
+            "properties": ["name": ["type": "string"], "age": ["type": "number"]],
+            "required": ["name", "age"],
+            "additionalProperties": false
+        ]
+        let data = try! JSONSerialization.data(withJSONObject: schemaDict)
+        return JSONSchema(name: "person", description: "A person", schemaData: data)
+    }
+
+    @Test("supportsStructuredOutput returns true")
+    func supportsStructuredOutput() {
+        #expect(engine.supportsStructuredOutput == true)
+    }
+
+    @Test("Structured output success decodes correctly")
+    func structuredOutputSuccess() async throws {
+        let responseJSON = """
+        {"response": "{\\"name\\": \\"Jane\\", \\"age\\": 30}"}
+        """.data(using: .utf8)!
+
+        OllamaMockProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        let result = try await engine.generateStructured(
+            messages: makeMessages("Give me a person"),
+            schema: makeSchema(),
+            config: makeConfig()
+        )
+
+        struct Person: Decodable {
+            let name: String
+            let age: Int
+        }
+
+        let person = try result.decode(Person.self)
+        #expect(person.name == "Jane")
+        #expect(person.age == 30)
+    }
+
+    @Test("Structured output request includes format as JSON object")
+    func structuredOutputRequestFormat() async throws {
+        let responseJSON = """
+        {"response": "{\\"name\\": \\"Jane\\", \\"age\\": 30}"}
+        """.data(using: .utf8)!
+
+        var capturedRequest: URLRequest?
+        OllamaMockProtocol.requestHandler = { request in
+            capturedRequest = request
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        _ = try await engine.generateStructured(
+            messages: makeMessages("test"),
+            schema: makeSchema(),
+            config: makeConfig()
+        )
+
+        let request = try #require(capturedRequest)
+        let body = try #require(request.httpBody)
+        let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+
+        // format should be a JSON object (dictionary), not a string
+        let format = try #require(json["format"] as? [String: Any])
+        #expect(format["type"] as? String == "object")
+
+        let properties = try #require(format["properties"] as? [String: Any])
+        #expect(properties.keys.contains("name"))
+        #expect(properties.keys.contains("age"))
+    }
+
+    @Test("Structured output token usage extracted from response")
+    func structuredOutputTokenUsage() async throws {
+        let responseJSON = """
+        {"response": "{\\"name\\": \\"Jane\\", \\"age\\": 30}", "prompt_eval_count": 55, "eval_count": 20}
+        """.data(using: .utf8)!
+
+        OllamaMockProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        let result = try await engine.generateStructured(
+            messages: makeMessages("test"),
+            schema: makeSchema(),
+            config: makeConfig()
+        )
+
+        let usage = try #require(result.usage)
+        #expect(usage.inputTokens == 55)
+        #expect(usage.outputTokens == 20)
+        #expect(usage.cacheCreationTokens == 0)
+        #expect(usage.cacheReadTokens == 0)
+    }
+
+    @Test("Structured output empty response throws emptyResponse")
+    func structuredOutputEmptyResponse() async throws {
+        let responseJSON = """
+        {"response": ""}
+        """.data(using: .utf8)!
+
+        OllamaMockProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        await #expect(throws: LLMEngineError.self) {
+            try await engine.generateStructured(
+                messages: makeMessages("test"),
+                schema: makeSchema(),
+                config: makeConfig()
+            )
+        }
+    }
+
+    @Test("Structured output HTTP error throws httpError")
+    func structuredOutputHTTPError() async throws {
+        OllamaMockProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!
+            return (response, "Internal Server Error".data(using: .utf8)!)
+        }
+
+        await #expect(throws: LLMEngineError.self) {
+            try await engine.generateStructured(
+                messages: makeMessages("test"),
+                schema: makeSchema(),
+                config: makeConfig()
+            )
+        }
+    }
 }

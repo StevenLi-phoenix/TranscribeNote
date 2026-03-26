@@ -76,6 +76,69 @@ struct NoopLLMEngineTests {
         let result = try await engine.generate(messages: messages, config: .default)
         #expect(result.content == "")
     }
+
+    @Test func supportsStructuredOutputReturnsFalse() {
+        let engine = NoopLLMEngine()
+        #expect(engine.supportsStructuredOutput == false)
+    }
+
+    @Test func generateStructuredThrowsNotSupported() async {
+        let engine = NoopLLMEngine()
+        let schemaData = try! JSONSerialization.data(withJSONObject: ["type": "object"])
+        let schema = JSONSchema(name: "test", description: "test", schemaData: schemaData)
+        await #expect(throws: LLMEngineError.self) {
+            try await engine.generateStructured(messages: [], schema: schema, config: .default)
+        }
+    }
+}
+
+@Suite("JSONSchema Tests")
+struct JSONSchemaTests {
+
+    @Test func initWithDefaults() {
+        let data = try! JSONSerialization.data(withJSONObject: ["type": "object"])
+        let schema = JSONSchema(name: "test", description: "A test schema", schemaData: data)
+        #expect(schema.name == "test")
+        #expect(schema.description == "A test schema")
+        #expect(schema.schemaData == data)
+        #expect(schema.strict == true)
+    }
+
+    @Test func initWithStrictFalse() {
+        let data = try! JSONSerialization.data(withJSONObject: ["type": "object"])
+        let schema = JSONSchema(name: "test", description: "test", schemaData: data, strict: false)
+        #expect(schema.strict == false)
+    }
+}
+
+@Suite("StructuredOutput Tests")
+struct StructuredOutputTests {
+
+    private struct Person: Decodable, Equatable {
+        let name: String
+        let age: Int
+    }
+
+    @Test func decodeSuccess() throws {
+        let json = #"{"name": "Jane", "age": 30}"#
+        let output = StructuredOutput(data: json.data(using: .utf8)!, usage: .zero)
+        let person = try output.decode(Person.self)
+        #expect(person.name == "Jane")
+        #expect(person.age == 30)
+    }
+
+    @Test func decodeFailureThrowsSchemaError() {
+        let output = StructuredOutput(data: "not json".data(using: .utf8)!, usage: nil)
+        #expect(throws: LLMEngineError.self) {
+            try output.decode(Person.self)
+        }
+    }
+
+    @Test func usagePreserved() {
+        let usage = TokenUsage(inputTokens: 10, outputTokens: 5, cacheCreationTokens: 0, cacheReadTokens: 0)
+        let output = StructuredOutput(data: Data(), usage: usage)
+        #expect(output.usage == usage)
+    }
 }
 
 @Suite("AudioExportError Tests")
@@ -134,6 +197,17 @@ struct LLMEngineErrorTests {
     @Test func notConfiguredDescription() {
         let error = LLMEngineError.notConfigured
         #expect(error.errorDescription?.contains("not configured") == true)
+    }
+
+    @Test func notSupportedDescription() {
+        let error = LLMEngineError.notSupported
+        #expect(error.errorDescription?.contains("not supported") == true)
+    }
+
+    @Test func schemaErrorDescription() {
+        let error = LLMEngineError.schemaError("invalid type")
+        #expect(error.errorDescription?.contains("Schema error") == true)
+        #expect(error.errorDescription?.contains("invalid type") == true)
     }
 }
 
