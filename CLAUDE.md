@@ -78,8 +78,10 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - **VAD logger gotcha**: `OSAllocatedUnfairLock.withLock` closure captures `inout state` — `Logger` string interpolation of state fields is an escaping autoclosure that captures inout, causing compile error; extract values before logging outside the lock
 
 ### LLM & Summarization
-- `LLMEngine` protocol: `generate(prompt:config:) async throws -> String`, `isAvailable(config:) async -> Bool` — `nonisolated`, `AnyObject`, `Sendable`, injectable `URLSession` for testing; config param ensures engines check user-configured URLs, not hardcoded defaults
-- Four implementations: `OllamaEngine`, `OpenAIEngine`, `AnthropicEngine`, `NoopLLMEngine` — created via `LLMEngineFactory.create(from:session:)`; `.custom` provider maps to `OpenAIEngine` (OpenAI-compatible API for LM Studio etc.)
+- `LLMEngine` protocol: `generate(messages: [LLMMessage], config:) async throws -> LLMMessage`, `isAvailable(config:) async -> Bool` — `nonisolated`, `AnyObject`, `Sendable`, injectable `URLSession` for testing; config param ensures engines check user-configured URLs, not hardcoded defaults
+- `LLMMessage` struct: `role` (`.system`/`.user`/`.assistant`), `content`, `cacheHint` (marks stable content for prompt caching), `usage: TokenUsage?` (input/output/cache tokens from API response)
+- Five implementations: `FoundationModelsEngine` (Apple Intelligence on-device), `OllamaEngine`, `OpenAIEngine`, `AnthropicEngine`, `NoopLLMEngine` — created via `LLMEngineFactory.create(from:session:)`; `.custom` provider maps to `OpenAIEngine` (OpenAI-compatible API for LM Studio etc.)
+- **Foundation Models fallback**: `LLMEngineFactory.createWithFallback()` tries primary engine, falls back to `FoundationModelsEngine` if primary unavailable and Apple Intelligence is enabled; `FoundationModelsEngine.isModelAvailable` checks `SystemLanguageModel.default.availability`
 - `SummarizerService` orchestrates: guard minTranscriptLength → build prompt via `PromptBuilder` → call LLM with retry (3 attempts, 10s/30s/60s backoff, only retries network/HTTP errors)
 - `SummarizerService.summarizeInChunks()` yields `ChunkProgress` per time window; `summarizeOverall()` synthesizes chunk summaries into a single overall summary
 - `SummarizerService.splitIntoChunks()` uses zero-based windows: window 0 = `[0, interval)`, window 1 = `[interval, 2*interval)` — segments assigned by `Int(startTime / intervalSeconds)`; `splitIntoChunksWithWindowIndices()` returns window indices for boundary calculations
@@ -96,6 +98,8 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - **`BackgroundSummaryService`**: `@MainActor` singleton that dispatches overall summary + title generation after recording ends, independent of view lifecycle; uses its own `ModelContext` so summaries persist even if user navigates away; `activeTasks: [UUID: Task]` prevents double-dispatch; `awaitAll()` for graceful quit; generates title via separate `LLMRole.title` config after summary completes
 - **`AudioExporter`**: Merges multiple audio clips into single M4A via `AVMutableComposition` + `AVAssetExportSession`; single-clip case copies directly; used when `RecordingSession.audioFilePaths` has multiple entries from pause/resume
 - **Multi-clip recording**: Pause/resume creates separate audio clips stored in `RecordingSession.audioFilePaths: [String]`; `AudioExporter.mergeAndExport()` combines them on session completion; `audioFilePath` (singular) retained for backward compatibility
+- **`SummaryMarkdownFormatter`**: Formats `SummaryBlock` content as Markdown with time-range or "Overall Summary" heading; used by copy-summary feature
+- **`AudioConfig`**: `nonisolated Sendable` struct with `sampleRate`, `channels`, `bufferDurationSeconds`; `AudioConfig.default` = 16kHz mono, 30s buffer
 
 ### Thread Safety
 - `SpeechAnalyzerEngine` uses serial `DispatchQueue` for thread safety — all mutable state accessed through `queue`; `stopRecognition()` is async with 4-phase drain (finish input → finalize analyzer → await resultTask with 2s timeout → cleanup with sessionID guard); `stopRecognitionLocked()` is the synchronous force-stop used internally by `startRecognition()`
@@ -130,11 +134,11 @@ Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Mo
   - `notetakerApp.swift` — Entry point, shared `ModelContainer`, `MenuBarExtra`, `Settings` scene
   - `ContentView.swift` — `NavigationSplitView` (sidebar session list + detail routing)
   - `Models/` — SwiftData models (`RecordingSession`, `TranscriptSegment`, `SummaryBlock`, `ScheduledRecording`), config types (`LLMConfig`, `SummarizerConfig`, `LLMModelProfile`, `VADConfig`, `OverallSummaryMode`, `RepeatRule`), schema versioning (`Schemas/` V1–V6)
-  - `Services/` — Protocol-based engines (`ASREngine`, `LLMEngine`) with multiple implementations, `AudioCaptureService`, `AudioPlaybackService`, `AudioExporter`, `SummarizerService`, `BackgroundSummaryService`, `PromptBuilder`, `KeychainService`, `CrashLogService`, `SchedulerService`, `CalendarService`
+  - `Services/` — Protocol-based engines (`ASREngine`, `LLMEngine`) with multiple implementations (including `FoundationModelsEngine` for Apple Intelligence), `AudioCaptureService`, `AudioPlaybackService`, `AudioExporter`, `SummarizerService`, `BackgroundSummaryService`, `SummaryMarkdownFormatter`, `PromptBuilder`, `KeychainService`, `CrashLogService`, `SchedulerService`, `CalendarService`
   - `ViewModels/` — `RecordingViewModel` (`@Observable`) — central state machine for recording lifecycle; `SchedulerViewModel` — scheduled recordings + calendar integration
   - `DesignSystem.swift` — `DS` enum (spacing, typography, colors, radius, layout tokens)
-  - `Views/` — SwiftUI views including `SettingsView`, `ScheduleView`, `ScheduleEditorView`, `PrivacyDisclosureView`, `AudioLevelBar`, `ResizeHandle`, `ViewModifiers`
-- **`notetakerTests/`** — Swift Testing (`@Test`, `#expect`); ~60 test files; `Mocks/` has `MockASREngine`, `MockLLMEngine`, `MockSchedulerService`, per-suite `MockURLProtocol` subclasses; `Helpers/` has `BufferFactory` and `FileAudioSource`
+  - `Views/` — SwiftUI views including `SettingsView` (4-tab layout: `SettingsTab`, `ModelsSettingsTab`, `AboutTab`), `ScheduleView`, `ScheduleEditorView`, `PrivacyDisclosureView`, `SummaryCardView`, `TranscriptSegmentRow`, `AudioLevelBar`, `ResizeHandle`, `SettingsComponents` (reusable settings UI), `ViewModifiers`
+- **`notetakerTests/`** — Swift Testing (`@Test`, `#expect`); ~64 test files; `Mocks/` has `MockASREngine`, `MockLLMEngine`, `MockSchedulerService`, per-suite `MockURLProtocol` subclasses; `Helpers/` has `BufferFactory` and `FileAudioSource`
 - **`notetakerUITests/`** — XCTest UI tests (light/dark mode via `runsForEachTargetApplicationUIConfiguration`)
 - **`scripts/`** — `increment_build_number.sh`
 - **`docs/`** — `PRIVACY_POLICY.md`, `APP_STORE_PRIVACY_CHECKLIST.md`, specs (SPEC-001 through SPEC-005)
@@ -155,7 +159,13 @@ Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Mo
 - **Close the app before running tests** — if the app is already running, UI tests attach to the existing instance instead of launching a fresh one, causing `Failed to terminate` errors and test failures
 - **Two-tier test plans**: `UnitTests.xctestplan` (22 pure-logic suites, ~257 tests, <0.2s) is default for Cmd+U; `FullTests.xctestplan` (all suites + UI tests) for CI on PR to main; shared scheme at `xcshareddata/xcschemes/notetaker.xcscheme` associates both plans
 - **Test plan gotcha**: Xcode auto-generated schemes don't support `-testPlan`; the explicit shared scheme with `shouldAutocreateTestPlan = "NO"` is required; verify with `xcodebuild -scheme notetaker -showTestPlans`
-- 31 test suites use `.serialized` to prevent parallel UserDefaults/Keychain/URLProtocol/SwiftData/NSPasteboard contamination; ~737 tests total across ~60 test files; UnitTests plan excludes all serialized suites for fast local iteration
+- 31 test suites use `.serialized` to prevent parallel UserDefaults/Keychain/URLProtocol/SwiftData/NSPasteboard contamination; ~746 tests total across ~64 test files; UnitTests plan excludes all serialized suites for fast local iteration
+
+## CI Workflows
+
+- **`ci.yml`**: Runs on PR/push to `main`/`release`; builds with `CODE_SIGNING_ALLOWED=NO`; skips tests if macOS < 26; caches DerivedData; auto-creates issue when tests are skipped
+- **`auto-merge.yml`**: Waits for `ci.yml` build-and-test to pass, runs Claude Code review, then merges; closes linked issues after merge
+- **`codeql.yml`**: CodeQL analysis for release branch protection
 
 ## Known Limitations
 
