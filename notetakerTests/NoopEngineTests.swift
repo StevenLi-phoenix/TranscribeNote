@@ -90,6 +90,21 @@ struct NoopLLMEngineTests {
             try await engine.generateStructured(messages: [], schema: schema, config: .default)
         }
     }
+
+    @Test func supportsToolCallingReturnsFalse() {
+        let engine = NoopLLMEngine()
+        #expect(engine.supportsToolCalling == false)
+    }
+
+    @Test func generateWithToolsThrowsNotSupported() async {
+        let engine = NoopLLMEngine()
+        let schemaData = try! JSONSerialization.data(withJSONObject: ["type": "object"])
+        let schema = JSONSchema(name: "params", description: "params", schemaData: schemaData)
+        let tool = LLMTool(name: "test", description: "test", parameters: schema) { _ in "result" }
+        await #expect(throws: LLMEngineError.self) {
+            try await engine.generateWithTools(messages: [], tools: [tool], config: .default)
+        }
+    }
 }
 
 @Suite("JSONSchema Tests")
@@ -261,5 +276,19 @@ struct LLMMessageTests {
         #expect(LLMMessage.Role.system.rawValue == "system")
         #expect(LLMMessage.Role.user.rawValue == "user")
         #expect(LLMMessage.Role.assistant.rawValue == "assistant")
+        #expect(LLMMessage.Role.tool.rawValue == "tool")
+    }
+
+    @Test func initWithToolCalls() {
+        let calls = [LLMToolCall(id: "tc-1", name: "fn", arguments: Data())]
+        let msg = LLMMessage(role: .assistant, content: "thinking", toolCalls: calls)
+        #expect(msg.toolCalls?.count == 1)
+        #expect(msg.toolCallId == nil)
+    }
+
+    @Test func initWithToolCallId() {
+        let msg = LLMMessage(role: .tool, content: "result", toolCallId: "tc-1")
+        #expect(msg.toolCallId == "tc-1")
+        #expect(msg.toolCalls == nil)
     }
 }

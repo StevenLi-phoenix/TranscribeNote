@@ -330,4 +330,142 @@ struct OpenAIEngineTests {
             )
         }
     }
+
+    // MARK: - Tool Calling Tests
+
+    private func makeTool() -> LLMTool {
+        let schemaData = try! JSONSerialization.data(withJSONObject: ["type": "object", "properties": ["q": ["type": "string"]]])
+        let schema = JSONSchema(name: "params", description: "params", schemaData: schemaData)
+        return LLMTool(name: "search", description: "Search the web", parameters: schema) { _ in "result" }
+    }
+
+    @Test("supportsToolCalling returns true")
+    func supportsToolCalling() {
+        #expect(engine.supportsToolCalling == true)
+    }
+
+    @Test("Tool calling request format includes tools array")
+    func toolCallingRequestFormat() async throws {
+        let responseJSON = """
+        {"choices": [{"message": {"content": "ok"}}]}
+        """.data(using: .utf8)!
+
+        var capturedRequest: URLRequest?
+        OpenAIMockProtocol.requestHandler = { request in
+            capturedRequest = request
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        _ = try await engine.generateWithTools(messages: makeMessages("test"), tools: [makeTool()], config: makeConfig())
+
+        let body = try #require(capturedRequest?.httpBody)
+        let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let tools = try #require(json["tools"] as? [[String: Any]])
+        #expect(tools.count == 1)
+        let fn = try #require(tools[0]["function"] as? [String: Any])
+        #expect(fn["name"] as? String == "search")
+        #expect(fn["description"] as? String == "Search the web")
+        #expect(tools[0]["type"] as? String == "function")
+    }
+
+    @Test("Tool calling text response")
+    func toolCallingTextResponse() async throws {
+        let responseJSON = """
+        {"choices": [{"message": {"content": "  Text result  "}}]}
+        """.data(using: .utf8)!
+
+        OpenAIMockProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        let result = try await engine.generateWithTools(messages: makeMessages("test"), tools: [makeTool()], config: makeConfig())
+        if case .text(let msg) = result {
+            #expect(msg.content == "Text result")
+        } else {
+            Issue.record("Expected .text response")
+        }
+    }
+
+    @Test("Tool calling returns toolCalls when present")
+    func toolCallingToolCalls() async throws {
+        let responseJSON = """
+        {"choices": [{"message": {"content": null, "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "search", "arguments": "{\\"q\\": \\"test\\"}"}}]}}], "usage": {"prompt_tokens": 10, "completion_tokens": 5}}
+        """.data(using: .utf8)!
+
+        OpenAIMockProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        let result = try await engine.generateWithTools(messages: makeMessages("test"), tools: [makeTool()], config: makeConfig())
+        if case .toolCalls(let calls, let usage) = result {
+            #expect(calls.count == 1)
+            #expect(calls[0].id == "call_1")
+            #expect(calls[0].name == "search")
+            #expect(usage?.inputTokens == 10)
+            #expect(usage?.outputTokens == 5)
+        } else {
+            Issue.record("Expected .toolCalls response")
+        }
+    }
+
+    @Test("Tool messages included in request")
+    func toolMessagesInRequest() async throws {
+        let responseJSON = """
+        {"choices": [{"message": {"content": "ok"}}]}
+        """.data(using: .utf8)!
+
+        var capturedRequest: URLRequest?
+        OpenAIMockProtocol.requestHandler = { request in
+            capturedRequest = request
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        let calls = [LLMToolCall(id: "call_1", name: "search", arguments: #"{"q":"test"}"#.data(using: .utf8)!)]
+        let messages = [
+            LLMMessage(role: .user, content: "Search"),
+            LLMMessage(role: .assistant, content: "", toolCalls: calls),
+            LLMMessage(role: .tool, content: "search result", toolCallId: "call_1"),
+        ]
+        _ = try await engine.generateWithTools(messages: messages, tools: [makeTool()], config: makeConfig())
+
+        let body = try #require(capturedRequest?.httpBody)
+        let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let apiMessages = try #require(json["messages"] as? [[String: Any]])
+        #expect(apiMessages.count == 3)
+
+        // Verify tool message
+        #expect(apiMessages[2]["role"] as? String == "tool")
+        #expect(apiMessages[2]["content"] as? String == "search result")
+        #expect(apiMessages[2]["tool_call_id"] as? String == "call_1")
+
+        // Verify assistant message has tool_calls
+        let assistantToolCalls = try #require(apiMessages[1]["tool_calls"] as? [[String: Any]])
+        #expect(assistantToolCalls.count == 1)
+    }
+
+    @Test("Tool calling token usage extracted")
+    func toolCallingTokenUsage() async throws {
+        let responseJSON = """
+        {"choices": [{"message": {"content": "ok"}}], "usage": {"prompt_tokens": 100, "completion_tokens": 25, "prompt_tokens_details": {"cached_tokens": 50}}}
+        """.data(using: .utf8)!
+
+        OpenAIMockProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        let result = try await engine.generateWithTools(messages: makeMessages("test"), tools: [makeTool()], config: makeConfig())
+        if case .text(let msg) = result {
+            let usage = try #require(msg.usage)
+            #expect(usage.inputTokens == 100)
+            #expect(usage.outputTokens == 25)
+            #expect(usage.cacheReadTokens == 50)
+        } else {
+            Issue.record("Expected .text response")
+        }
+    }
 }
