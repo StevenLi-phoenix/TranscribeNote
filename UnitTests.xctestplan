@@ -44,6 +44,8 @@
         "SummarizerServiceExtendedTests",
         "SummarizerServiceTests",
         "SummaryBlockTests",
+        "ToolCallingTypeTests",
+        "ToolCallingErrorTests",
         "SyntheticBufferInjectionTests",
         "TimeIntervalFormattingTests",
         "TranscriptSegmentTests",

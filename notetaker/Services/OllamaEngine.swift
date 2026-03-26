@@ -10,6 +10,7 @@ nonisolated final class OllamaEngine: LLMEngine, @unchecked Sendable {
     }
 
     var supportsStructuredOutput: Bool { true }
+    var supportsToolCalling: Bool { true }
 
     func generate(messages: [LLMMessage], config: LLMConfig) async throws -> LLMMessage {
         let baseURL = try LLMHTTPHelpers.validateBaseURL(
@@ -142,6 +143,119 @@ nonisolated final class OllamaEngine: LLMEngine, @unchecked Sendable {
         return StructuredOutput(data: outputData, usage: usage)
     }
 
+    func generateWithTools(messages: [LLMMessage], tools: [LLMTool], config: LLMConfig) async throws -> LLMToolResponse {
+        let baseURL = try LLMHTTPHelpers.validateBaseURL(
+            config.baseURL.isEmpty ? "http://localhost:11434" : config.baseURL
+        )
+        guard let url = URL(string: "\(baseURL)/api/chat") else {
+            throw LLMEngineError.invalidURL(baseURL)
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        // Build chat-format messages
+        var apiMessages: [[String: Any]] = []
+        for msg in messages {
+            switch msg.role {
+            case .system, .user:
+                apiMessages.append(["role": msg.role.rawValue, "content": msg.content])
+            case .assistant:
+                var msgDict: [String: Any] = ["role": "assistant", "content": msg.content]
+                if let calls = msg.toolCalls {
+                    let callsArray: [[String: Any]] = calls.map { call in
+                        let argsObject: Any = (try? JSONSerialization.jsonObject(with: call.arguments)) ?? [String: Any]()
+                        return [
+                            "function": [
+                                "name": call.name,
+                                "arguments": argsObject
+                            ]
+                        ]
+                    }
+                    msgDict["tool_calls"] = callsArray
+                }
+                apiMessages.append(msgDict)
+            case .tool:
+                apiMessages.append(["role": "tool", "content": msg.content])
+            }
+        }
+
+        // Build tools array (OpenAI-compatible format)
+        let toolsArray: [[String: Any]] = try tools.map { tool in
+            let paramsObject = try JSONSerialization.jsonObject(with: tool.parameters.schemaData)
+            return [
+                "type": "function",
+                "function": [
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": paramsObject
+                ] as [String: Any]
+            ]
+        }
+
+        let body: [String: Any] = [
+            "model": config.model,
+            "messages": apiMessages,
+            "tools": toolsArray,
+            "stream": false
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        Self.logger.info("Generating with tools using Ollama model \(config.model)")
+
+        let (data, response) = try await LLMHTTPHelpers.performRequest(request, session: session)
+        try LLMHTTPHelpers.validateHTTPResponse(response, data: data)
+
+        // Ollama chat response structure
+        struct ToolCallFunction: Decodable {
+            let name: String
+            let arguments: OllamaAnyCodableValue?
+        }
+        struct ToolCallItem: Decodable {
+            let function: ToolCallFunction
+        }
+        struct Message: Decodable {
+            let role: String?
+            let content: String?
+            let tool_calls: [ToolCallItem]?
+        }
+        struct OllamaChatResponse: Decodable {
+            let message: Message
+            let prompt_eval_count: Int?
+            let eval_count: Int?
+        }
+
+        let ollamaResponse = try LLMHTTPHelpers.decodeResponse(OllamaChatResponse.self, from: data)
+
+        let usage = TokenUsage(
+            inputTokens: ollamaResponse.prompt_eval_count ?? 0,
+            outputTokens: ollamaResponse.eval_count ?? 0,
+            cacheCreationTokens: 0,
+            cacheReadTokens: 0
+        )
+
+        if let toolCalls = ollamaResponse.message.tool_calls, !toolCalls.isEmpty {
+            let calls = toolCalls.enumerated().map { index, tc in
+                let argsData: Data
+                if let args = tc.function.arguments {
+                    argsData = (try? JSONSerialization.data(withJSONObject: args.value)) ?? Data()
+                } else {
+                    argsData = Data()
+                }
+                return LLMToolCall(id: "ollama-\(index)", name: tc.function.name, arguments: argsData)
+            }
+            Self.logger.info("Ollama returned \(calls.count) tool call(s)")
+            return .toolCalls(calls, usage: usage)
+        }
+
+        let content = (ollamaResponse.message.content ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !content.isEmpty else { throw LLMEngineError.emptyResponse }
+
+        Self.logger.info("Ollama tool-calling generation complete (\(content.count) chars)")
+        return .text(LLMMessage(role: .assistant, content: content, usage: usage))
+    }
+
     func isAvailable(config: LLMConfig) async -> Bool {
         guard let baseURL = try? LLMHTTPHelpers.validateBaseURL(
             config.baseURL.isEmpty ? "http://localhost:11434" : config.baseURL
@@ -155,4 +269,50 @@ nonisolated final class OllamaEngine: LLMEngine, @unchecked Sendable {
         }
     }
 
+}
+
+/// Helper for decoding arbitrary JSON values from Ollama tool call arguments.
+private enum OllamaAnyCodableValue: Decodable {
+    case dictionary([String: OllamaAnyCodableValue])
+    case array([OllamaAnyCodableValue])
+    case string(String)
+    case number(Double)
+    case bool(Bool)
+    case null
+
+    var value: Any {
+        switch self {
+        case .dictionary(let dict):
+            return dict.mapValues { $0.value }
+        case .array(let arr):
+            return arr.map { $0.value }
+        case .string(let s):
+            return s
+        case .number(let n):
+            return n
+        case .bool(let b):
+            return b
+        case .null:
+            return NSNull()
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let b = try? container.decode(Bool.self) {
+            self = .bool(b)
+        } else if let n = try? container.decode(Double.self) {
+            self = .number(n)
+        } else if let s = try? container.decode(String.self) {
+            self = .string(s)
+        } else if let arr = try? container.decode([OllamaAnyCodableValue].self) {
+            self = .array(arr)
+        } else if let dict = try? container.decode([String: OllamaAnyCodableValue].self) {
+            self = .dictionary(dict)
+        } else {
+            throw DecodingError.typeMismatch(OllamaAnyCodableValue.self, .init(codingPath: decoder.codingPath, debugDescription: "Unsupported type"))
+        }
+    }
 }

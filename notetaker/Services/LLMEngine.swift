@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 nonisolated enum LLMEngineError: Error, LocalizedError {
     case invalidURL(String)
@@ -9,6 +10,8 @@ nonisolated enum LLMEngineError: Error, LocalizedError {
     case notConfigured
     case notSupported
     case schemaError(String)
+    case toolExecutionError(toolName: String, underlying: Error)
+    case maxIterationsReached(Int)
 
     var errorDescription: String? {
         switch self {
@@ -20,6 +23,8 @@ nonisolated enum LLMEngineError: Error, LocalizedError {
         case .notConfigured: "LLM not configured"
         case .notSupported: "Operation not supported by this engine"
         case .schemaError(let msg): "Schema error: \(msg)"
+        case .toolExecutionError(let name, let err): "Tool '\(name)' execution failed: \(err.localizedDescription)"
+        case .maxIterationsReached(let count): "Tool calling loop exceeded maximum iterations (\(count))"
         }
     }
 }
@@ -42,6 +47,7 @@ nonisolated struct LLMMessage: Sendable {
         case system
         case user
         case assistant
+        case tool
     }
 
     let role: Role
@@ -50,12 +56,18 @@ nonisolated struct LLMMessage: Sendable {
     let cacheHint: Bool
     /// Token usage statistics from the API response (populated on assistant messages returned by engines).
     let usage: TokenUsage?
+    /// Tool calls returned by the assistant (populated when the LLM requests tool invocations).
+    let toolCalls: [LLMToolCall]?
+    /// The tool call ID this message is responding to (for .tool role messages).
+    let toolCallId: String?
 
-    init(role: Role, content: String, cacheHint: Bool = false, usage: TokenUsage? = nil) {
+    init(role: Role, content: String, cacheHint: Bool = false, usage: TokenUsage? = nil, toolCalls: [LLMToolCall]? = nil, toolCallId: String? = nil) {
         self.role = role
         self.content = content
         self.cacheHint = cacheHint
         self.usage = usage
+        self.toolCalls = toolCalls
+        self.toolCallId = toolCallId
     }
 }
 
@@ -89,11 +101,38 @@ nonisolated struct StructuredOutput: Sendable {
     }
 }
 
+/// A tool definition for LLM function calling.
+nonisolated struct LLMTool: Sendable {
+    let name: String
+    let description: String
+    let parameters: JSONSchema
+    let handler: @Sendable (Data) async throws -> String
+}
+
+/// A single tool call returned by the LLM.
+nonisolated struct LLMToolCall: Sendable, Equatable {
+    let id: String
+    let name: String
+    let arguments: Data
+
+    static func == (lhs: LLMToolCall, rhs: LLMToolCall) -> Bool {
+        lhs.id == rhs.id && lhs.name == rhs.name && lhs.arguments == rhs.arguments
+    }
+}
+
+/// Response from a tool-calling LLM request.
+nonisolated enum LLMToolResponse: Sendable {
+    case text(LLMMessage)
+    case toolCalls([LLMToolCall], usage: TokenUsage?)
+}
+
 nonisolated protocol LLMEngine: AnyObject, Sendable {
     func generate(messages: [LLMMessage], config: LLMConfig) async throws -> LLMMessage
     func isAvailable(config: LLMConfig) async -> Bool
     var supportsStructuredOutput: Bool { get }
     func generateStructured(messages: [LLMMessage], schema: JSONSchema, config: LLMConfig) async throws -> StructuredOutput
+    var supportsToolCalling: Bool { get }
+    func generateWithTools(messages: [LLMMessage], tools: [LLMTool], config: LLMConfig) async throws -> LLMToolResponse
 }
 
 extension LLMEngine {
@@ -101,6 +140,58 @@ extension LLMEngine {
     func generateStructured(messages: [LLMMessage], schema: JSONSchema, config: LLMConfig) async throws -> StructuredOutput {
         throw LLMEngineError.notSupported
     }
+    var supportsToolCalling: Bool { false }
+    func generateWithTools(messages: [LLMMessage], tools: [LLMTool], config: LLMConfig) async throws -> LLMToolResponse {
+        throw LLMEngineError.notSupported
+    }
+}
+
+/// Executes a tool-calling loop: repeatedly calls the engine, executes tool handlers, and feeds results back until the LLM returns a text response.
+nonisolated func executeToolLoop(
+    engine: any LLMEngine,
+    messages: [LLMMessage],
+    tools: [LLMTool],
+    config: LLMConfig,
+    maxIterations: Int = 10
+) async throws -> LLMMessage {
+    let logger = Logger(subsystem: "com.notetaker", category: "ToolLoop")
+    let toolMap = Dictionary(uniqueKeysWithValues: tools.map { ($0.name, $0) })
+    var currentMessages = messages
+
+    for iteration in 0..<maxIterations {
+        logger.info("Tool loop iteration \(iteration + 1)/\(maxIterations)")
+        let response = try await engine.generateWithTools(messages: currentMessages, tools: tools, config: config)
+
+        switch response {
+        case .text(let message):
+            logger.info("Tool loop completed with text response after \(iteration + 1) iteration(s)")
+            return message
+        case .toolCalls(let calls, _):
+            logger.info("Received \(calls.count) tool call(s)")
+            // Append assistant message with tool calls
+            currentMessages.append(LLMMessage(role: .assistant, content: "", toolCalls: calls))
+            // Execute each tool and append results
+            for call in calls {
+                let resultContent: String
+                if let tool = toolMap[call.name] {
+                    do {
+                        resultContent = try await tool.handler(call.arguments)
+                        logger.info("Tool '\(call.name)' executed successfully")
+                    } catch {
+                        resultContent = "Error: \(error.localizedDescription)"
+                        logger.warning("Tool '\(call.name)' failed: \(error.localizedDescription)")
+                    }
+                } else {
+                    resultContent = "Error: Unknown tool '\(call.name)'"
+                    logger.warning("Unknown tool requested: \(call.name)")
+                }
+                currentMessages.append(LLMMessage(role: .tool, content: resultContent, toolCallId: call.id))
+            }
+        }
+    }
+
+    logger.error("Tool loop exceeded max iterations (\(maxIterations))")
+    throw LLMEngineError.maxIterationsReached(maxIterations)
 }
 
 /// Shared HTTP helpers for LLM engine implementations.
