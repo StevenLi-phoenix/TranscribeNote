@@ -166,15 +166,15 @@ Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Mo
 
 ## CI Workflows
 
-- **`ci.yml`**: Runs on PR/push to `main`/`release`; builds with `CODE_SIGNING_ALLOWED=NO`; skips tests if macOS < 26; caches DerivedData; auto-creates issue when tests are skipped
+- **`ci.yml`**: Runs on PR/push to `main`/`release` on `macos-26` runner; builds with `CODE_SIGNING_ALLOWED=NO`; runs FullTests plan (unit + UI tests); caches DerivedData; filtered test output with last-50-lines on failure
 - **`auto-merge.yml`**: Waits for `ci.yml` build-and-test to pass, runs Claude Code review, then merges; closes linked issues after merge
 - **`codeql.yml`**: CodeQL analysis for release branch protection
 
 ## CI/CD & Branch Protection
 
 - **Release branch** protected via GitHub ruleset (ID 14307671): requires PR, 1 approval, signed commits, status checks (`build-and-test`), CodeQL, no force push/deletion
-- **GitHub-hosted runners** (`macos-15`) have Xcode 26 SDK but run macOS 15.7.4 — build works (cross-compilation) but tests cannot run (deployment target 26.2); CI conditionally skips tests with `sw_vers` check
-- **Three CI workflows**: `ci.yml` (build + conditional test), `codeql.yml` (Swift security scanning), `auto-merge.yml` (Claude review + auto-merge)
+- **GitHub-hosted runners** (`macos-26`) run macOS 26 natively — both build and tests execute successfully with `CODE_SIGNING_ALLOWED=NO`
+- **Three CI workflows**: `ci.yml` (build + full test), `codeql.yml` (Swift security scanning), `auto-merge.yml` (Claude review + auto-merge)
 - **GitHub rulesets API**: use `code_scanning` not `required_code_scanning`; `pull_request` rule requires all 5 boolean params; use `--input` with JSON not `-f` flags for nested objects
 - `gh label create` must precede `gh issue edit --add-label` — labels must exist first
 
