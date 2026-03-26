@@ -93,10 +93,11 @@ scripts/                        # Build number increment
 
 ## Default LLM Configuration
 
-- Provider: `.custom` (OpenAI-compatible)
-- Model: `qwen3-14b-mlx`
-- Base URL: `http://localhost:1234/v1` (LM Studio)
+- Provider: `.apple` (Apple Foundation Model)
+- Model: `foundation-small`
+- Base URL: *(none required, uses on-device framework)*
 
 ## License
 
-Private repository.
+MIT
+

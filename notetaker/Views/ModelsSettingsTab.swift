@@ -86,6 +86,7 @@ struct ModelsSettingsTab: View {
                         }
                     }
                     .formStyle(.columns)
+                    .toggleStyle(.switch)
                     .padding()
                 }
             } else {

@@ -171,6 +171,46 @@ extension View {
     }
 }
 
+// MARK: - SettingsGrid
+
+/// Scrollable container for SettingsRow items. Provides consistent vertical spacing and toggle style.
+struct SettingsGrid<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 14) {
+                content
+            }
+            .toggleStyle(.switch)
+            .padding()
+        }
+    }
+}
+
+// MARK: - SettingsRow
+
+/// Two-column settings row: label (trailing, 50%) | control (leading, 50%).
+/// All rows share the same 50/50 split — column divider is always at the center regardless of label length.
+struct SettingsRow<Content: View>: View {
+    let label: String
+    @ViewBuilder let content: Content
+
+    init(_ label: String, @ViewBuilder content: () -> Content) {
+        self.label = label
+        self.content = content()
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(label)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            content
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
 // MARK: - SettingsInfoLabel
 
 /// Label with icon for informational notes in settings. Uses caption styling with secondary color.

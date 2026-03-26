@@ -167,6 +167,14 @@ Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Mo
 - **`auto-merge.yml`**: Waits for `ci.yml` build-and-test to pass, runs Claude Code review, then merges; closes linked issues after merge
 - **`codeql.yml`**: CodeQL analysis for release branch protection
 
+## CI/CD & Branch Protection
+
+- **Release branch** protected via GitHub ruleset (ID 14307671): requires PR, 1 approval, signed commits, status checks (`build-and-test`), CodeQL, no force push/deletion
+- **GitHub-hosted runners** (`macos-15`) have Xcode 26 SDK but run macOS 15.7.4 — build works (cross-compilation) but tests cannot run (deployment target 26.2); CI conditionally skips tests with `sw_vers` check
+- **Three CI workflows**: `ci.yml` (build + conditional test), `codeql.yml` (Swift security scanning), `auto-merge.yml` (Claude review + auto-merge)
+- **GitHub rulesets API**: use `code_scanning` not `required_code_scanning`; `pull_request` rule requires all 5 boolean params; use `--input` with JSON not `-f` flags for nested objects
+- `gh label create` must precede `gh issue edit --add-label` — labels must exist first
+
 ## Known Limitations
 
 - Settings changes require app restart to take effect for LLM engine (engine created at init time); summarizer config changes update timer interval live
