@@ -7,6 +7,7 @@ struct ContentView: View {
     var schedulerViewModel: SchedulerViewModel
     @State private var selectedSessionID: UUID?
     @State private var showScheduleSheet = false
+    @State private var showGlobalSearch = false
 
     /// Handle recording completion — works both on initial appear and state change.
     /// Background summary is already dispatched by the ViewModel's drainTask.
@@ -44,10 +45,25 @@ struct ContentView: View {
                         }
                         .accessibilityLabel("Scheduled recordings")
                     }
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            showGlobalSearch = true
+                        } label: {
+                            Image(systemName: "text.magnifyingglass")
+                        }
+                        .keyboardShortcut("f", modifiers: [.command, .shift])
+                        .accessibilityLabel("Knowledge search")
+                    }
                 }
                 .sheet(isPresented: $showScheduleSheet) {
                     ScheduleView(schedulerViewModel: schedulerViewModel)
                         .frame(minWidth: 480, minHeight: 400)
+                }
+                .sheet(isPresented: $showGlobalSearch) {
+                    GlobalSearchView { sessionID in
+                        selectedSessionID = sessionID
+                    }
+                    .frame(minWidth: 560, minHeight: 480)
                 }
         } detail: {
             if viewModel.isActive || viewModel.state == .stopping {

@@ -176,4 +176,34 @@ enum PromptBuilder {
 
         return messages
     }
+
+    /// Build a prompt for cross-session knowledge search (RAG).
+    /// The LLM answers the user's query based on transcript excerpts from multiple sessions.
+    static func buildSearchPrompt(query: String, context: String, language: String) -> [LLMMessage] {
+        var messages: [LLMMessage] = []
+
+        var systemParts = [
+            "You are a helpful assistant answering questions based on meeting and recording transcripts.",
+            "Use ONLY information from the provided transcript excerpts to answer. Cite the source session name and timestamp when possible.",
+            "If the answer is not in the provided excerpts, say so clearly.",
+            "Be concise and direct."
+        ]
+
+        if language != "auto" {
+            let lang = sanitizeLanguage(language)
+            systemParts.append("IMPORTANT: Write your response in \(lang).")
+        }
+
+        messages.append(LLMMessage(role: .system, content: systemParts.joined(separator: "\n\n"), cacheHint: true))
+
+        // Context from search results (stable for this query, cache candidate)
+        if !context.isEmpty {
+            messages.append(LLMMessage(role: .user, content: "Transcript excerpts:\n\(context)", cacheHint: true))
+        }
+
+        // User query
+        messages.append(LLMMessage(role: .user, content: query))
+
+        return messages
+    }
 }
