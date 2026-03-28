@@ -145,7 +145,7 @@ struct SummarizationSettingsTab: View {
 
             SettingsRow("Min Transcript Length") {
                 Stepper(value: $config.minTranscriptLength, in: 50...500, step: 50) {
-                    Text("\(config.minTranscriptLength)")
+                    Text("\(config.minTranscriptLength) chars")
                         .monospacedDigit()
                 }
             }
@@ -275,7 +275,7 @@ struct RecordingSettingsTab: View {
                         get: { timeout },
                         set: { config.silenceTimeoutSeconds = $0 }
                     ), in: 30...600, step: 30) {
-                        Text("\(timeout)s")
+                        Text(TimeInterval(timeout).compactDuration)
                             .monospacedDigit()
                     }
                     .disabled(!config.vadEnabled)

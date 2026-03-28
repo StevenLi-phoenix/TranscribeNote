@@ -116,6 +116,7 @@ struct SummaryCardView: View {
                         .buttonStyle(.plain)
                         .foregroundStyle(.tertiary)
                         .help("Edit summary")
+                        .accessibilityLabel("Edit summary")
                     }
                     if onRegenerate != nil {
                         Button {
@@ -128,6 +129,7 @@ struct SummaryCardView: View {
                         .buttonStyle(.plain)
                         .foregroundStyle(.tertiary)
                         .help("Regenerate with instructions")
+                        .accessibilityLabel("Regenerate summary")
                     }
                 }
             }

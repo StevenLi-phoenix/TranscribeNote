@@ -46,6 +46,7 @@ struct ModelsSettingsTab: View {
                     } label: {
                         Image(systemName: "plus")
                     }
+                    .help("Add new profile")
 
                     Button {
                         showDeleteConfirmation = true
@@ -53,6 +54,7 @@ struct ModelsSettingsTab: View {
                         Image(systemName: "minus")
                     }
                     .disabled(selectedProfileID == nil || profiles.count <= 1)
+                    .help("Delete selected profile")
 
                     Button {
                         duplicateProfile()
