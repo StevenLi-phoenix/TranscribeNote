@@ -6,7 +6,7 @@ struct PlaybackControlView: View {
     @State private var seekValue: TimeInterval = 0
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: DS.Spacing.md) {
             Button {
                 service.togglePlayPause()
             } label: {

@@ -20,7 +20,7 @@ struct RecordingControlView: View {
             // Recording indicator — always rendered to prevent layout shift
             HStack(spacing: DS.Spacing.lg) {
                 Circle()
-                    .fill(.red)
+                    .fill(DS.Colors.recording)
                     .frame(width: 10, height: 10)
                     .opacity(pulseAnimation ? 0.3 : 1.0)
 

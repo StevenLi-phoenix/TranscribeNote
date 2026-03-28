@@ -270,7 +270,7 @@ private struct DateFilterChip: View {
                 .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
                 .foregroundStyle(isSelected ? .primary : .secondary)
                 .padding(.horizontal, DS.Spacing.sm)
-                .padding(.vertical, 3)
+                .padding(.vertical, DS.Spacing.xxs)
                 .background {
                     if isSelected {
                         Capsule()

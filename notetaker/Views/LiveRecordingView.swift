@@ -29,8 +29,8 @@ struct LiveRecordingView: View {
 
             if let error = viewModel.errorMessage {
                 Text(error)
-                    .foregroundStyle(.red)
-                    .font(.caption)
+                    .foregroundStyle(DS.Colors.recording)
+                    .font(DS.Typography.caption)
                     .padding(.horizontal)
                     .padding(.vertical, DS.Spacing.xs)
             }
@@ -51,6 +51,7 @@ struct LiveRecordingView: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Dismiss error")
                 }
                 .font(DS.Typography.caption)
                 .padding(DS.Spacing.sm)
