@@ -57,6 +57,11 @@ final class RecordingViewModel {
     var isRecording: Bool { state == .recording }
     var isActive: Bool { state == .recording || state == .paused }
 
+    /// Current audio source read from UserDefaults.
+    var audioSource: AudioSource {
+        AudioSource(rawValue: UserDefaults.standard.string(forKey: "audioSource") ?? "") ?? .microphone
+    }
+
     private let audioCaptureService: AudioCaptureService
     private let asrEngine: any ASREngine
     private var timer: Timer?
@@ -73,6 +78,7 @@ final class RecordingViewModel {
     private var periodicWindowCount: Int = 0
     private var llmConfigObserver: NSObjectProtocol?
     private let vadConfig: VADConfig
+    private var systemAudioService: SystemAudioCaptureService?
 
     // Duration-end timer state (2c)
     private var durationEndTimer: Timer?
@@ -193,10 +199,24 @@ final class RecordingViewModel {
     }
 
     private func checkPermissions() async -> Bool {
-        let micGranted = await audioCaptureService.requestPermission()
-        guard micGranted else {
-            errorMessage = "Microphone permission denied"
-            return false
+        let source = audioSource
+
+        // Mic permission needed for .microphone and .both
+        if source == .microphone || source == .both {
+            let micGranted = await audioCaptureService.requestPermission()
+            guard micGranted else {
+                errorMessage = "Microphone permission denied"
+                return false
+            }
+        }
+
+        // Screen Recording permission needed for .systemAudio and .both
+        if source == .systemAudio || source == .both {
+            let screenGranted = await SystemAudioCaptureService.checkPermission()
+            guard screenGranted else {
+                errorMessage = "Screen Recording permission is required for system audio capture. Please enable it in System Settings > Privacy & Security > Screen Recording."
+                return false
+            }
         }
 
         if SFSpeechRecognizer.authorizationStatus() != .authorized {
@@ -215,8 +235,10 @@ final class RecordingViewModel {
     }
 
     private func startAudioPipeline() throws -> URL {
-        // 0. Configure VAD before audio starts
-        if vadConfig.vadEnabled {
+        let source = audioSource
+
+        // 0. Configure VAD before audio starts (mic-based only)
+        if (source == .microphone || source == .both) && vadConfig.vadEnabled {
             let inputFormat = audioCaptureService.audioEngine.inputNode.outputFormat(forBus: 0)
             // Buffer size matches the tap's hardcoded 1024 in AudioCaptureService.startCapture()
             let bufferDuration = 1024.0 / inputFormat.sampleRate
@@ -241,22 +263,26 @@ final class RecordingViewModel {
 
         // 1. Wire up buffer forwarding BEFORE audio starts
         let engine = asrEngine
-        audioCaptureService.onAudioBuffer = { buffer in
-            engine.appendAudioBuffer(buffer)
+        if source == .microphone || source == .both {
+            audioCaptureService.onAudioBuffer = { buffer in
+                engine.appendAudioBuffer(buffer)
+            }
         }
 
         // 2. Wire audio level metering (throttle on audio thread to avoid Task spam)
         let meter = audioMeter
         let lastLevel = OSAllocatedUnfairLock(initialState: Float(0))
-        audioCaptureService.onAudioLevel = { level in
-            let shouldUpdate = lastLevel.withLock { last -> Bool in
-                guard abs(last - level) > 0.02 else { return false }
-                last = level
-                return true
-            }
-            if shouldUpdate {
-                Task { @MainActor in
-                    meter.update(level)
+        if source == .microphone || source == .both {
+            audioCaptureService.onAudioLevel = { level in
+                let shouldUpdate = lastLevel.withLock { last -> Bool in
+                    guard abs(last - level) > 0.02 else { return false }
+                    last = level
+                    return true
+                }
+                if shouldUpdate {
+                    Task { @MainActor in
+                        meter.update(level)
+                    }
                 }
             }
         }
@@ -264,8 +290,60 @@ final class RecordingViewModel {
         // 3. Start ASR (creates recognition request ready to receive buffers)
         try asrEngine.startRecognition(audioEngine: audioCaptureService.audioEngine)
 
-        // 4. Start audio capture LAST (tap installed, engine starts, audio flows to ASR)
-        return try audioCaptureService.startCapture()
+        // 4. Start mic audio capture (tap installed, engine starts, audio flows to ASR)
+        let fileURL: URL
+        if source == .microphone || source == .both {
+            fileURL = try audioCaptureService.startCapture()
+        } else {
+            // System-audio-only: still need a file URL for the session, but no mic capture
+            let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+            let filename = "system_audio_\(UUID().uuidString).m4a"
+            fileURL = documentsURL.appendingPathComponent(filename)
+        }
+
+        // 5. Start system audio capture if needed
+        if source == .systemAudio || source == .both {
+            let sysService = SystemAudioCaptureService()
+            systemAudioService = sysService
+
+            // Wire system audio buffers to ASR engine
+            let sysOnBuffer: @Sendable (AVAudioPCMBuffer) -> Void = { buffer in
+                engine.appendAudioBuffer(buffer)
+            }
+
+            // Wire system audio level metering (used when system-audio-only)
+            var sysOnLevel: (@Sendable (Float) -> Void)?
+            if source == .systemAudio {
+                sysOnLevel = { level in
+                    let shouldUpdate = lastLevel.withLock { last -> Bool in
+                        guard abs(last - level) > 0.02 else { return false }
+                        last = level
+                        return true
+                    }
+                    if shouldUpdate {
+                        Task { @MainActor in
+                            meter.update(level)
+                        }
+                    }
+                }
+            }
+
+            let capturedOnLevel = sysOnLevel
+            Task { @MainActor [weak self] in
+                do {
+                    try await sysService.startCapture(
+                        onAudioBuffer: sysOnBuffer,
+                        onAudioLevel: capturedOnLevel
+                    )
+                    Self.logger.info("System audio capture started alongside recording")
+                } catch {
+                    Self.logger.error("Failed to start system audio capture: \(error.localizedDescription)")
+                    self?.errorMessage = "System audio capture failed: \(error.localizedDescription)"
+                }
+            }
+        }
+
+        return fileURL
     }
 
     private func createSession(fileURL: URL, scheduledInfo: ScheduledRecordingInfo? = nil) {
@@ -308,6 +386,13 @@ final class RecordingViewModel {
         // 3. Stop audio capture (saves current clip file, clears VAD)
         if let savedURL = audioCaptureService.stopCapture() {
             Self.logger.info("Clip saved to \(savedURL.path)")
+        }
+
+        // 3b. Stop system audio capture if running
+        if let sysService = systemAudioService {
+            let service = sysService
+            systemAudioService = nil
+            await service.stopCapture()
         }
 
         // 4. Drain ASR results for current clip
@@ -498,6 +583,15 @@ final class RecordingViewModel {
             } else {
                 Self.logger.warning("stopCapture returned nil — no audio file was saved")
             }
+
+            // Stop system audio capture if running
+            if let sysService = systemAudioService {
+                let service = sysService
+                systemAudioService = nil
+                Task {
+                    await service.stopCapture()
+                }
+            }
         }
 
         if let session = currentSession {
@@ -658,6 +752,8 @@ final class RecordingViewModel {
             audioCaptureService.onAudioLevel = nil
             audioCaptureService.onSilenceTimeout = nil
             _ = audioCaptureService.stopCapture()
+            // System audio service cleanup (fire-and-forget on force quit)
+            systemAudioService = nil
         }
 
         if let session = currentSession {
