@@ -23,6 +23,7 @@
         "ChatServiceTests",
         "CommandPaletteTests",
         "DateFilterBadgeTests",
+        "DragDropExportTests",
         "AudioExporterTests",
         "AudioLevelMeterTests",
         "BufferFactoryTests",

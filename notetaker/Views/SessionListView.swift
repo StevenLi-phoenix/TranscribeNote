@@ -190,6 +190,7 @@ struct SessionListView: View {
                     ForEach(pinnedSessions, id: \.id) { session in
                         SessionRowView(session: session)
                             .tag(session.id)
+                            .draggable(SessionExportItem(session: session))
                             .contextMenu { sessionContextMenu(for: session) }
                     }
                 }
@@ -199,6 +200,7 @@ struct SessionListView: View {
                     ForEach(group.sessions, id: \.id) { session in
                         SessionRowView(session: session)
                             .tag(session.id)
+                            .draggable(SessionExportItem(session: session))
                             .contextMenu { sessionContextMenu(for: session) }
                     }
                 }
