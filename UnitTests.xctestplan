@@ -18,6 +18,7 @@
         "name" : "notetakerTests"
       },
       "selectedTests" : [
+        "AutoTitleTests",
         "AudioConfigTests",
         "ChatServiceTests",
         "AudioExporterTests",
