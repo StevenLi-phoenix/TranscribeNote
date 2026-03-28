@@ -13,6 +13,7 @@ struct ChatView: View {
     @State private var inputText = ""
     @State private var isGenerating = false
     @State private var scrollTarget: UUID?
+    @State private var chatTask: Task<Void, Never>?
 
     private let presetQuestions = [
         "What were the main topics discussed?",
@@ -39,6 +40,9 @@ struct ChatView: View {
         }
         .onAppear { initServiceIfNeeded() }
         .onChange(of: sessionID) {
+            chatTask?.cancel()
+            chatTask = nil
+            isGenerating = false
             messages.removeAll()
             chatService?.clearHistory()
             chatService = nil
@@ -209,16 +213,18 @@ struct ChatView: View {
         messages.append(userMsg)
         scrollTarget = userMsg.id
 
-        Task {
+        chatTask = Task {
             defer { isGenerating = false }
             do {
                 let config = LLMProfileStore.resolveConfig(for: .chat)
                 let response = try await chatService?.sendMessage(text, segments: segments, llmConfig: config)
+                guard !Task.isCancelled else { return }
                 if let response {
                     messages.append(response)
                     scrollTarget = response.id
                 }
             } catch {
+                guard !Task.isCancelled else { return }
                 Self.logger.error("Chat error: \(error.localizedDescription)")
                 let errorMsg = ChatMessage(role: .assistant, content: "Error: \(error.localizedDescription)", isError: true)
                 messages.append(errorMsg)
