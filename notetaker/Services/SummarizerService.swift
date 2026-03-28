@@ -24,6 +24,12 @@ nonisolated final class SummarizerService: @unchecked Sendable {
                 if let usage = result.usage {
                     Self.logger.info("\(label) tokens: input=\(usage.inputTokens) output=\(usage.outputTokens) cache_create=\(usage.cacheCreationTokens) cache_read=\(usage.cacheReadTokens)")
                 }
+                if let usage = result.usage {
+                    TokenUsageTracker.record(
+                        usage: usage,
+                        estimatedCost: TokenPricing.estimateCost(usage: usage, provider: llmConfig.provider, model: llmConfig.model)
+                    )
+                }
                 return LLMMessage(role: .assistant, content: trimmedContent, usage: result.usage)
             } catch is CancellationError {
                 Self.logger.info("\(label) cancelled on attempt \(attempt + 1)")
