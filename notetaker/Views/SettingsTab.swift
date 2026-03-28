@@ -8,8 +8,10 @@ struct LLMAssignmentTab: View {
     @State private var liveProfileID: UUID?
     @State private var overallProfileID: UUID?
     @State private var titleProfileID: UUID?
+    @State private var chatProfileID: UUID?
     @State private var overallInheritsLive = false
     @State private var titleInheritsLive = true
+    @State private var chatInheritsLive = true
 
     var body: some View {
         SettingsGrid {
@@ -41,6 +43,18 @@ struct LLMAssignmentTab: View {
                     profilePicker(selection: $titleProfileID)
                 }
             }
+
+            SettingsRow("Chat: Use Live") {
+                Toggle("", isOn: $chatInheritsLive)
+                    .labelsHidden()
+                    .help("Reuse the live model for transcript chat")
+            }
+
+            if !chatInheritsLive {
+                SettingsRow("Chat Model") {
+                    profilePicker(selection: $chatProfileID)
+                }
+            }
         }
         .onAppear { loadAssignments() }
         .onChange(of: liveProfileID) { _, newValue in
@@ -57,6 +71,12 @@ struct LLMAssignmentTab: View {
         }
         .onChange(of: titleInheritsLive) { _, newValue in
             LLMProfileStore.setInheritsLive(newValue, for: .title)
+        }
+        .onChange(of: chatProfileID) { _, newValue in
+            if let id = newValue { LLMProfileStore.setAssignedProfileID(id, for: .chat) }
+        }
+        .onChange(of: chatInheritsLive) { _, newValue in
+            LLMProfileStore.setInheritsLive(newValue, for: .chat)
         }
     }
 
@@ -78,6 +98,8 @@ struct LLMAssignmentTab: View {
         titleProfileID = LLMProfileStore.assignedProfileID(for: .title)
         overallInheritsLive = LLMProfileStore.inheritsLive(for: .overall)
         titleInheritsLive = LLMProfileStore.inheritsLive(for: .title)
+        chatProfileID = LLMProfileStore.assignedProfileID(for: .chat)
+        chatInheritsLive = LLMProfileStore.inheritsLive(for: .chat)
     }
 }
 
