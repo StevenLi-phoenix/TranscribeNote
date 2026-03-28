@@ -14,6 +14,10 @@ final class RecordingSession {
     var isPartial: Bool = false
     /// Links session to the triggering scheduled recording.
     var scheduledRecordingID: UUID? = nil
+    /// Whether this session is pinned/favorited.
+    var isPinned: Bool = false
+    /// When the session was pinned (for sort ordering).
+    var pinnedAt: Date? = nil
 
     @Relationship(deleteRule: .cascade)
     var segments: [TranscriptSegment]
@@ -55,7 +59,9 @@ final class RecordingSession {
         segments: [TranscriptSegment] = [],
         summaries: [SummaryBlock] = [],
         isPartial: Bool = false,
-        scheduledRecordingID: UUID? = nil
+        scheduledRecordingID: UUID? = nil,
+        isPinned: Bool = false,
+        pinnedAt: Date? = nil
     ) {
         self.id = id
         self.startedAt = startedAt
@@ -68,5 +74,12 @@ final class RecordingSession {
         self.summaries = summaries
         self.isPartial = isPartial
         self.scheduledRecordingID = scheduledRecordingID
+        self.isPinned = isPinned
+        self.pinnedAt = pinnedAt
+    }
+
+    func togglePin() {
+        isPinned.toggle()
+        pinnedAt = isPinned ? Date() : nil
     }
 }

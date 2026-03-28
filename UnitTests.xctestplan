@@ -36,6 +36,7 @@
         "LLMRoleCoverageTests",
         "MarkdownExporterTests",
         "NoopEngineTests",
+        "PinFavoriteTests",
         "PromptBuilderExtendedTests",
         "PromptBuilderTests",
         "RecordingSessionExtendedTests",

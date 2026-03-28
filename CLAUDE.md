@@ -52,15 +52,17 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - Re-fetch SwiftData `@Model` objects after `await` in async Tasks — captured references may be stale; re-fetch by ID with `#Predicate`
 - Reset transient view state (`isGeneratingSummary`, `hasAutoTriggered`, errors) in `onChange(of: sessionID)` — prevents stale flags blocking behavior on navigation
 - **SwiftData property defaults for migration**: New non-optional stored properties on `@Model` classes MUST have inline default values on the property declaration (e.g., `var isOverall: Bool = false`), NOT just in `init()` — SwiftData uses the property-level default to fill existing rows during lightweight migration; `init` defaults are ignored
-- **Schema versioning**: `NotetakerMigrationPlan` in `Models/Schemas/` — ModelContainer initialized with `migrationPlan: NotetakerMigrationPlan.self`; all 6 versions use lightweight migrations:
+- **Schema versioning**: `NotetakerMigrationPlan` in `Models/Schemas/` — ModelContainer initialized with `migrationPlan: NotetakerMigrationPlan.self`; all 7 versions use lightweight migrations:
   - **V1**: Initial schema (RecordingSession, TranscriptSegment, SummaryBlock)
   - **V2**: Adds `editedContent: String? = nil` to SummaryBlock; `displayContent` computed property returns editedContent ?? content
   - **V3**: Adds `ScheduledRecording` model for timed recording scheduling
   - **V4**: Adds `audioFilePaths: [String] = []` to RecordingSession for multi-clip pause/resume
   - **V5**: Adds `isPartial: Bool = false` to RecordingSession for force-quit detection
   - **V6**: Adds `calendarEventIdentifier: String? = nil` to ScheduledRecording, `scheduledRecordingID: UUID? = nil` to RecordingSession
+  - **V7**: Adds `isPinned: Bool = false` and `pinnedAt: Date? = nil` to RecordingSession for pin/favorite feature
 - **Design System tokens**: `DS` enum in `DesignSystem.swift` centralizes spacing (4pt grid), typography, colors, radii, layout constants; `ViewModifiers.swift` provides `.cardStyle()` and `.badgeStyle()`; `ControlBarMetrics` aliases DS values
 - **Session search**: `SessionListView` uses `.searchable()` filtering by title, segment text, summary content; debounced 300ms to prevent SwiftData fault storms; `DateFilter` enum for Today/This Week/This Month quick filters
+- **Pin/favorite sessions**: Pinned sessions appear in a separate "Pinned" section at the top of the session list, sorted by `pinnedAt` descending; not affected by date filter but filtered by search text; `RecordingSession.togglePin()` sets `isPinned` and `pinnedAt`; context menu Pin/Unpin on single and multi-select
 - **Command Palette**: `CommandPaletteView` (⌘K) — Raycast-style overlay with fuzzy search, category grouping, keyboard navigation (↑/↓/Enter/Escape); `CommandPaletteSearch` enum has testable `filter(commands:query:)` and `grouped(commands:)` static methods; `PaletteCommand` model + `CommandCategory` enum; commands built dynamically in `ContentView.buildPaletteCommands()` based on current ViewModel state
 - **Playback keyboard shortcuts**: `Notification.Name` extensions (`.togglePlayback`, `.seekForward`, `.seekBackward`, `.seekForwardLong`, `.seekBackwardLong`) in `notetakerApp.swift`; `CommandMenu("Playback")` provides Space (play/pause), ←/→ (±5s), Shift+←/→ (±15s); `SessionDetailView` listens via `.onReceive` and delegates to `AudioPlaybackService`
 - **Karaoke transcript sync**: `KaraokeSync.findActiveIndex(at:in:)` binary search for active segment; `TranscriptView` passes `activeSegmentID` through to `TranscriptSegmentRow.isActive` for highlight styling; `ScrollViewReader.scrollTo(id:, anchor: .center)` for auto-scroll; user scroll detection via `onScrollPhaseChange` pauses auto-scroll for 3s; timestamp tap seeks playback and starts playing
@@ -141,7 +143,7 @@ Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Mo
 - **`notetaker/`** — Main app target
   - `notetakerApp.swift` — Entry point, shared `ModelContainer`, `MenuBarExtra`, `Settings` scene
   - `ContentView.swift` — `NavigationSplitView` (sidebar session list + detail routing)
-  - `Models/` — SwiftData models (`RecordingSession`, `TranscriptSegment`, `SummaryBlock`, `ScheduledRecording`), config types (`LLMConfig`, `SummarizerConfig`, `LLMModelProfile`, `VADConfig`, `OverallSummaryMode`, `RepeatRule`), ephemeral types (`ChatMessage`), schema versioning (`Schemas/` V1–V6)
+  - `Models/` — SwiftData models (`RecordingSession`, `TranscriptSegment`, `SummaryBlock`, `ScheduledRecording`), config types (`LLMConfig`, `SummarizerConfig`, `LLMModelProfile`, `VADConfig`, `OverallSummaryMode`, `RepeatRule`), ephemeral types (`ChatMessage`), schema versioning (`Schemas/` V1–V7)
   - `Services/` — Protocol-based engines (`ASREngine`, `LLMEngine`) with multiple implementations (including `FoundationModelsEngine` for Apple Intelligence), `AudioCaptureService`, `AudioPlaybackService`, `AudioExporter`, `SummarizerService`, `BackgroundSummaryService`, `SummaryMarkdownFormatter`, `ChatService`, `PromptBuilder`, `KeychainService`, `CrashLogService`, `SchedulerService`, `CalendarService`
   - `ViewModels/` — `RecordingViewModel` (`@Observable`) — central state machine for recording lifecycle; `SchedulerViewModel` — scheduled recordings + calendar integration
   - `DesignSystem.swift` — `DS` enum (spacing, typography, colors, radius, layout tokens)
