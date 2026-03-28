@@ -33,5 +33,7 @@ struct ResizeHandle: View {
                     NSCursor.pop()
                 }
             }
+            .accessibilityLabel("Resize handle")
+            .help("Drag to resize panel height")
     }
 }

@@ -20,6 +20,7 @@ struct AboutTab: View {
                 Image(nsImage: NSApp.applicationIconImage)
                     .resizable()
                     .frame(width: 96, height: 96)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                     Text("Notetaker")
@@ -50,8 +51,10 @@ struct AboutTab: View {
             VStack(spacing: DS.Spacing.sm) {
                 Link("Report a Bug",
                      destination: URL(string: "https://github.com/StevenLi-phoenix/notetaker/issues/new")!)
+                    .help("Open GitHub to report issues")
                 Link("Privacy Policy",
                      destination: PrivacyDisclosureView.privacyPolicyURL)
+                    .help("View the full privacy policy")
             }
             .font(DS.Typography.body)
 

@@ -34,5 +34,7 @@ struct VerticalResizeHandle: View {
                     NSCursor.pop()
                 }
             }
+            .accessibilityLabel("Resize handle")
+            .help("Drag to resize panel width")
     }
 }
