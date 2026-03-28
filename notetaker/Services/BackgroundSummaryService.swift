@@ -159,6 +159,14 @@ final class BackgroundSummaryService {
                     context: context,
                     summarizerConfig: summarizerConfig
                 )
+
+                // Generate tags from overall summary
+                await Self.generateTags(
+                    sessionID: sessionID,
+                    summaryContent: content,
+                    context: context,
+                    summarizerConfig: summarizerConfig
+                )
             } catch is CancellationError {
                 Self.logger.info("Background summary cancelled for \(sessionID)")
             } catch {
@@ -175,6 +183,48 @@ final class BackgroundSummaryService {
         }
 
         activeTasks[sessionID] = task
+    }
+
+    /// Generate semantic tags for the session from its overall summary.
+    private static func generateTags(
+        sessionID: UUID,
+        summaryContent: String,
+        context: ModelContext,
+        summarizerConfig: SummarizerConfig
+    ) async {
+        guard !summaryContent.isEmpty else { return }
+
+        let predicate = #Predicate<RecordingSession> { $0.id == sessionID }
+        guard let session = try? context.fetch(FetchDescriptor(predicate: predicate)).first,
+              session.tags.isEmpty else {
+            return
+        }
+
+        let tagConfig = LLMProfileStore.resolveConfig(for: .title)
+        let engine = await LLMEngineFactory.createWithFallback(from: tagConfig)
+        let language = summarizerConfig.summaryLanguage != "auto" ? summarizerConfig.summaryLanguage : nil
+        let messages = PromptBuilder.buildTagPrompt(summary: summaryContent, language: language)
+
+        do {
+            let result = try await engine.generate(messages: messages, config: tagConfig)
+            let tags = TagParser.parse(from: result.content)
+            guard !Task.isCancelled, !tags.isEmpty else { return }
+
+            // Re-fetch session after async work
+            guard let currentSession = try? context.fetch(FetchDescriptor(predicate: predicate)).first else {
+                logger.error("Session \(sessionID) deleted during tag generation")
+                return
+            }
+
+            currentSession.tags = tags
+            try context.save()
+            logger.info("Auto-tagged session \(sessionID) with \(tags.count) tags: \(tags.joined(separator: ", "))")
+        } catch is CancellationError {
+            logger.info("Tag generation cancelled for \(sessionID)")
+        } catch {
+            logger.warning("Tag generation failed for \(sessionID): \(error.localizedDescription)")
+            // Non-fatal — session works fine without tags
+        }
     }
 
     /// Generate a descriptive title for the session using the title LLM config.
