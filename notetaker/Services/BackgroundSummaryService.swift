@@ -119,7 +119,7 @@ final class BackgroundSummaryService {
                         content = result.content
                         structuredResult = result.structured
                     } else {
-                        Self.logger.info("Mode: chunkSummaries — synthesizing \(sortedChunks.count) chunks for \(sessionID)")
+                        Self.logger.info("Mode: chunkSummaries — synthesizing \(sortedChunks.count) chunks for \(sessionID) (structured output not available for chunk synthesis)")
                         content = try await service.summarizeOverall(
                             chunkSummaries: sortedChunks,
                             config: summarizerConfig,
@@ -138,7 +138,7 @@ final class BackgroundSummaryService {
                         content = result.content
                         structuredResult = result.structured
                     } else {
-                        Self.logger.info("Mode: auto — synthesizing \(sortedChunks.count) chunks for \(sessionID)")
+                        Self.logger.info("Mode: auto — synthesizing \(sortedChunks.count) chunks for \(sessionID) (structured output not available for chunk synthesis)")
                         content = try await service.summarizeOverall(
                             chunkSummaries: sortedChunks,
                             config: summarizerConfig,

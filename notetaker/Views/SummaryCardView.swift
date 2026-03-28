@@ -178,7 +178,7 @@ struct SummaryCardView: View {
 
     @ViewBuilder
     private var contentView: some View {
-        if let structured = structuredSummary {
+        if !isUserEdited, let structured = structuredSummary {
             structuredContentView(structured)
         } else if let attributed = try? AttributedString(
             markdown: content,
@@ -218,7 +218,7 @@ struct SummaryCardView: View {
                         .font(DS.Typography.caption)
                         .foregroundStyle(.secondary)
                         .textCase(.uppercase)
-                    ForEach(structured.keyPoints, id: \.self) { point in
+                    ForEach(Array(structured.keyPoints.enumerated()), id: \.offset) { _, point in
                         HStack(alignment: .top, spacing: DS.Spacing.xs) {
                             Text("•")
                                 .foregroundStyle(.secondary)
@@ -230,35 +230,16 @@ struct SummaryCardView: View {
                 }
             }
 
-            // Action Items
-            if !structured.actionItems.isEmpty {
-                VStack(alignment: .leading, spacing: DS.Spacing.xxs) {
-                    Text("Action Items")
+            // Sentiment badge
+            if !structured.sentiment.isEmpty {
+                HStack(spacing: DS.Spacing.xs) {
+                    Circle()
+                        .fill(sentimentColor(structured.sentiment))
+                        .frame(width: 8, height: 8)
+                    Text(structured.sentiment.capitalized)
                         .font(DS.Typography.caption)
                         .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
-                    ForEach(structured.actionItems, id: \.self) { item in
-                        HStack(alignment: .top, spacing: DS.Spacing.xs) {
-                            Image(systemName: "circle")
-                                .font(.system(size: 8))
-                                .foregroundStyle(.secondary)
-                                .padding(.top, 4)
-                            Text(item)
-                                .textSelection(.enabled)
-                        }
-                        .font(DS.Typography.callout)
-                    }
                 }
-            }
-
-            // Sentiment badge
-            HStack(spacing: DS.Spacing.xs) {
-                Circle()
-                    .fill(sentimentColor(structured.sentiment))
-                    .frame(width: 8, height: 8)
-                Text(structured.sentiment.capitalized)
-                    .font(DS.Typography.caption)
-                    .foregroundStyle(.secondary)
             }
         }
     }

@@ -74,6 +74,13 @@ nonisolated final class FoundationModelsEngine: LLMEngine, @unchecked Sendable {
             session = LanguageModelSession(instructions: systemText)
         }
 
+        // FoundationModels only supports @Generable types at compile time.
+        // Currently only StructuredSummary is supported; other schemas will fail gracefully.
+        guard schema.name == "structured_summary" else {
+            Self.logger.warning("Foundation Models structured output only supports 'structured_summary' schema, got '\(schema.name)'")
+            throw LLMEngineError.notSupported
+        }
+
         Self.logger.info("Generating structured output with Foundation Models (prompt: \(userText.count) chars)")
 
         do {
