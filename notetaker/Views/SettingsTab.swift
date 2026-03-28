@@ -216,10 +216,21 @@ struct SummarizationSettingsTab: View {
 
 struct RecordingSettingsTab: View {
     @AppStorage("vadConfigJSON") private var vadConfigJSON: String = ""
+    @AppStorage("audioSource") private var audioSource: String = AudioSource.microphone.rawValue
     @State private var config: VADConfig = .default
 
     var body: some View {
         SettingsGrid {
+            SettingsRow("Audio Source") {
+                Picker("", selection: $audioSource) {
+                    ForEach(AudioSource.allCases, id: \.rawValue) { source in
+                        Text(source.displayName).tag(source.rawValue)
+                    }
+                }
+                .labelsHidden()
+                .help("Choose audio input: microphone only, system audio (Zoom/Meet/Teams), or both")
+            }
+
             SettingsRow("Voice Activity Detection") {
                 Toggle("", isOn: $config.vadEnabled)
                     .labelsHidden()
