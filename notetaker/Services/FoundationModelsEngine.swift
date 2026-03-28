@@ -52,6 +52,51 @@ nonisolated final class FoundationModelsEngine: LLMEngine, @unchecked Sendable {
         }
     }
 
+    var supportsStructuredOutput: Bool { true }
+
+    func generateStructured(messages: [LLMMessage], schema: JSONSchema, config: LLMConfig) async throws -> StructuredOutput {
+        guard Self.isModelAvailable else {
+            Self.logger.error("Foundation Models not available for structured generation")
+            throw LLMEngineError.notConfigured
+        }
+
+        let systemText = messages.filter { $0.role == .system }.map(\.content).joined(separator: "\n\n")
+        let userText = messages.filter { $0.role == .user }.map(\.content).joined(separator: "\n\n")
+
+        guard !userText.isEmpty else {
+            throw LLMEngineError.emptyResponse
+        }
+
+        let session: LanguageModelSession
+        if systemText.isEmpty {
+            session = LanguageModelSession()
+        } else {
+            session = LanguageModelSession(instructions: systemText)
+        }
+
+        // FoundationModels only supports @Generable types at compile time.
+        // Currently only StructuredSummary is supported; other schemas will fail gracefully.
+        guard schema.name == "structured_summary" else {
+            Self.logger.warning("Foundation Models structured output only supports 'structured_summary' schema, got '\(schema.name)'")
+            throw LLMEngineError.notSupported
+        }
+
+        Self.logger.info("Generating structured output with Foundation Models (prompt: \(userText.count) chars)")
+
+        do {
+            let response = try await session.respond(to: userText, generating: StructuredSummary.self)
+            let result = response.content
+            let jsonData = try JSONEncoder().encode(result)
+            Self.logger.info("Foundation Models structured generation complete")
+            return StructuredOutput(data: jsonData, usage: .zero)
+        } catch let error as LLMEngineError {
+            throw error
+        } catch {
+            Self.logger.error("Foundation Models structured generation failed: \(error.localizedDescription)")
+            throw LLMEngineError.networkError(error)
+        }
+    }
+
     func isAvailable(config: LLMConfig) async -> Bool {
         Self.isModelAvailable
     }

@@ -173,6 +173,12 @@ struct SummarizationSettingsTab: View {
                 }
             }
 
+            SettingsRow("Auto-Extract Action Items") {
+                Toggle("", isOn: $config.actionItemExtractionEnabled)
+                    .labelsHidden()
+                    .help("Automatically extract action items after recording ends.")
+            }
+
             SettingsRow("Include Previous Context") {
                 Toggle("", isOn: $config.includeContext)
                     .labelsHidden()

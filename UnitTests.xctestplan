@@ -18,6 +18,8 @@
         "name" : "notetakerTests"
       },
       "selectedTests" : [
+        "ActionItemMarkdownFormatterTests",
+        "ActionItemParserTests",
         "AudioConfigTests",
         "ChatServiceTests",
         "AudioExporterTests",
@@ -44,6 +46,8 @@
         "SummarizerConfigExtendedTests",
         "SummarizerServiceExtendedTests",
         "SummarizerServiceTests",
+        "StructuredSummaryTests",
+        "SummarizerStructuredTests",
         "SummaryBlockTests",
         "ToolCallingTypeTests",
         "ToolCallingErrorTests",

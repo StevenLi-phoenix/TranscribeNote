@@ -9,6 +9,7 @@ struct SummaryCardView: View {
     let isCompact: Bool
     let isOverall: Bool
     let isUserEdited: Bool
+    let structuredSummary: StructuredSummary?
     var onTimeTap: (() -> Void)?
     var onSave: ((String) -> Void)?
     var onRegenerate: ((String) -> Void)?
@@ -30,6 +31,7 @@ struct SummaryCardView: View {
         isCompact: Bool = false,
         isOverall: Bool = false,
         isUserEdited: Bool = false,
+        structuredSummary: StructuredSummary? = nil,
         onTimeTap: (() -> Void)? = nil,
         onSave: ((String) -> Void)? = nil,
         onRegenerate: ((String) -> Void)? = nil
@@ -41,6 +43,7 @@ struct SummaryCardView: View {
         self.isCompact = isCompact
         self.isOverall = isOverall
         self.isUserEdited = isUserEdited
+        self.structuredSummary = structuredSummary
         self.onTimeTap = onTimeTap
         self.onSave = onSave
         self.onRegenerate = onRegenerate
@@ -60,6 +63,7 @@ struct SummaryCardView: View {
         self.isCompact = isCompact
         self.isOverall = block.isOverall
         self.isUserEdited = block.userEdited
+        self.structuredSummary = block.structuredSummary
         self.onTimeTap = onTimeTap
         self.onSave = onSave
         self.onRegenerate = onRegenerate
@@ -152,7 +156,8 @@ struct SummaryCardView: View {
             content: content,
             coveringFrom: coveringFrom,
             coveringTo: coveringTo,
-            isOverall: isOverall
+            isOverall: isOverall,
+            structuredSummary: structuredSummary
         )
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(markdown, forType: .string)
@@ -173,7 +178,9 @@ struct SummaryCardView: View {
 
     @ViewBuilder
     private var contentView: some View {
-        if let attributed = try? AttributedString(
+        if !isUserEdited, let structured = structuredSummary {
+            structuredContentView(structured)
+        } else if let attributed = try? AttributedString(
             markdown: content,
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         ) {
@@ -184,6 +191,65 @@ struct SummaryCardView: View {
             Text(content)
                 .font(DS.Typography.callout)
                 .textSelection(.enabled)
+        }
+    }
+
+    @ViewBuilder
+    private func structuredContentView(_ structured: StructuredSummary) -> some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            // Summary text
+            if let attributed = try? AttributedString(
+                markdown: structured.summary,
+                options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+            ) {
+                Text(attributed)
+                    .font(DS.Typography.callout)
+                    .textSelection(.enabled)
+            } else {
+                Text(structured.summary)
+                    .font(DS.Typography.callout)
+                    .textSelection(.enabled)
+            }
+
+            // Key Points
+            if !structured.keyPoints.isEmpty {
+                VStack(alignment: .leading, spacing: DS.Spacing.xxs) {
+                    Text("Key Points")
+                        .font(DS.Typography.caption)
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                    ForEach(Array(structured.keyPoints.enumerated()), id: \.offset) { _, point in
+                        HStack(alignment: .top, spacing: DS.Spacing.xs) {
+                            Text("•")
+                                .foregroundStyle(.secondary)
+                            Text(point)
+                                .textSelection(.enabled)
+                        }
+                        .font(DS.Typography.callout)
+                    }
+                }
+            }
+
+            // Sentiment badge
+            if !structured.sentiment.isEmpty {
+                HStack(spacing: DS.Spacing.xs) {
+                    Circle()
+                        .fill(sentimentColor(structured.sentiment))
+                        .frame(width: 8, height: 8)
+                    Text(structured.sentiment.capitalized)
+                        .font(DS.Typography.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func sentimentColor(_ sentiment: String) -> Color {
+        switch sentiment.lowercased() {
+        case "positive": .green
+        case "negative": .red
+        case "mixed": .orange
+        default: .gray
         }
     }
 
