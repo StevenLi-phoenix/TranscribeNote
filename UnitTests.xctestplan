@@ -25,6 +25,7 @@
         "BufferFactoryTests",
         "FileAudioSourceTests",
         "FoundationModelsEngineTests",
+        "KnowledgeSearchTests",
         "LLMConfigCoverageTests",
         "LLMHTTPHelpersTests",
         "LLMModelProfileCoverageTests",
