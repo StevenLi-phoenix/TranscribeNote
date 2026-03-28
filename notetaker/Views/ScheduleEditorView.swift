@@ -142,6 +142,8 @@ private struct LabelPicker: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Show label suggestions")
+                    .help("Show existing group labels")
                 }
             }
             if showSuggestions && !existingLabels.isEmpty {

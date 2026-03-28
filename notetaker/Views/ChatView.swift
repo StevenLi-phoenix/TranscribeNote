@@ -71,6 +71,7 @@ struct ChatView: View {
                         .font(DS.Typography.caption)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Clear conversation")
                 .help("Clear conversation")
             }
         }
@@ -175,6 +176,7 @@ struct ChatView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(inputText.trimmingCharacters(in: .whitespaces).isEmpty)
+                .accessibilityLabel("Send message")
             }
         }
         .padding(.horizontal, DS.Spacing.md)
