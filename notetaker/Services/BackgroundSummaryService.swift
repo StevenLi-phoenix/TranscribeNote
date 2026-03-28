@@ -152,6 +152,10 @@ final class BackgroundSummaryService {
                 try context.save()
                 Self.logger.info("Background summary saved for session \(sessionID) (\(content.count) chars)")
 
+                // Update Spotlight index with new summary data
+                let spotlightData = SpotlightIndexer.sessionData(from: currentSession)
+                Task.detached { await SpotlightIndexer.shared.indexSession(spotlightData) }
+
                 // Generate title after summary
                 await Self.generateTitle(
                     sessionID: sessionID,
@@ -207,6 +211,10 @@ final class BackgroundSummaryService {
             currentSession.title = title
             try context.save()
             logger.info("Title generated for session \(sessionID) (\(title.count) chars)")
+
+            // Update Spotlight index with new title
+            let spotlightData = SpotlightIndexer.sessionData(from: currentSession)
+            Task.detached { await SpotlightIndexer.shared.indexSession(spotlightData) }
         } catch is CancellationError {
             logger.info("Title generation cancelled for \(sessionID)")
         } catch {

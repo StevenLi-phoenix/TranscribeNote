@@ -579,6 +579,10 @@ final class RecordingViewModel {
         do {
             try modelContext.save()
             Self.logger.info("Session saved with \(self.segments.count) segments\(includeSummaries ? ", \(self.summaries.count) summaries" : "")")
+
+            // Index into Spotlight for system-wide search
+            let spotlightData = SpotlightIndexer.sessionData(from: session)
+            Task.detached { await SpotlightIndexer.shared.indexSession(spotlightData) }
         } catch {
             errorMessage = "Failed to save session: \(error.localizedDescription)"
         }

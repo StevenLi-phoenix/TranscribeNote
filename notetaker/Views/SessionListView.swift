@@ -166,6 +166,9 @@ struct SessionListView: View {
         do {
             try modelContext.save()
             Self.logger.info("Deleted \(count) session(s)")
+
+            // Remove from Spotlight index
+            Task.detached { await SpotlightIndexer.shared.deindexSessions(ids: ids) }
         } catch {
             Self.logger.error("Failed to delete sessions: \(error.localizedDescription)")
         }

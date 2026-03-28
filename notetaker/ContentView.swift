@@ -3,6 +3,7 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @Bindable var viewModel: RecordingViewModel
     var schedulerViewModel: SchedulerViewModel
     @State private var selectedSessionID: UUID?
@@ -84,6 +85,12 @@ struct ContentView: View {
         .onChange(of: viewModel.state) { _, newState in
             if newState == .completed {
                 handleCompletionIfNeeded()
+            }
+        }
+        .onChange(of: appDelegate.spotlightSessionID) { _, newID in
+            if let newID {
+                selectedSessionID = newID
+                appDelegate.spotlightSessionID = nil
             }
         }
     }
