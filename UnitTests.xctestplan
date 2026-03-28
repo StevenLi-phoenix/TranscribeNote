@@ -32,6 +32,7 @@
         "LLMProviderCoverageTests",
         "LLMProviderTests",
         "LLMRoleCoverageTests",
+        "MarkdownExporterTests",
         "NoopEngineTests",
         "PromptBuilderExtendedTests",
         "PromptBuilderTests",
