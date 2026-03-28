@@ -101,11 +101,11 @@ struct SessionListView: View {
                     searchDebounceTask = Task {
                         try? await Task.sleep(for: .milliseconds(300))
                         guard !Task.isCancelled else { return }
-                        updateGroupedSessions()
+                        withAnimation { updateGroupedSessions() }
                     }
                 }
             }
-            .onChange(of: dateFilter) { updateGroupedSessions() }
+            .onChange(of: dateFilter) { withAnimation { updateGroupedSessions() } }
             .onChange(of: selectedSessionIDs) { _, newValue in
                 if newValue.count == 1 {
                     selectedSessionID = newValue.first
@@ -146,6 +146,14 @@ struct SessionListView: View {
                         SessionRowView(session: session)
                             .tag(session.id)
                             .contextMenu {
+                                Button {
+                                    let sorted = session.segments.sorted { $0.startTime < $1.startTime }
+                                    TranscriptExporter.copyToClipboard(segments: sorted, title: session.title)
+                                } label: {
+                                    Label("Copy Transcript", systemImage: "doc.on.doc")
+                                }
+                                .disabled(session.segments.isEmpty)
+                                Divider()
                                 deleteButton(for: [session.id])
                             }
                     }
