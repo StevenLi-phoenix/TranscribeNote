@@ -200,16 +200,18 @@ private struct SessionRowView: View {
                     .foregroundStyle(.secondary)
 
                 if session.totalDuration > 0 {
-                    Text("·")
+                    Text("\u{00B7}")
                         .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                     Text(session.totalDuration.compactDuration)
                         .font(DS.Typography.caption)
                         .foregroundStyle(.secondary)
                 }
 
                 if !session.segments.isEmpty {
-                    Text("·")
+                    Text("\u{00B7}")
                         .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                     Text("\(session.segments.count) segments")
                         .font(DS.Typography.caption)
                         .foregroundStyle(.secondary)
@@ -280,5 +282,7 @@ private struct DateFilterChip: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(label) filter")
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }

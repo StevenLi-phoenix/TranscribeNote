@@ -15,5 +15,6 @@ struct TranscriptSegmentRow: View {
         }
         .padding(.vertical, DS.Spacing.xxs)
         .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(AccessibilityHelpers.timestampDescription(segment.startTime)), \(segment.text)")
     }
 }

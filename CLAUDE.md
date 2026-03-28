@@ -131,6 +131,14 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - **Recurrence mapping**: `CalendarService.mapRecurrenceRule()` maps `EKRecurrenceRule` to `RepeatRule`; only `interval == 1`; weekday detection via `Set<EKWeekday>` equality
 - **SchemaV6**: Adds `calendarEventIdentifier: String? = nil` to `ScheduledRecording`, `scheduledRecordingID: UUID? = nil` to `RecordingSession`
 
+### Accessibility (VoiceOver)
+- `AccessibilityHelpers` (`nonisolated enum` in `Services/`) — pure functions for audio level description, duration formatting, recording state, session description; used by `AudioLevelBar`, `MenuBarView`, `TranscriptSegmentRow`, `SessionListView`
+- `.accessibilityElement(children: .combine)` on composite rows (`TranscriptSegmentRow`, `SessionRowView`); `.accessibilityElement(children: .contain)` on `SummaryCardView`
+- `.accessibilityHidden(true)` on decorative elements (pulsing dot, pause icon, dot separators)
+- `.accessibilityAddTraits(.updatesFrequently)` on real-time data (audio level bar, timer display)
+- `.accessibilityHint` on MenuBarView recording control buttons (start/stop/pause/resume)
+- `.accessibilityLabel` + `.accessibilityAddTraits(.isSelected)` on `DateFilterChip`
+
 ## Architecture
 
 Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Model` classes for persistence.
@@ -139,11 +147,11 @@ Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Mo
   - `notetakerApp.swift` — Entry point, shared `ModelContainer`, `MenuBarExtra`, `Settings` scene
   - `ContentView.swift` — `NavigationSplitView` (sidebar session list + detail routing)
   - `Models/` — SwiftData models (`RecordingSession`, `TranscriptSegment`, `SummaryBlock`, `ScheduledRecording`), config types (`LLMConfig`, `SummarizerConfig`, `LLMModelProfile`, `VADConfig`, `OverallSummaryMode`, `RepeatRule`), ephemeral types (`ChatMessage`), schema versioning (`Schemas/` V1–V6)
-  - `Services/` — Protocol-based engines (`ASREngine`, `LLMEngine`) with multiple implementations (including `FoundationModelsEngine` for Apple Intelligence), `AudioCaptureService`, `AudioPlaybackService`, `AudioExporter`, `SummarizerService`, `BackgroundSummaryService`, `SummaryMarkdownFormatter`, `ChatService`, `PromptBuilder`, `KeychainService`, `CrashLogService`, `SchedulerService`, `CalendarService`
+  - `Services/` — Protocol-based engines (`ASREngine`, `LLMEngine`) with multiple implementations (including `FoundationModelsEngine` for Apple Intelligence), `AudioCaptureService`, `AudioPlaybackService`, `AudioExporter`, `SummarizerService`, `BackgroundSummaryService`, `SummaryMarkdownFormatter`, `ChatService`, `PromptBuilder`, `KeychainService`, `CrashLogService`, `SchedulerService`, `CalendarService`, `AccessibilityHelpers`
   - `ViewModels/` — `RecordingViewModel` (`@Observable`) — central state machine for recording lifecycle; `SchedulerViewModel` — scheduled recordings + calendar integration
   - `DesignSystem.swift` — `DS` enum (spacing, typography, colors, radius, layout tokens)
   - `Views/` — SwiftUI views including `SettingsView` (4-tab layout: `SettingsTab`, `ModelsSettingsTab`, `AboutTab`), `ScheduleView`, `ScheduleEditorView`, `PrivacyDisclosureView`, `SummaryCardView`, `TranscriptSegmentRow`, `AudioLevelBar`, `ResizeHandle`, `VerticalResizeHandle`, `ChatView`, `SettingsComponents` (reusable settings UI), `ViewModifiers`
-- **`notetakerTests/`** — Swift Testing (`@Test`, `#expect`); ~64 test files; `Mocks/` has `MockASREngine`, `MockLLMEngine`, `MockSchedulerService`, per-suite `MockURLProtocol` subclasses; `Helpers/` has `BufferFactory` and `FileAudioSource`
+- **`notetakerTests/`** — Swift Testing (`@Test`, `#expect`); ~65 test files; `Mocks/` has `MockASREngine`, `MockLLMEngine`, `MockSchedulerService`, per-suite `MockURLProtocol` subclasses; `Helpers/` has `BufferFactory` and `FileAudioSource`
 - **`notetakerUITests/`** — XCTest UI tests (light/dark mode via `runsForEachTargetApplicationUIConfiguration`)
 - **`scripts/`** — `increment_build_number.sh`
 - **`docs/`** — `PRIVACY_POLICY.md`, `APP_STORE_PRIVACY_CHECKLIST.md`, specs (SPEC-001 through SPEC-005)

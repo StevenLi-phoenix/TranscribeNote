@@ -167,16 +167,21 @@ struct MenuBarView: View {
                     .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulsing)
                     .onAppear { pulsing = true }
                     .onDisappear { pulsing = false }
+                    .accessibilityHidden(true)
                 Text("Recording")
                     .fontWeight(.medium)
                 Spacer()
                 Text(viewModel.clock.formatted)
                     .font(.system(.body, design: .monospaced))
                     .foregroundStyle(.secondary)
+                    .accessibilityLabel(AccessibilityHelpers.durationDescription(viewModel.clock.elapsedTime))
+                    .accessibilityAddTraits(.updatesFrequently)
             }
             .padding(.horizontal, DS.Spacing.md)
             .padding(.top, DS.Spacing.xs)
             .frame(minWidth: 280)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(AccessibilityHelpers.recordingStateDescription(isRecording: true, isPaused: false, elapsed: viewModel.clock.elapsedTime))
 
             AudioLevelBar(level: viewModel.audioMeter.level)
                 .padding(.horizontal, DS.Spacing.md)
@@ -202,26 +207,32 @@ struct MenuBarView: View {
             } label: {
                 Label("Pause Recording", systemImage: "pause.fill")
             }
+            .accessibilityHint("Pauses the current recording")
 
             Button(role: .destructive) {
                 viewModel.stopRecording(modelContext: modelContainer.mainContext)
             } label: {
                 Label("Stop Recording", systemImage: "stop.fill")
             }
+            .accessibilityHint("Stops and saves the current recording")
         } else if viewModel.state == .paused {
             HStack(spacing: DS.Spacing.xs) {
                 Image(systemName: "pause.circle.fill")
                     .foregroundStyle(.orange)
+                    .accessibilityHidden(true)
                 Text("Paused")
                     .fontWeight(.medium)
                 Spacer()
                 Text(viewModel.clock.formatted)
                     .font(.system(.body, design: .monospaced))
                     .foregroundStyle(.secondary)
+                    .accessibilityLabel(AccessibilityHelpers.durationDescription(viewModel.clock.elapsedTime))
             }
             .padding(.horizontal, DS.Spacing.md)
             .padding(.vertical, DS.Spacing.xs)
             .frame(minWidth: 280)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(AccessibilityHelpers.recordingStateDescription(isRecording: false, isPaused: true, elapsed: viewModel.clock.elapsedTime))
 
             Divider()
 
@@ -230,12 +241,14 @@ struct MenuBarView: View {
             } label: {
                 Label("Resume Recording", systemImage: "play.fill")
             }
+            .accessibilityHint("Resumes the paused recording")
 
             Button(role: .destructive) {
                 viewModel.stopRecording(modelContext: modelContainer.mainContext)
             } label: {
                 Label("Stop Recording", systemImage: "stop.fill")
             }
+            .accessibilityHint("Stops and saves the current recording")
         } else {
             Label("Not Recording", systemImage: "mic.slash")
                 .foregroundStyle(.secondary)
@@ -264,6 +277,7 @@ struct MenuBarView: View {
             } label: {
                 Label("Start Recording", systemImage: "record.circle")
             }
+            .accessibilityHint("Starts a new audio recording session")
         }
 
         Divider()
