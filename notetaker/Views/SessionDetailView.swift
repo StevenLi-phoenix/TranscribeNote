@@ -170,16 +170,30 @@ struct SessionDetailView: View {
                 }
 
                 if let summaryGenerationError {
-                    Text(summaryGenerationError)
-                        .foregroundStyle(.secondary)
-                        .font(DS.Typography.caption)
-                        .padding(.horizontal)
-                        .transition(.opacity)
-                        .task(id: summaryGenerationError) {
-                            try? await Task.sleep(for: .seconds(5))
-                            guard !Task.isCancelled else { return }
+                    HStack(spacing: DS.Spacing.sm) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(summaryGenerationError)
+                            .font(DS.Typography.caption)
+                        Spacer()
+                        Button {
                             self.summaryGenerationError = nil
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(DS.Typography.caption2)
                         }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, DS.Spacing.xs)
+                    .background(DS.Colors.subtleError.opacity(0.1))
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .task(id: summaryGenerationError) {
+                        try? await Task.sleep(for: .seconds(8))
+                        guard !Task.isCancelled else { return }
+                        withAnimation { self.summaryGenerationError = nil }
+                    }
                 }
 
                 Divider()

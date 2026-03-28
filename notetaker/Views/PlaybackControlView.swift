@@ -8,6 +8,15 @@ struct PlaybackControlView: View {
     var body: some View {
         HStack(spacing: 12) {
             Button {
+                service.seek(to: max(0, service.currentTime - 15))
+            } label: {
+                Image(systemName: "gobackward.15")
+                    .font(.title3)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Skip back 15 seconds")
+
+            Button {
                 service.togglePlayPause()
             } label: {
                 Image(systemName: service.isPlaying ? "pause.circle.fill" : "play.circle.fill")
@@ -15,6 +24,15 @@ struct PlaybackControlView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(service.isPlaying ? "Pause" : "Play")
+
+            Button {
+                service.seek(to: min(service.duration, service.currentTime + 15))
+            } label: {
+                Image(systemName: "goforward.15")
+                    .font(.title3)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Skip forward 15 seconds")
 
             Text((isSeeking ? seekValue : service.currentTime).mmss)
                 .font(ControlBarMetrics.timeFont)

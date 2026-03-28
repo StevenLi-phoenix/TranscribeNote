@@ -15,7 +15,7 @@ struct AudioLevelBar: View {
             }
         }
         .frame(height: DS.Spacing.xs)
-        .animation(.linear(duration: 0.05), value: level)
+        .animation(.spring(duration: 0.15, bounce: 0.0), value: level)
         .accessibilityLabel("Audio level")
         .accessibilityValue("\(Int(level * 100)) percent")
     }

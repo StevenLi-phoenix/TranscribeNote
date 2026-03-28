@@ -215,6 +215,15 @@ private struct SessionRowView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                if !session.summaries.isEmpty {
+                    Text("·")
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "text.badge.checkmark")
+                        .font(DS.Typography.caption)
+                        .foregroundStyle(.secondary)
+                        .help("\(session.summaries.count) summary/summaries")
+                }
+
             }
 
         }
