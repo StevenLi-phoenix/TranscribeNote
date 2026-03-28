@@ -52,6 +52,11 @@ struct ChatView: View {
         HStack {
             Text("Chat")
                 .font(DS.Typography.sectionHeader)
+            if !messages.isEmpty {
+                Text("(\(messages.count))")
+                    .font(DS.Typography.caption)
+                    .foregroundStyle(.tertiary)
+            }
             Spacer()
             if !messages.isEmpty {
                 Button {
