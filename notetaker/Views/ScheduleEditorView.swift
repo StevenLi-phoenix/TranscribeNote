@@ -145,7 +145,7 @@ private struct LabelPicker: View {
                 }
             }
             if showSuggestions && !existingLabels.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: DS.Spacing.xxs) {
                     ForEach(existingLabels.filter { label.isEmpty || $0.localizedCaseInsensitiveContains(label) }, id: \.self) { suggestion in
                         Button {
                             label = suggestion

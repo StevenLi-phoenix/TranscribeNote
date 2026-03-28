@@ -120,7 +120,7 @@ private struct ScheduledRecordingRow: View {
 
     var body: some View {
         HStack(spacing: DS.Spacing.sm) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Spacing.xxs) {
                 Text(recording.title.isEmpty ? "Untitled" : recording.title)
                     .fontWeight(.medium)
                 HStack(spacing: DS.Spacing.xs) {
@@ -238,7 +238,7 @@ private struct CalendarImportView: View {
                     )
                 } else {
                     List(schedulerViewModel.calendarEvents, selection: $selectedIDs) { item in
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: DS.Spacing.xxs) {
                             Text(item.title)
                                 .fontWeight(.medium)
                             HStack(spacing: DS.Spacing.xs) {
