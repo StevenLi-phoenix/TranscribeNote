@@ -181,6 +181,12 @@ struct LLMConfigSection: View {
 
         if config.provider == .foundationModels {
             SettingsInfoLabel("Uses Apple's on-device model. No API key or network needed.", icon: "apple.intelligence")
+
+            Toggle("Context Tools", isOn: Binding(
+                get: { UserDefaults.standard.bool(forKey: "fmToolCallingEnabled") },
+                set: { UserDefaults.standard.set($0, forKey: "fmToolCallingEnabled") }
+            ))
+            .help("Allow on-device model to search related sessions and look up calendar events for richer summaries.")
         }
 
         if config.provider != .foundationModels {
