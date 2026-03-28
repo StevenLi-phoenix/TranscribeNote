@@ -39,6 +39,10 @@ struct ChatView: View {
             }
         }
         .onAppear { initServiceIfNeeded() }
+        .onDisappear {
+            chatTask?.cancel()
+            chatTask = nil
+        }
         .onChange(of: sessionID) {
             chatTask?.cancel()
             chatTask = nil
