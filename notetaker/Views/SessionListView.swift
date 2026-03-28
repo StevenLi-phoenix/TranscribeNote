@@ -9,6 +9,35 @@ enum DateFilter: String, CaseIterable {
     case thisMonth = "This Month"
 }
 
+/// Testable, nonisolated helper that counts sessions matching a date filter.
+nonisolated enum DateFilterCounter {
+
+    struct SessionDate {
+        let startedAt: Date
+    }
+
+    /// Count sessions matching a given date filter.
+    static func count(
+        for filter: DateFilter,
+        in sessions: [SessionDate],
+        now: Date = Date()
+    ) -> Int {
+        switch filter {
+        case .all:
+            return sessions.count
+        case .today:
+            let calendar = Calendar.current
+            return sessions.filter { calendar.isDate($0.startedAt, inSameDayAs: now) }.count
+        case .thisWeek:
+            let calendar = Calendar.current
+            return sessions.filter { calendar.isDate($0.startedAt, equalTo: now, toGranularity: .weekOfYear) }.count
+        case .thisMonth:
+            let calendar = Calendar.current
+            return sessions.filter { calendar.isDate($0.startedAt, equalTo: now, toGranularity: .month) }.count
+        }
+    }
+}
+
 struct SessionListView: View {
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "notetaker", category: "SessionListView")
 
@@ -134,7 +163,7 @@ struct SessionListView: View {
                 }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
-                DateFilterBar(selection: $dateFilter)
+                DateFilterBar(selection: $dateFilter, sessions: sessions)
             }
     }
 
@@ -274,13 +303,16 @@ private struct SessionRowView: View {
 /// Compact inline filter bar — understated pill chips that sit flush below the search field.
 private struct DateFilterBar: View {
     @Binding var selection: DateFilter
+    let sessions: [RecordingSession]
 
     var body: some View {
         HStack(spacing: DS.Spacing.xs) {
             ForEach(DateFilter.allCases, id: \.self) { filter in
+                let count = filter == .all ? nil : countFor(filter)
                 DateFilterChip(
                     label: filter.rawValue,
-                    isSelected: selection == filter
+                    isSelected: selection == filter,
+                    count: count
                 ) {
                     withAnimation(.easeInOut(duration: 0.15)) {
                         selection = filter
@@ -292,27 +324,42 @@ private struct DateFilterBar: View {
         .padding(.horizontal, DS.Spacing.sm)
         .padding(.vertical, DS.Spacing.xs)
     }
+
+    private func countFor(_ filter: DateFilter) -> Int {
+        DateFilterCounter.count(
+            for: filter,
+            in: sessions.map { .init(startedAt: $0.startedAt) }
+        )
+    }
 }
 
 private struct DateFilterChip: View {
     let label: String
     let isSelected: Bool
+    var count: Int? = nil
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Text(label)
-                .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
-                .foregroundStyle(isSelected ? .primary : .secondary)
-                .padding(.horizontal, DS.Spacing.sm)
-                .padding(.vertical, 3)
-                .background {
-                    if isSelected {
-                        Capsule()
-                            .fill(.quaternary)
-                    }
+            HStack(spacing: DS.Spacing.xxs) {
+                Text(label)
+                if let count, count > 0 {
+                    Text("(\(count))")
+                        .font(DS.Typography.caption2)
+                        .foregroundStyle(.secondary)
                 }
-                .contentShape(Capsule())
+            }
+            .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+            .foregroundStyle(isSelected ? .primary : .secondary)
+            .padding(.horizontal, DS.Spacing.sm)
+            .padding(.vertical, 3)
+            .background {
+                if isSelected {
+                    Capsule()
+                        .fill(.quaternary)
+                }
+            }
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])

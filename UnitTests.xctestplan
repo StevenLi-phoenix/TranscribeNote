@@ -21,6 +21,7 @@
         "AudioConfigTests",
         "ChatServiceTests",
         "CommandPaletteTests",
+        "DateFilterBadgeTests",
         "AudioExporterTests",
         "AudioLevelMeterTests",
         "BufferFactoryTests",
