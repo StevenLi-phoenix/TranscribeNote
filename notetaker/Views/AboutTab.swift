@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct AboutTab: View {
+    @State private var showCopiedVersion = false
+
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
     }
@@ -23,9 +25,21 @@ struct AboutTab: View {
                     Text("Notetaker")
                         .font(DS.Typography.title)
 
-                    Text("Version \(appVersion) (\(buildNumber))")
-                        .font(DS.Typography.caption)
-                        .foregroundStyle(.secondary)
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString("Notetaker \(appVersion) (\(buildNumber))", forType: .string)
+                        showCopiedVersion = true
+                        Task {
+                            try? await Task.sleep(for: .seconds(1.5))
+                            showCopiedVersion = false
+                        }
+                    } label: {
+                        Text(showCopiedVersion ? "Copied!" : "Version \(appVersion) (\(buildNumber))")
+                            .font(DS.Typography.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Click to copy version info")
                 }
             }
 

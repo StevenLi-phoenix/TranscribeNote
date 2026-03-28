@@ -15,7 +15,7 @@ struct PrivacyDisclosureView: View {
                 .font(.title2)
                 .bold()
 
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: DS.Spacing.md) {
                 disclosureSection(
                     title: "When you configure an external LLM provider, Notetaker will send:",
                     items: [
@@ -64,7 +64,7 @@ struct PrivacyDisclosureView: View {
         VStack(alignment: .leading, spacing: DS.Spacing.xs) {
             Text(title)
                 .font(.headline)
-                .padding(.top, 4)
+                .padding(.top, DS.Spacing.xs)
 
             ForEach(items, id: \.self) { item in
                 Label(item, systemImage: "circle.fill")
@@ -78,7 +78,7 @@ struct PrivacyDisclosureView: View {
 /// Compact bullet-point label style using a small circle as the icon.
 private struct BulletLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: DS.Spacing.sm) {
             configuration.icon
                 .font(.system(size: 4))
                 .foregroundStyle(.secondary)

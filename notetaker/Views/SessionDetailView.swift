@@ -24,6 +24,7 @@ struct SessionDetailView: View {
     @AppStorage("overallSummaryHeight") private var overallHeight: Double = 300
     @AppStorage("chunkSummariesHidden") private var chunkSummariesHidden = false
     @State private var showChatPanel = false
+    @State private var showCopiedTranscript = false
     @AppStorage("chatPanelWidth") private var chatPanelWidth: Double = 320
 
     var body: some View {
@@ -37,15 +38,19 @@ struct SessionDetailView: View {
                 VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                     TextField("Session Title", text: Binding(
                         get: { session.title },
-                        set: { newTitle in
-                            let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-                            guard !trimmed.isEmpty else { return }
-                            session.title = trimmed
-                            try? modelContext.save()
-                        }
+                        set: { session.title = $0 }
                     ))
                     .font(DS.Typography.title)
                     .textFieldStyle(.plain)
+                    .onSubmit {
+                        let trimmed = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if trimmed.isEmpty {
+                            fetchSession()
+                        } else {
+                            session.title = trimmed
+                            try? modelContext.save()
+                        }
+                    }
 
                     HStack {
                         Text(session.startedAt.formatted(date: .abbreviated, time: .shortened))
@@ -78,8 +83,17 @@ struct SessionDetailView: View {
                                 segments: sortedSegments,
                                 title: session.title
                             )
+                            showCopiedTranscript = true
+                            Task {
+                                try? await Task.sleep(for: .seconds(1.5))
+                                showCopiedTranscript = false
+                            }
                         } label: {
-                            Label("Copy Transcript", systemImage: "doc.on.doc")
+                            Label(
+                                showCopiedTranscript ? "Copied!" : "Copy Transcript",
+                                systemImage: showCopiedTranscript ? "checkmark" : "doc.on.doc"
+                            )
+                            .contentTransition(.symbolEffect(.replace))
                         }
                         .disabled(sortedSegments.isEmpty)
 
@@ -113,6 +127,24 @@ struct SessionDetailView: View {
                                     generateChunkedSummary()
                                 } label: {
                                     Label("Chunked Summary", systemImage: "text.badge.star")
+                                }
+                                if !session.summaries.isEmpty {
+                                    Divider()
+                                    Button {
+                                        let formatted = session.summaries
+                                            .sorted { $0.coveringFrom < $1.coveringFrom }
+                                            .map { SummaryMarkdownFormatter.format(
+                                                content: $0.displayContent,
+                                                coveringFrom: $0.coveringFrom,
+                                                coveringTo: $0.coveringTo,
+                                                isOverall: $0.isOverall
+                                            )}
+                                            .joined(separator: "\n\n")
+                                        NSPasteboard.general.clearContents()
+                                        NSPasteboard.general.setString(formatted, forType: .string)
+                                    } label: {
+                                        Label("Copy All Summaries", systemImage: "doc.on.doc")
+                                    }
                                 }
                             } label: {
                                 Label("Generate Summary", systemImage: "text.badge.star")
