@@ -243,6 +243,7 @@ struct SummarizationSettingsTab: View {
 
 struct RecordingSettingsTab: View {
     @AppStorage("vadConfigJSON") private var vadConfigJSON: String = ""
+    @AppStorage("skipTrashOnDelete") private var skipTrash = false
     @State private var config: VADConfig = .default
 
     var body: some View {
@@ -285,6 +286,12 @@ struct RecordingSettingsTab: View {
                     }
                     .disabled(!config.vadEnabled)
                 }
+            }
+
+            SettingsRow("Skip Trash on Delete") {
+                Toggle("", isOn: $skipTrash)
+                    .labelsHidden()
+                    .help("When enabled, deleted sessions are permanently removed instead of moving to Trash.")
             }
         }
         .animation(.easeInOut(duration: 0.2), value: config.silenceTimeoutSeconds != nil)

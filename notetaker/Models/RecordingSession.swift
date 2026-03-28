@@ -18,6 +18,8 @@ final class RecordingSession {
     var isPinned: Bool = false
     /// When the session was pinned (for sort ordering).
     var pinnedAt: Date? = nil
+    /// When the session was moved to trash (nil = not deleted).
+    var deletedAt: Date? = nil
 
     @Relationship(deleteRule: .cascade)
     var segments: [TranscriptSegment]
@@ -61,7 +63,8 @@ final class RecordingSession {
         isPartial: Bool = false,
         scheduledRecordingID: UUID? = nil,
         isPinned: Bool = false,
-        pinnedAt: Date? = nil
+        pinnedAt: Date? = nil,
+        deletedAt: Date? = nil
     ) {
         self.id = id
         self.startedAt = startedAt
@@ -76,6 +79,26 @@ final class RecordingSession {
         self.scheduledRecordingID = scheduledRecordingID
         self.isPinned = isPinned
         self.pinnedAt = pinnedAt
+        self.deletedAt = deletedAt
+    }
+
+    // MARK: - Trash
+
+    var isDeleted: Bool { deletedAt != nil }
+
+    func moveToTrash() {
+        deletedAt = Date()
+    }
+
+    func restore() {
+        deletedAt = nil
+    }
+
+    /// Days remaining before automatic permanent deletion (30-day retention).
+    var daysUntilPermanentDeletion: Int? {
+        guard let deletedAt else { return nil }
+        let days = Calendar.current.dateComponents([.day], from: deletedAt, to: Date()).day ?? 0
+        return max(0, 30 - days)
     }
 
     func togglePin() {

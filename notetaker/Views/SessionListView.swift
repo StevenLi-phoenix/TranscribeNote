@@ -68,8 +68,13 @@ struct SessionListView: View {
         }
     }
 
+    /// All non-deleted sessions (excludes trash).
+    private var activeSessions: [RecordingSession] {
+        sessions.filter { $0.deletedAt == nil }
+    }
+
     private var filteredSessions: [RecordingSession] {
-        var result = sessions.filter { !$0.isPinned }
+        var result = activeSessions.filter { !$0.isPinned }
 
         // Date filter (only for unpinned sessions)
         if dateFilter != .all {
@@ -94,8 +99,8 @@ struct SessionListView: View {
     }
 
     private func updateGroupedSessions() {
-        // Pinned sessions: not affected by date filter, but affected by search
-        pinnedSessions = searchFiltered(sessions.filter { $0.isPinned })
+        // Pinned sessions: not affected by date filter, but affected by search; exclude deleted
+        pinnedSessions = searchFiltered(activeSessions.filter { $0.isPinned })
             .sorted { ($0.pinnedAt ?? .distantPast) > ($1.pinnedAt ?? .distantPast) }
 
         let calendar = Calendar.current
@@ -125,7 +130,11 @@ struct SessionListView: View {
                 }
                 Button("Cancel", role: .cancel) { }
             } message: {
-                Text("This will permanently delete the recording\(sessionsToDelete.count == 1 ? "" : "s") and associated audio files.")
+                if UserDefaults.standard.bool(forKey: "skipTrashOnDelete") {
+                    Text("This will permanently delete the recording\(sessionsToDelete.count == 1 ? "" : "s") and associated audio files.")
+                } else {
+                    Text("The recording\(sessionsToDelete.count == 1 ? "" : "s") will be moved to Trash and permanently deleted after 30 days.")
+                }
             }
             .onAppear { updateGroupedSessions() }
             .onChange(of: sessions) { updateGroupedSessions() }
@@ -159,7 +168,7 @@ struct SessionListView: View {
                 }
             }
             .overlay {
-                if sessions.isEmpty {
+                if activeSessions.isEmpty {
                     ContentUnavailableView(
                         "No Sessions",
                         systemImage: "tray",
@@ -170,7 +179,7 @@ struct SessionListView: View {
                 }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
-                DateFilterBar(selection: $dateFilter, sessions: sessions)
+                DateFilterBar(selection: $dateFilter, sessions: activeSessions)
             }
     }
 
@@ -256,21 +265,19 @@ struct SessionListView: View {
 
     private func deleteSessions(ids: Set<UUID>) {
         let count = ids.count
+        let skipTrash = UserDefaults.standard.bool(forKey: "skipTrashOnDelete")
         for id in ids {
             if let session = sessions.first(where: { $0.id == id }) {
-                for audioURL in session.audioFileURLs {
-                    do {
-                        try FileManager.default.removeItem(at: audioURL)
-                    } catch {
-                        Self.logger.warning("Failed to delete audio file \(audioURL.lastPathComponent): \(error.localizedDescription)")
-                    }
+                if skipTrash {
+                    TrashCleanupService.permanentlyDelete(session: session, context: modelContext)
+                } else {
+                    session.moveToTrash()
                 }
-                modelContext.delete(session)
             }
         }
         do {
             try modelContext.save()
-            Self.logger.info("Deleted \(count) session(s)")
+            Self.logger.info("\(skipTrash ? "Permanently deleted" : "Moved to trash") \(count) session(s)")
         } catch {
             Self.logger.error("Failed to delete sessions: \(error.localizedDescription)")
         }
