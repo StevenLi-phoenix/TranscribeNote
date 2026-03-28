@@ -20,11 +20,19 @@ struct SessionDetailView: View {
     @State private var scrollToTime: TimeInterval?
     @State private var refreshTimer: Timer?
     @State private var isExportingAudio = false
+    @State private var showExportedFeedback = false
+    @State private var markdownExportFeedback: String?
     @AppStorage("overallSummaryCollapsed") private var overallCollapsed = false
     @AppStorage("overallSummaryHeight") private var overallHeight: Double = 300
     @AppStorage("chunkSummariesHidden") private var chunkSummariesHidden = false
     @State private var showChatPanel = false
+    @State private var showCopiedTranscript = false
     @AppStorage("chatPanelWidth") private var chatPanelWidth: Double = 320
+
+    // Karaoke transcript sync state
+    @State private var activeSegmentID: UUID?
+    @State private var isUserScrolling = false
+    @State private var scrollReenableTask: Task<Void, Never>?
 
     var body: some View {
         if isLoading {
@@ -35,8 +43,21 @@ struct SessionDetailView: View {
             VStack(spacing: 0) {
                 // Header
                 VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-                    Text(session.title)
-                        .font(DS.Typography.title)
+                    TextField("Session Title", text: Binding(
+                        get: { session.title },
+                        set: { session.title = $0 }
+                    ))
+                    .font(DS.Typography.title)
+                    .textFieldStyle(.plain)
+                    .onSubmit {
+                        let trimmed = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if trimmed.isEmpty {
+                            fetchSession()
+                        } else {
+                            session.title = trimmed
+                            try? modelContext.save()
+                        }
+                    }
 
                     HStack {
                         Text(session.startedAt.formatted(date: .abbreviated, time: .shortened))
@@ -47,6 +68,14 @@ struct SessionDetailView: View {
                         if session.isPartial {
                             Label("Incomplete — saved on quit", systemImage: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.orange)
+                        }
+                        if !sortedSegments.isEmpty {
+                            Text("·")
+                            Text("\(sortedSegments.count) segments")
+                        }
+                        if !session.summaries.isEmpty {
+                            Text("·")
+                            Text("\(session.summaries.count) summaries")
                         }
                     }
                     .font(DS.Typography.callout)
@@ -61,8 +90,17 @@ struct SessionDetailView: View {
                                 segments: sortedSegments,
                                 title: session.title
                             )
+                            showCopiedTranscript = true
+                            Task {
+                                try? await Task.sleep(for: .seconds(1.5))
+                                showCopiedTranscript = false
+                            }
                         } label: {
-                            Label("Copy Transcript", systemImage: "doc.on.doc")
+                            Label(
+                                showCopiedTranscript ? "Copied!" : "Copy Transcript",
+                                systemImage: showCopiedTranscript ? "checkmark" : "doc.on.doc"
+                            )
+                            .contentTransition(.symbolEffect(.replace))
                         }
                         .disabled(sortedSegments.isEmpty)
 
@@ -76,8 +114,35 @@ struct SessionDetailView: View {
                         }
                         .disabled(sortedSegments.isEmpty)
 
+                        Button {
+                            exportMarkdown(session: session)
+                        } label: {
+                            Label("Export Markdown", systemImage: "doc.text")
+                        }
+                        .keyboardShortcut("e", modifiers: .command)
+                        .disabled(sortedSegments.isEmpty)
+
+                        if let markdownExportFeedback {
+                            Text(markdownExportFeedback)
+                                .font(DS.Typography.caption)
+                                .foregroundStyle(.secondary)
+                                .transition(.opacity)
+                                .task(id: markdownExportFeedback) {
+                                    try? await Task.sleep(for: .seconds(3))
+                                    guard !Task.isCancelled else { return }
+                                    self.markdownExportFeedback = nil
+                                }
+                        }
+
                         if isGeneratingSummary {
-                            ProgressView().controlSize(.small)
+                            HStack(spacing: DS.Spacing.xs) {
+                                ProgressView().controlSize(.small)
+                                if let summaryProgress {
+                                    Text(summaryProgress)
+                                        .font(DS.Typography.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                         } else {
                             Menu {
                                 Button {
@@ -89,6 +154,24 @@ struct SessionDetailView: View {
                                     generateChunkedSummary()
                                 } label: {
                                     Label("Chunked Summary", systemImage: "text.badge.star")
+                                }
+                                if !session.summaries.isEmpty {
+                                    Divider()
+                                    Button {
+                                        let formatted = session.summaries
+                                            .sorted { $0.coveringFrom < $1.coveringFrom }
+                                            .map { SummaryMarkdownFormatter.format(
+                                                content: $0.displayContent,
+                                                coveringFrom: $0.coveringFrom,
+                                                coveringTo: $0.coveringTo,
+                                                isOverall: $0.isOverall
+                                            )}
+                                            .joined(separator: "\n\n")
+                                        NSPasteboard.general.clearContents()
+                                        NSPasteboard.general.setString(formatted, forType: .string)
+                                    } label: {
+                                        Label("Copy All Summaries", systemImage: "doc.on.doc")
+                                    }
                                 }
                             } label: {
                                 Label("Generate Summary", systemImage: "text.badge.star")
@@ -105,8 +188,13 @@ struct SessionDetailView: View {
                                 Button {
                                     exportAudio(session: session)
                                 } label: {
-                                    Label("Save Audio", systemImage: "square.and.arrow.down")
+                                    Label(
+                                        showExportedFeedback ? "Exported!" : "Save Audio",
+                                        systemImage: showExportedFeedback ? "checkmark" : "square.and.arrow.down"
+                                    )
+                                    .contentTransition(.symbolEffect(.replace))
                                 }
+                                .help("Export recording audio as M4A")
                             }
                         }
 
@@ -114,6 +202,7 @@ struct SessionDetailView: View {
                             withAnimation { showChatPanel.toggle() }
                         } label: {
                             Label("Chat", systemImage: showChatPanel ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
+                                .contentTransition(.symbolEffect(.replace))
                         }
                         .disabled(sortedSegments.isEmpty)
                         .help("Ask questions about this transcript")
@@ -134,9 +223,10 @@ struct SessionDetailView: View {
                             withAnimation { overallCollapsed.toggle() }
                         } label: {
                             HStack(spacing: DS.Spacing.xs) {
-                                Image(systemName: overallCollapsed ? "chevron.right" : "chevron.down")
+                                Image(systemName: "chevron.right")
                                     .font(DS.Typography.caption)
                                     .frame(width: 12)
+                                    .rotationEffect(.degrees(overallCollapsed ? 0 : 90))
                                 Text("Overall Summary")
                                     .font(DS.Typography.sectionHeader)
                                 Spacer()
@@ -144,6 +234,7 @@ struct SessionDetailView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(overallCollapsed ? "Expand summary" : "Collapse summary")
                         .padding(.horizontal)
                         .padding(.vertical, DS.Spacing.xs)
 
@@ -170,16 +261,31 @@ struct SessionDetailView: View {
                 }
 
                 if let summaryGenerationError {
-                    Text(summaryGenerationError)
-                        .foregroundStyle(.secondary)
-                        .font(DS.Typography.caption)
-                        .padding(.horizontal)
-                        .transition(.opacity)
-                        .task(id: summaryGenerationError) {
-                            try? await Task.sleep(for: .seconds(5))
-                            guard !Task.isCancelled else { return }
-                            self.summaryGenerationError = nil
+                    HStack(spacing: DS.Spacing.sm) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(summaryGenerationError)
+                            .font(DS.Typography.caption)
+                        Spacer()
+                        Button {
+                            withAnimation { self.summaryGenerationError = nil }
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(DS.Typography.caption2)
                         }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Dismiss error")
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, DS.Spacing.xs)
+                    .background(DS.Colors.subtleError.opacity(0.1))
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .task(id: summaryGenerationError) {
+                        try? await Task.sleep(for: .seconds(8))
+                        guard !Task.isCancelled else { return }
+                        withAnimation { self.summaryGenerationError = nil }
+                    }
                 }
 
                 Divider()
@@ -217,8 +323,29 @@ struct SessionDetailView: View {
                         segments: sortedSegments,
                         partialText: "",
                         summaries: chunkSummariesHidden ? [] : session.summaries.filter { !$0.isOverall },
-                        scrollToTime: $scrollToTime
+                        scrollToTime: $scrollToTime,
+                        activeSegmentID: isUserScrolling ? nil : activeSegmentID,
+                        onTimestampTap: { segment in
+                            playbackService.seek(to: segment.startTime)
+                            if !playbackService.isPlaying {
+                                playbackService.play()
+                            }
+                        }
                     )
+                    .onScrollPhaseChange { _, newPhase in
+                        if newPhase == .interacting || newPhase == .decelerating {
+                            isUserScrolling = true
+                            scrollReenableTask?.cancel()
+                        }
+                        if newPhase == .idle {
+                            scrollReenableTask?.cancel()
+                            scrollReenableTask = Task {
+                                try? await Task.sleep(for: .seconds(3))
+                                guard !Task.isCancelled else { return }
+                                isUserScrolling = false
+                            }
+                        }
+                    }
                 }
             }
             .frame(maxWidth: .infinity)
@@ -233,7 +360,22 @@ struct SessionDetailView: View {
                 loadAudio(for: session)
                 startRefreshTimerIfNeeded()
             }
+            .onChange(of: playbackService.currentTime) { _, newTime in
+                guard playbackService.isPlaying, !sortedSegments.isEmpty else { return }
+                let timeRanges = sortedSegments.map { ($0.startTime, $0.endTime) }
+                if let idx = KaraokeSync.findActiveIndex(at: newTime, in: timeRanges) {
+                    let newID = sortedSegments[idx].id
+                    if newID != activeSegmentID {
+                        activeSegmentID = newID
+                    }
+                }
+            }
             .onChange(of: sessionID) { _, _ in
+                // Auto-save title if changed
+                let trimmed = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    try? modelContext.save()
+                }
                 playbackService.stop()
                 summaryTask?.cancel()
                 refreshTimer?.invalidate()
@@ -244,14 +386,28 @@ struct SessionDetailView: View {
                 summaryGenerationError = nil
                 summaryProgress = nil
                 scrollToTime = nil
+                markdownExportFeedback = nil
                 showChatPanel = false
+                showCopiedTranscript = false
+                showExportedFeedback = false
+                activeSegmentID = nil
+                isUserScrolling = false
+                scrollReenableTask?.cancel()
+                scrollReenableTask = nil
                 fetchSession()
             }
             .onDisappear {
+                // Auto-save title if changed
+                let trimmed = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    try? modelContext.save()
+                }
                 playbackService.stop()
                 summaryTask?.cancel()
                 refreshTimer?.invalidate()
                 refreshTimer = nil
+                scrollReenableTask?.cancel()
+                scrollReenableTask = nil
             }
         } else if let fetchError {
             ContentUnavailableView(
@@ -572,6 +728,45 @@ struct SessionDetailView: View {
         }
     }
 
+    private func exportMarkdown(session: RecordingSession) {
+        let segments = sortedSegments.map {
+            MarkdownExporter.SegmentInfo(startTime: $0.startTime, text: $0.text)
+        }
+        let summaries = session.summaries.map {
+            MarkdownExporter.SummaryInfo(
+                content: $0.displayContent,
+                coveringFrom: $0.coveringFrom,
+                coveringTo: $0.coveringTo,
+                isOverall: $0.isOverall
+            )
+        }
+
+        let markdown = MarkdownExporter.export(
+            title: session.title,
+            date: session.startedAt,
+            totalDuration: session.totalDuration,
+            segments: segments,
+            summaries: summaries,
+            options: .init()
+        )
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
+        let baseName = MarkdownExporter.sanitizeFilename(session.title)
+        panel.nameFieldStringValue = "\(baseName).md"
+
+        guard panel.runModal() == .OK, let destURL = panel.url else { return }
+
+        do {
+            try markdown.write(to: destURL, atomically: true, encoding: .utf8)
+            markdownExportFeedback = "Exported!"
+            Self.logger.info("Markdown exported to \(destURL.path)")
+        } catch {
+            Self.logger.error("Markdown export failed: \(error.localizedDescription)")
+            markdownExportFeedback = "Export failed"
+        }
+    }
+
     private func exportAudio(session: RecordingSession) {
         let urls = session.audioFileURLs.filter { FileManager.default.fileExists(atPath: $0.path) }
         guard !urls.isEmpty else { return }
@@ -587,6 +782,9 @@ struct SessionDetailView: View {
         Task {
             do {
                 try await AudioExporter.mergeAndExport(urls: urls, to: destURL)
+                showExportedFeedback = true
+                try? await Task.sleep(for: .seconds(1.5))
+                showExportedFeedback = false
             } catch {
                 Self.logger.error("Audio export failed: \(error.localizedDescription)")
                 fetchError = "Failed to save audio: \(error.localizedDescription)"

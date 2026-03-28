@@ -61,6 +61,7 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
   - **V6**: Adds `calendarEventIdentifier: String? = nil` to ScheduledRecording, `scheduledRecordingID: UUID? = nil` to RecordingSession
 - **Design System tokens**: `DS` enum in `DesignSystem.swift` centralizes spacing (4pt grid), typography, colors, radii, layout constants; `ViewModifiers.swift` provides `.cardStyle()` and `.badgeStyle()`; `ControlBarMetrics` aliases DS values
 - **Session search**: `SessionListView` uses `.searchable()` filtering by title, segment text, summary content; debounced 300ms to prevent SwiftData fault storms; `DateFilter` enum for Today/This Week/This Month quick filters
+- **Karaoke transcript sync**: `KaraokeSync.findActiveIndex(at:in:)` binary search for active segment; `TranscriptView` passes `activeSegmentID` through to `TranscriptSegmentRow.isActive` for highlight styling; `ScrollViewReader.scrollTo(id:, anchor: .center)` for auto-scroll; user scroll detection via `onScrollPhaseChange` pauses auto-scroll for 3s; timestamp tap seeks playback and starts playing
 
 ### Privacy & App Store
 - **Privacy disclosure**: `PrivacyDisclosureView` shown as sheet on first `LLMSettingsTab` `onAppear` via `@AppStorage("hasShownPrivacyDisclosure")`; reset via Help > Data Usage Information menu or `defaults delete <bundle-id> hasShownPrivacyDisclosure`

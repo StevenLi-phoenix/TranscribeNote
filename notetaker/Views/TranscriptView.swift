@@ -18,17 +18,23 @@ struct TranscriptView: View {
     let summaries: [SummaryBlock]
     let partialText: String
     @Binding var scrollToTime: TimeInterval?
+    var activeSegmentID: UUID? = nil
+    var onTimestampTap: ((TranscriptSegment) -> Void)? = nil
 
     init(
         segments: [TranscriptSegment],
         partialText: String,
         summaries: [SummaryBlock] = [],
-        scrollToTime: Binding<TimeInterval?> = .constant(nil)
+        scrollToTime: Binding<TimeInterval?> = .constant(nil),
+        activeSegmentID: UUID? = nil,
+        onTimestampTap: ((TranscriptSegment) -> Void)? = nil
     ) {
         self.segments = segments
         self.partialText = partialText
         self.summaries = summaries
         self._scrollToTime = scrollToTime
+        self.activeSegmentID = activeSegmentID
+        self.onTimestampTap = onTimestampTap
     }
 
     /// Build a mixed list: segments outside summary ranges shown normally,
@@ -77,8 +83,14 @@ struct TranscriptView: View {
                     ForEach(displayItems) { item in
                         switch item {
                         case .segment(let segment):
-                            TranscriptSegmentRow(segment: segment)
-                                .id(item.id)
+                            TranscriptSegmentRow(
+                                segment: segment,
+                                isActive: segment.id == activeSegmentID,
+                                onTimestampTap: onTimestampTap.map { callback in
+                                    { callback(segment) }
+                                }
+                            )
+                            .id(item.id)
                         case .summary(let summary):
                             InlineSummaryRow(
                                 coveringFrom: summary.coveringFrom,
@@ -132,6 +144,12 @@ struct TranscriptView: View {
                     }
                 }
                 scrollToTime = nil
+            }
+            .onChange(of: activeSegmentID) { _, newID in
+                guard let newID else { return }
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    proxy.scrollTo(newID.uuidString, anchor: .center)
+                }
             }
         }
     }
