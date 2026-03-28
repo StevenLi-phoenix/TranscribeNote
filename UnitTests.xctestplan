@@ -40,6 +40,7 @@
         "RecordingViewModelTests",
         "RingBufferTests",
         "SimpleVADTests",
+        "SoundEffectTests",
         "SummarizerConfigExtendedTests",
         "SummarizerServiceExtendedTests",
         "SummarizerServiceTests",
