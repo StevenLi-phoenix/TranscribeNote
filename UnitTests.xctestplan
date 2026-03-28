@@ -20,6 +20,7 @@
       "selectedTests" : [
         "AudioConfigTests",
         "ChatServiceTests",
+        "DragDropExportTests",
         "AudioExporterTests",
         "AudioLevelMeterTests",
         "BufferFactoryTests",
