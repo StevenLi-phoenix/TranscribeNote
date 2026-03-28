@@ -29,6 +29,11 @@ struct SessionDetailView: View {
     @State private var showCopiedTranscript = false
     @AppStorage("chatPanelWidth") private var chatPanelWidth: Double = 320
 
+    // Karaoke transcript sync state
+    @State private var activeSegmentID: UUID?
+    @State private var isUserScrolling = false
+    @State private var scrollReenableTask: Task<Void, Never>?
+
     var body: some View {
         if isLoading {
             ProgressView()
@@ -318,8 +323,29 @@ struct SessionDetailView: View {
                         segments: sortedSegments,
                         partialText: "",
                         summaries: chunkSummariesHidden ? [] : session.summaries.filter { !$0.isOverall },
-                        scrollToTime: $scrollToTime
+                        scrollToTime: $scrollToTime,
+                        activeSegmentID: isUserScrolling ? nil : activeSegmentID,
+                        onTimestampTap: { segment in
+                            playbackService.seek(to: segment.startTime)
+                            if !playbackService.isPlaying {
+                                playbackService.play()
+                            }
+                        }
                     )
+                    .onScrollPhaseChange { _, newPhase in
+                        if newPhase == .interacting || newPhase == .decelerating {
+                            isUserScrolling = true
+                            scrollReenableTask?.cancel()
+                        }
+                        if newPhase == .idle {
+                            scrollReenableTask?.cancel()
+                            scrollReenableTask = Task {
+                                try? await Task.sleep(for: .seconds(3))
+                                guard !Task.isCancelled else { return }
+                                isUserScrolling = false
+                            }
+                        }
+                    }
                 }
             }
             .frame(maxWidth: .infinity)
@@ -333,6 +359,16 @@ struct SessionDetailView: View {
             .onAppear {
                 loadAudio(for: session)
                 startRefreshTimerIfNeeded()
+            }
+            .onChange(of: playbackService.currentTime) { _, newTime in
+                guard playbackService.isPlaying, !sortedSegments.isEmpty else { return }
+                let timeRanges = sortedSegments.map { ($0.startTime, $0.endTime) }
+                if let idx = KaraokeSync.findActiveIndex(at: newTime, in: timeRanges) {
+                    let newID = sortedSegments[idx].id
+                    if newID != activeSegmentID {
+                        activeSegmentID = newID
+                    }
+                }
             }
             .onChange(of: sessionID) { _, _ in
                 // Auto-save title if changed
@@ -354,6 +390,10 @@ struct SessionDetailView: View {
                 showChatPanel = false
                 showCopiedTranscript = false
                 showExportedFeedback = false
+                activeSegmentID = nil
+                isUserScrolling = false
+                scrollReenableTask?.cancel()
+                scrollReenableTask = nil
                 fetchSession()
             }
             .onDisappear {
@@ -366,6 +406,8 @@ struct SessionDetailView: View {
                 summaryTask?.cancel()
                 refreshTimer?.invalidate()
                 refreshTimer = nil
+                scrollReenableTask?.cancel()
+                scrollReenableTask = nil
             }
         } else if let fetchError {
             ContentUnavailableView(
