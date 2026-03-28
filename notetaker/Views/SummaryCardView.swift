@@ -18,6 +18,7 @@ struct SummaryCardView: View {
     @State private var showRegenerateField = false
     @State private var regenerateInstructions = ""
     @State private var isHovered = false
+    @FocusState private var isFocused: Bool
     @State private var showCopiedFeedback = false
 
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "notetaker", category: "SummaryCardView")
@@ -97,8 +98,10 @@ struct SummaryCardView: View {
 
         }
         .padding(.vertical, DS.Spacing.xs)
+        .focusable()
+        .focused($isFocused)
         .overlay(alignment: .topTrailing) {
-            if !isEditing && !showRegenerateField && (isHovered || showCopiedFeedback) {
+            if !isEditing && !showRegenerateField && (isHovered || isFocused || showCopiedFeedback) {
                 HStack(spacing: DS.Spacing.xs) {
                     copyButton
 

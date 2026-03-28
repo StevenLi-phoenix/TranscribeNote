@@ -76,8 +76,11 @@ struct ChatView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: DS.Spacing.sm) {
                     ForEach(messages) { message in
-                        ChatBubbleView(message: message)
-                            .id(message.id)
+                        ChatBubbleView(
+                            message: message,
+                            onDismiss: message.isError ? { messages.removeAll { $0.id == message.id } } : nil
+                        )
+                        .id(message.id)
                     }
                     if isGenerating {
                         TypingIndicator()
@@ -220,12 +223,19 @@ struct ChatView: View {
 
 private struct ChatBubbleView: View {
     let message: ChatMessage
+    var onDismiss: (() -> Void)?
 
     var body: some View {
         HStack {
             if message.role == .user { Spacer(minLength: 60) }
             bubbleContent
             if message.role != .user { Spacer(minLength: 60) }
+        }
+        .task(id: message.id) {
+            guard message.isError, onDismiss != nil else { return }
+            try? await Task.sleep(for: .seconds(8))
+            guard !Task.isCancelled else { return }
+            onDismiss?()
         }
     }
 
@@ -238,6 +248,18 @@ private struct ChatBubbleView: View {
             .background(backgroundColor)
             .foregroundStyle(message.isError ? DS.Colors.subtleError : .primary)
             .clipShape(RoundedRectangle(cornerRadius: DS.Radius.lg))
+            .accessibilityLabel("\(message.role == .user ? "You" : "Assistant"): \(message.content)")
+            .overlay(alignment: .topTrailing) {
+                if message.isError, onDismiss != nil {
+                    Button { onDismiss?() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(DS.Typography.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .offset(x: 4, y: -4)
+                }
+            }
     }
 
     private var backgroundColor: Color {

@@ -114,6 +114,7 @@ struct SessionDetailView: View {
                             withAnimation { showChatPanel.toggle() }
                         } label: {
                             Label("Chat", systemImage: showChatPanel ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
+                                .contentTransition(.symbolEffect(.replace))
                         }
                         .disabled(sortedSegments.isEmpty)
                         .help("Ask questions about this transcript")

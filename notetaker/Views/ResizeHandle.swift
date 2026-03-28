@@ -13,6 +13,7 @@ struct ResizeHandle: View {
             .fill(isDragging ? Color.accentColor.opacity(0.5) : DS.Colors.separator)
             .frame(height: isDragging ? 3 : 1)
             .frame(maxWidth: .infinity)
+            .animation(.easeInOut(duration: 0.15), value: isDragging)
             .contentShape(Rectangle().inset(by: -4))
             .gesture(
                 DragGesture(minimumDistance: 1)
