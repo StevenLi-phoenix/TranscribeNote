@@ -27,6 +27,7 @@
         "AudioLevelMeterTests",
         "BufferFactoryTests",
         "FileAudioSourceTests",
+        "GlobalHotkeyTests",
         "FoundationModelsEngineTests",
         "KaraokeTranscriptSyncTests",
         "LLMConfigCoverageTests",
