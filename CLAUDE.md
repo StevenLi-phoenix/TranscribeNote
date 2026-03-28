@@ -60,6 +60,7 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
   - **V5**: Adds `isPartial: Bool = false` to RecordingSession for force-quit detection
   - **V6**: Adds `calendarEventIdentifier: String? = nil` to ScheduledRecording, `scheduledRecordingID: UUID? = nil` to RecordingSession
 - **Design System tokens**: `DS` enum in `DesignSystem.swift` centralizes spacing (4pt grid), typography, colors, radii, layout constants; `ViewModifiers.swift` provides `.cardStyle()` and `.badgeStyle()`; `ControlBarMetrics` aliases DS values
+- **Liquid Glass**: `DS.Glass` namespace provides `card(_:cornerRadius:)`, `capsule(_:)`, `tinted(_:color:cornerRadius:)` helpers — all gated by `#available(macOS 26, *)` with `ultraThinMaterial` fallback; `CardStyleModifier`/`BadgeStyleModifier` use `.glassEffect` on macOS 26; `SummaryCardGlassModifier` applies blue-tinted glass for overall summaries; `SessionHeaderGlassModifier` and `MenuBarRecordingGlassModifier` for detail header and menu bar indicators
 - **Session search**: `SessionListView` uses `.searchable()` filtering by title, segment text, summary content; debounced 300ms to prevent SwiftData fault storms; `DateFilter` enum for Today/This Week/This Month quick filters
 
 ### Privacy & App Store

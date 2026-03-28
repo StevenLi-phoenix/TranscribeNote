@@ -175,7 +175,8 @@ struct MenuBarView: View {
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, DS.Spacing.md)
-            .padding(.top, DS.Spacing.xs)
+            .padding(.vertical, DS.Spacing.xs)
+            .modifier(MenuBarRecordingGlassModifier(isPaused: false))
             .frame(minWidth: 280)
 
             AudioLevelBar(level: viewModel.audioMeter.level)
@@ -221,6 +222,7 @@ struct MenuBarView: View {
             }
             .padding(.horizontal, DS.Spacing.md)
             .padding(.vertical, DS.Spacing.xs)
+            .modifier(MenuBarRecordingGlassModifier(isPaused: true))
             .frame(minWidth: 280)
 
             Divider()
@@ -280,5 +282,19 @@ struct MenuBarView: View {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q")
+    }
+}
+
+/// Glass capsule effect for MenuBarExtra recording/paused status indicators.
+struct MenuBarRecordingGlassModifier: ViewModifier {
+    let isPaused: Bool
+
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            let tintColor = isPaused ? Color.orange : Color.red
+            content.glassEffect(.regular.tint(tintColor.opacity(0.2)), in: .capsule)
+        } else {
+            content
+        }
     }
 }

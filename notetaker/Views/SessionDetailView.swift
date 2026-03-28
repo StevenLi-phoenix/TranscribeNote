@@ -33,7 +33,7 @@ struct SessionDetailView: View {
         } else if let session {
             HStack(spacing: 0) {
             VStack(spacing: 0) {
-                // Header
+                // Header with glass card
                 VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                     Text(session.title)
                         .font(DS.Typography.title)
@@ -43,6 +43,10 @@ struct SessionDetailView: View {
                         if session.totalDuration > 0 {
                             Text("·")
                             Text(session.totalDuration.compactDuration)
+                        }
+                        if !session.segments.isEmpty {
+                            Text("·")
+                            Text("\(session.segments.count) segments")
                         }
                         if session.isPartial {
                             Label("Incomplete — saved on quit", systemImage: "exclamationmark.triangle.fill")
@@ -54,6 +58,7 @@ struct SessionDetailView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
+                .modifier(SessionHeaderGlassModifier())
                 .toolbar {
                     ToolbarItemGroup {
                         Button {
@@ -595,4 +600,15 @@ struct SessionDetailView: View {
         }
     }
 
+}
+
+/// Glass effect for the session detail header area.
+struct SessionHeaderGlassModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            content.glassEffect(.regular.tint(.clear), in: RoundedRectangle(cornerRadius: DS.Radius.md))
+        } else {
+            content
+        }
+    }
 }

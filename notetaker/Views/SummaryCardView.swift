@@ -97,6 +97,8 @@ struct SummaryCardView: View {
 
         }
         .padding(.vertical, DS.Spacing.xs)
+        .padding(.horizontal, DS.Spacing.sm)
+        .modifier(SummaryCardGlassModifier(isOverall: isOverall))
         .overlay(alignment: .topTrailing) {
             if !isEditing && !showRegenerateField && (isHovered || showCopiedFeedback) {
                 HStack(spacing: DS.Spacing.xs) {
@@ -270,6 +272,23 @@ struct SummaryCardView: View {
         } else {
             Text(title)
                 .font(DS.Typography.caption)
+        }
+    }
+}
+
+/// Applies tinted glass for overall summaries, regular glass for chunk summaries.
+struct SummaryCardGlassModifier: ViewModifier {
+    let isOverall: Bool
+
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            if isOverall {
+                content.glassEffect(.regular.tint(Color.blue.opacity(0.15)), in: RoundedRectangle(cornerRadius: DS.Radius.sm))
+            } else {
+                content.glassEffect(.regular.tint(.clear), in: RoundedRectangle(cornerRadius: DS.Radius.sm))
+            }
+        } else {
+            content
         }
     }
 }

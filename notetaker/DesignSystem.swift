@@ -57,4 +57,43 @@ enum DS {
         static let controlBarMinHeight: CGFloat = 48
         static let timeMinWidth: CGFloat = 64
     }
+
+    // MARK: - Liquid Glass (macOS 26+)
+
+    /// Liquid Glass design tokens with automatic fallback to ultraThinMaterial on older macOS.
+    enum Glass {
+        /// Apply glass card effect with rounded rectangle shape.
+        @ViewBuilder
+        static func card<V: View>(_ content: V, cornerRadius: CGFloat = DS.Radius.md) -> some View {
+            if #available(macOS 26, *) {
+                content.glassEffect(.regular.tint(.clear), in: RoundedRectangle(cornerRadius: cornerRadius))
+            } else {
+                content
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius))
+            }
+        }
+
+        /// Apply glass capsule effect (for pills/badges).
+        @ViewBuilder
+        static func capsule<V: View>(_ content: V) -> some View {
+            if #available(macOS 26, *) {
+                content.glassEffect(.regular.tint(.clear), in: .capsule)
+            } else {
+                content
+                    .background(.ultraThinMaterial, in: Capsule())
+            }
+        }
+
+        /// Apply glass effect with semantic tint color.
+        @ViewBuilder
+        static func tinted<V: View>(_ content: V, color: Color, cornerRadius: CGFloat = DS.Radius.md) -> some View {
+            if #available(macOS 26, *) {
+                content.glassEffect(.regular.tint(color.opacity(0.3)), in: RoundedRectangle(cornerRadius: cornerRadius))
+            } else {
+                content
+                    .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: cornerRadius))
+                    .overlay(RoundedRectangle(cornerRadius: cornerRadius).strokeBorder(color.opacity(0.2), lineWidth: 0.5))
+            }
+        }
+    }
 }
