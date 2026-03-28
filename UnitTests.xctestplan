@@ -18,8 +18,8 @@
         "name" : "notetakerTests"
       },
       "selectedTests" : [
-        "AccessibilityHelpersTests",
-        "AnalyticsServiceTests",
+        "ActionItemMarkdownFormatterTests",
+        "ActionItemParserTests",
         "AudioConfigTests",
         "AudioExporterTests",
         "AudioLevelMeterTests",
@@ -61,10 +61,11 @@
         "RingBufferTests",
         "SimpleVADTests",
         "SoundEffectTests",
-        "SpotlightIndexerTests",
         "SummarizerConfigExtendedTests",
         "SummarizerServiceExtendedTests",
         "SummarizerServiceTests",
+        "StructuredSummaryTests",
+        "SummarizerStructuredTests",
         "SummaryBlockTests",
         "SummaryCardExporterTests",
         "SyntheticBufferInjectionTests",

@@ -38,6 +38,8 @@ struct notetakerApp: App {
     private let containerError: String?
 
     init() {
+        UserDefaults.standard.register(defaults: ["soundEffectsEnabled": true])
+
         CrashLogService.install()
         KeychainMigration.migrateIfNeeded()
         SchedulerService.install()
@@ -55,7 +57,7 @@ struct notetakerApp: App {
         do {
             sharedModelContainer = try ModelContainer(
                 for: RecordingSession.self, TranscriptSegment.self, SummaryBlock.self,
-                ScheduledRecording.self,
+                ScheduledRecording.self, ActionItem.self,
                 migrationPlan: NotetakerMigrationPlan.self,
                 configurations: configuration
             )

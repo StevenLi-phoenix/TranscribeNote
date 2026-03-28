@@ -84,10 +84,12 @@ struct LLMModelProfileTests {
     }
 
     @Test func allCases() {
-        #expect(LLMRole.allCases.count == 3)
+        #expect(LLMRole.allCases.count == 5)
         #expect(LLMRole.allCases.contains(.live))
         #expect(LLMRole.allCases.contains(.overall))
         #expect(LLMRole.allCases.contains(.title))
+        #expect(LLMRole.allCases.contains(.chat))
+        #expect(LLMRole.allCases.contains(.actionItems))
     }
 
     // MARK: - LLMProfileStore
