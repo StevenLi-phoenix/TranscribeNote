@@ -12,8 +12,7 @@ struct PrivacyDisclosureView: View {
                 .foregroundStyle(.blue)
 
             Text("Privacy Notice")
-                .font(.title2)
-                .bold()
+                .font(DS.Typography.title)
 
             VStack(alignment: .leading, spacing: 12) {
                 disclosureSection(
@@ -41,7 +40,7 @@ struct PrivacyDisclosureView: View {
                     ]
                 )
             }
-            .font(.body)
+            .font(DS.Typography.body)
             .padding()
             .background(Color.secondary.opacity(0.1))
             .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -54,7 +53,7 @@ struct PrivacyDisclosureView: View {
 
             Link("View Full Privacy Policy",
                  destination: Self.privacyPolicyURL)
-                .font(.caption)
+                .font(DS.Typography.caption)
         }
         .padding(32)
         .frame(width: 480)
@@ -63,12 +62,12 @@ struct PrivacyDisclosureView: View {
     private func disclosureSection(title: String, items: [String]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.headline)
+                .font(DS.Typography.sectionHeader)
                 .padding(.top, 4)
 
             ForEach(items, id: \.self) { item in
                 Label(item, systemImage: "circle.fill")
-                    .font(.body)
+                    .font(DS.Typography.body)
                     .labelStyle(BulletLabelStyle())
             }
         }
