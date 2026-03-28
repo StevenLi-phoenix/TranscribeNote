@@ -202,7 +202,7 @@ struct SettingsRow<Content: View>: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: DS.Spacing.md) {
             Text(label)
                 .frame(maxWidth: .infinity, alignment: .trailing)
             content

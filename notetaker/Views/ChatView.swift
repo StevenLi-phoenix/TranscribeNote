@@ -287,7 +287,7 @@ private struct TypingIndicator: View {
     @State private var animating = false
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: DS.Spacing.xs) {
             ForEach(0..<3, id: \.self) { index in
                 Circle()
                     .fill(Color.secondary)
