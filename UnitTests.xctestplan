@@ -58,7 +58,8 @@
         "SyntheticBufferInjectionTests",
         "TimeIntervalFormattingTests",
         "TranscriptSegmentTests",
-        "VADConfigTests"
+        "VADConfigTests",
+        "WordCounterTests"
       ]
     }
   ],

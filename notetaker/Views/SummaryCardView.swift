@@ -92,7 +92,33 @@ struct SummaryCardView: View {
                     }
 
                     // Summary content
-                    contentView
+                    VStack(alignment: .leading, spacing: DS.Spacing.xxs) {
+                        contentView
+
+                        // Word count & duration metrics
+                        if !content.isEmpty {
+                            let wordCount = WordCounter.count(in: content)
+                            if wordCount > 0 {
+                                let isCJK = WordCounter.isCJKDominant(content)
+                                if isOverall {
+                                    Text(WordCounter.formatWordCount(wordCount: wordCount, isCJK: isCJK))
+                                        .font(DS.Typography.caption2)
+                                        .foregroundStyle(.tertiary)
+                                } else {
+                                    let duration = coveringTo - coveringFrom
+                                    if duration > 0 {
+                                        Text(WordCounter.formatMetrics(
+                                            wordCount: wordCount,
+                                            duration: duration,
+                                            isCJK: isCJK
+                                        ))
+                                        .font(DS.Typography.caption2)
+                                        .foregroundStyle(.tertiary)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
