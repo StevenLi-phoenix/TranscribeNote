@@ -43,6 +43,7 @@ struct ContentView: View {
                             Image(systemName: "calendar.badge.plus")
                         }
                         .accessibilityLabel("Scheduled recordings")
+                        .help("View and manage scheduled recordings")
                     }
                 }
                 .sheet(isPresented: $showScheduleSheet) {

@@ -39,6 +39,7 @@ struct ScheduleView: View {
                     } label: {
                         Image(systemName: "plus")
                     }
+                    .accessibilityLabel("Add scheduled recording")
                 }
             }
             .navigationDestination(item: $editorItem) { item in
