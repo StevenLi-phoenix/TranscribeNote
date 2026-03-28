@@ -18,6 +18,7 @@
         "name" : "notetakerTests"
       },
       "selectedTests" : [
+        "AppIntentsTests",
         "AudioConfigTests",
         "ChatServiceTests",
         "AudioExporterTests",

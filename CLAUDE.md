@@ -131,6 +131,13 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - **Recurrence mapping**: `CalendarService.mapRecurrenceRule()` maps `EKRecurrenceRule` to `RepeatRule`; only `interval == 1`; weekday detection via `Set<EKWeekday>` equality
 - **SchemaV6**: Adds `calendarEventIdentifier: String? = nil` to `ScheduledRecording`, `scheduledRecordingID: UUID? = nil` to `RecordingSession`
 
+### App Intents & Shortcuts
+- **`AppIntentState`**: `@MainActor` singleton bridge — holds weak `RecordingViewModel` ref and optional `ModelContainer`; wired in `notetakerApp.init()`; `ensureReady()` throws `AppIntentError.appNotRunning` if not configured
+- **4 intents**: `StartRecordingIntent` (openAppWhenRun, optional title), `StopRecordingIntent`, `GetLastSummaryIntent` (optional SessionEntity param, falls back to most recent), `SearchTranscriptsIntent` (returns `[SessionEntity]`)
+- **`SessionEntity`**: `AppEntity` with `SessionEntityQuery`; `id` is `String` (UUID); date maps to `RecordingSession.startedAt`; `suggestedEntities()` returns 10 most recent
+- **`NotetakerShortcuts`**: `AppShortcutsProvider` with Siri phrases; `String` parameters cannot be referenced in phrases (only `AppEntity`/`AppEnum` allowed)
+- **Testing**: `AppIntentError` name collides with `AppIntents` framework — use `notetaker.AppIntentError` typealias in tests; `DisplayRepresentation.title` uses string interpolation so direct `==` comparison with string literals fails
+
 ## Architecture
 
 Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Model` classes for persistence.
@@ -143,6 +150,7 @@ Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Mo
   - `ViewModels/` — `RecordingViewModel` (`@Observable`) — central state machine for recording lifecycle; `SchedulerViewModel` — scheduled recordings + calendar integration
   - `DesignSystem.swift` — `DS` enum (spacing, typography, colors, radius, layout tokens)
   - `Views/` — SwiftUI views including `SettingsView` (4-tab layout: `SettingsTab`, `ModelsSettingsTab`, `AboutTab`), `ScheduleView`, `ScheduleEditorView`, `PrivacyDisclosureView`, `SummaryCardView`, `TranscriptSegmentRow`, `AudioLevelBar`, `ResizeHandle`, `VerticalResizeHandle`, `ChatView`, `SettingsComponents` (reusable settings UI), `ViewModifiers`
+  - `Intents/` — App Intents for Shortcuts & Siri: `AppIntentState` (singleton bridge), `StartRecordingIntent`, `StopRecordingIntent`, `GetLastSummaryIntent`, `SearchTranscriptsIntent`, `NotetakerShortcuts` (AppShortcutsProvider), `Entities/SessionEntity` (AppEntity + EntityQuery)
 - **`notetakerTests/`** — Swift Testing (`@Test`, `#expect`); ~64 test files; `Mocks/` has `MockASREngine`, `MockLLMEngine`, `MockSchedulerService`, per-suite `MockURLProtocol` subclasses; `Helpers/` has `BufferFactory` and `FileAudioSource`
 - **`notetakerUITests/`** — XCTest UI tests (light/dark mode via `runsForEachTargetApplicationUIConfiguration`)
 - **`scripts/`** — `increment_build_number.sh`

@@ -72,6 +72,10 @@ struct notetakerApp: App {
         appDelegate.schedulerViewModel = schedulerVM
         appDelegate.modelContainer = sharedModelContainer
 
+        // Wire App Intents state so Shortcuts/Siri can access the running app
+        AppIntentState.shared.viewModel = vm
+        AppIntentState.shared.modelContainerRef = sharedModelContainer
+
         // 3c: Auto-start is now handled directly by SchedulerViewModel.handleFire()
         // via direct callback to RecordingViewModel (no notification relay needed).
     }
