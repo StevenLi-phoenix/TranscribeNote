@@ -106,6 +106,8 @@ struct TranscriptView: View {
                     .padding(.vertical, DS.Spacing.xxs)
                     .id("partial")
                     .opacity(partialText.isEmpty ? 0 : 1)
+                    .accessibilityHidden(partialText.isEmpty)
+                    .accessibilityLabel("Transcribing: \(partialText)")
                 }
                 .padding()
             }
@@ -166,5 +168,7 @@ struct InlineSummaryRow: View {
         }
         .padding(.vertical, DS.Spacing.xs)
         .background(Color.accentColor.opacity(0.04), in: RoundedRectangle(cornerRadius: DS.Radius.sm))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Summary \(coveringFrom.mmss) to \(coveringTo.mmss)")
     }
 }
