@@ -74,6 +74,14 @@ struct notetakerApp: App {
 
         // 3c: Auto-start is now handled directly by SchedulerViewModel.handleFire()
         // via direct callback to RecordingViewModel (no notification relay needed).
+
+        // Re-schedule weekly digest notification if enabled (persists across app restarts)
+        if UserDefaults.standard.bool(forKey: "weeklyDigestEnabled") {
+            InsightNotificationService.scheduleWeeklyDigest(
+                body: "Your weekly meeting summary is ready. Open Notetaker to view."
+            )
+            Self.logger.debug("Re-scheduled weekly digest notification on launch")
+        }
     }
 
     @ViewBuilder

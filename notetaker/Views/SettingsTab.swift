@@ -216,10 +216,33 @@ struct SummarizationSettingsTab: View {
 
 struct RecordingSettingsTab: View {
     @AppStorage("vadConfigJSON") private var vadConfigJSON: String = ""
+    @AppStorage("weeklyDigestEnabled") private var weeklyDigestEnabled = false
     @State private var config: VADConfig = .default
 
     var body: some View {
         SettingsGrid {
+            SettingsRow("Weekly Meeting Digest") {
+                Toggle("", isOn: $weeklyDigestEnabled)
+                    .labelsHidden()
+                    .help("Receive a weekly summary of your meetings every Monday at 9 AM")
+                    .onChange(of: weeklyDigestEnabled) { _, enabled in
+                        if enabled {
+                            Task { @MainActor in
+                                let granted = await InsightNotificationService.requestPermission()
+                                if granted {
+                                    InsightNotificationService.scheduleWeeklyDigest(
+                                        body: "Your weekly meeting summary is ready. Open Notetaker to view."
+                                    )
+                                } else {
+                                    weeklyDigestEnabled = false
+                                }
+                            }
+                        } else {
+                            InsightNotificationService.cancelWeeklyDigest()
+                        }
+                    }
+            }
+
             SettingsRow("Voice Activity Detection") {
                 Toggle("", isOn: $config.vadEnabled)
                     .labelsHidden()
