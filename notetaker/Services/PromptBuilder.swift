@@ -148,6 +148,25 @@ enum PromptBuilder {
         return messages
     }
 
+    /// Build a prompt to generate semantic tags from a meeting summary.
+    static func buildTagPrompt(summary: String, language: String? = nil) -> [LLMMessage] {
+        let langInstruction = language.map { "Generate tags in \(sanitizeLanguage($0))." } ?? ""
+        let systemPrompt = """
+        You are a meeting classifier. Given a meeting summary, generate 3-5 short semantic tags that categorize the meeting.
+        Rules:
+        - Each tag should be 2-6 words
+        - Tags should describe the meeting type, topic, or purpose
+        - Output ONLY a JSON array of strings, nothing else
+        - Example: ["Product Review", "Sprint Planning", "Technical Discussion"]
+        \(langInstruction)
+        """
+
+        return [
+            LLMMessage(role: .system, content: systemPrompt),
+            LLMMessage(role: .user, content: "Classify this meeting:\n\n\(summary)")
+        ]
+    }
+
     static func buildOverallSummaryPrompt(
         chunkSummaries: [(coveringFrom: TimeInterval, coveringTo: TimeInterval, content: String)],
         config: SummarizerConfig
