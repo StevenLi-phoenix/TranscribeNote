@@ -59,6 +59,16 @@ struct PlaybackControlView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, DS.Spacing.sm)
+        .overlay(alignment: .bottom) {
+            if let error = service.errorMessage {
+                Text(error)
+                    .font(DS.Typography.caption)
+                    .foregroundStyle(DS.Colors.subtleError)
+                    .padding(.horizontal)
+                    .padding(.bottom, DS.Spacing.xxs)
+                    .transition(.opacity)
+            }
+        }
         .background {
             Button {
                 service.togglePlayPause()
