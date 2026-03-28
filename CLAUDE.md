@@ -131,6 +131,12 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - **Recurrence mapping**: `CalendarService.mapRecurrenceRule()` maps `EKRecurrenceRule` to `RepeatRule`; only `interval == 1`; weekday detection via `Set<EKWeekday>` equality
 - **SchemaV6**: Adds `calendarEventIdentifier: String? = nil` to `ScheduledRecording`, `scheduledRecordingID: UUID? = nil` to `RecordingSession`
 
+### Meeting Templates
+- **`MeetingTemplate`**: `nonisolated struct: Identifiable, Codable, Sendable, Hashable` — reusable workflow presets with name, icon, description, optional summarization overrides (interval, style, language), optional linked IDs (aiRecipeID, llmProfileID), and suggestedDurationMinutes
+- **`MeetingTemplateStore`**: `nonisolated enum` — JSON file storage at `~/Library/Application Support/notetaker/templates.json`; 5 built-in templates with stable UUIDs (General Meeting, Standup/Sync, 1-on-1, Brainstorm, Lecture/Talk); built-ins cannot be deleted; `loadTemplates()` always ensures built-ins present; `duplicateTemplate()` creates editable copy
+- **`TemplatePickerView`**: Sheet shown before recording starts (controlled by `@AppStorage("showTemplatePickerOnRecord")`); grid of template cards; skip button for default recording; applies template overrides to `SummarizerConfig` in UserDefaults before `startRecording()`
+- **`TemplateManagerView`**: Settings tab for template CRUD; HSplitView with list + detail; built-in templates are read-only with duplicate option; custom templates fully editable
+
 ## Architecture
 
 Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Model` classes for persistence.
@@ -138,11 +144,11 @@ Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Mo
 - **`notetaker/`** — Main app target
   - `notetakerApp.swift` — Entry point, shared `ModelContainer`, `MenuBarExtra`, `Settings` scene
   - `ContentView.swift` — `NavigationSplitView` (sidebar session list + detail routing)
-  - `Models/` — SwiftData models (`RecordingSession`, `TranscriptSegment`, `SummaryBlock`, `ScheduledRecording`), config types (`LLMConfig`, `SummarizerConfig`, `LLMModelProfile`, `VADConfig`, `OverallSummaryMode`, `RepeatRule`), ephemeral types (`ChatMessage`), schema versioning (`Schemas/` V1–V6)
-  - `Services/` — Protocol-based engines (`ASREngine`, `LLMEngine`) with multiple implementations (including `FoundationModelsEngine` for Apple Intelligence), `AudioCaptureService`, `AudioPlaybackService`, `AudioExporter`, `SummarizerService`, `BackgroundSummaryService`, `SummaryMarkdownFormatter`, `ChatService`, `PromptBuilder`, `KeychainService`, `CrashLogService`, `SchedulerService`, `CalendarService`
+  - `Models/` — SwiftData models (`RecordingSession`, `TranscriptSegment`, `SummaryBlock`, `ScheduledRecording`), config types (`LLMConfig`, `SummarizerConfig`, `LLMModelProfile`, `VADConfig`, `OverallSummaryMode`, `RepeatRule`, `MeetingTemplate`), ephemeral types (`ChatMessage`), schema versioning (`Schemas/` V1–V6)
+  - `Services/` — Protocol-based engines (`ASREngine`, `LLMEngine`) with multiple implementations (including `FoundationModelsEngine` for Apple Intelligence), `AudioCaptureService`, `AudioPlaybackService`, `AudioExporter`, `SummarizerService`, `BackgroundSummaryService`, `SummaryMarkdownFormatter`, `ChatService`, `PromptBuilder`, `KeychainService`, `CrashLogService`, `SchedulerService`, `CalendarService`, `MeetingTemplateStore`
   - `ViewModels/` — `RecordingViewModel` (`@Observable`) — central state machine for recording lifecycle; `SchedulerViewModel` — scheduled recordings + calendar integration
   - `DesignSystem.swift` — `DS` enum (spacing, typography, colors, radius, layout tokens)
-  - `Views/` — SwiftUI views including `SettingsView` (4-tab layout: `SettingsTab`, `ModelsSettingsTab`, `AboutTab`), `ScheduleView`, `ScheduleEditorView`, `PrivacyDisclosureView`, `SummaryCardView`, `TranscriptSegmentRow`, `AudioLevelBar`, `ResizeHandle`, `VerticalResizeHandle`, `ChatView`, `SettingsComponents` (reusable settings UI), `ViewModifiers`
+  - `Views/` — SwiftUI views including `SettingsView` (6-tab layout: Models, LLM, Summarization, Recording, Templates, About), `ScheduleView`, `ScheduleEditorView`, `PrivacyDisclosureView`, `SummaryCardView`, `TranscriptSegmentRow`, `AudioLevelBar`, `ResizeHandle`, `VerticalResizeHandle`, `ChatView`, `TemplatePickerView`, `TemplateManagerView`, `SettingsComponents` (reusable settings UI), `ViewModifiers`
 - **`notetakerTests/`** — Swift Testing (`@Test`, `#expect`); ~64 test files; `Mocks/` has `MockASREngine`, `MockLLMEngine`, `MockSchedulerService`, per-suite `MockURLProtocol` subclasses; `Helpers/` has `BufferFactory` and `FileAudioSource`
 - **`notetakerUITests/`** — XCTest UI tests (light/dark mode via `runsForEachTargetApplicationUIConfiguration`)
 - **`scripts/`** — `increment_build_number.sh`
@@ -162,9 +168,9 @@ Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Mo
 - `DispatchQueue.main.asyncAfter` may not fire during `Task.sleep`-based polling in Swift Testing — use `DispatchQueue.global()` or avoid dispatch
 - UI launch tests use `runsForEachTargetApplicationUIConfiguration = true` to test light/dark mode; do NOT delete
 - **Close the app before running tests** — if the app is already running, UI tests attach to the existing instance instead of launching a fresh one, causing `Failed to terminate` errors and test failures
-- **Two-tier test plans**: `UnitTests.xctestplan` (22 pure-logic suites, ~257 tests, <0.2s) is default for Cmd+U; `FullTests.xctestplan` (all suites + UI tests) for CI on PR to main; shared scheme at `xcshareddata/xcschemes/notetaker.xcscheme` associates both plans
+- **Two-tier test plans**: `UnitTests.xctestplan` (23 pure-logic suites, ~269 tests, <0.2s) is default for Cmd+U; `FullTests.xctestplan` (all suites + UI tests) for CI on PR to main; shared scheme at `xcshareddata/xcschemes/notetaker.xcscheme` associates both plans
 - **Test plan gotcha**: Xcode auto-generated schemes don't support `-testPlan`; the explicit shared scheme with `shouldAutocreateTestPlan = "NO"` is required; verify with `xcodebuild -scheme notetaker -showTestPlans`
-- 31 test suites use `.serialized` to prevent parallel UserDefaults/Keychain/URLProtocol/SwiftData/NSPasteboard contamination; ~746 tests total across ~64 test files; UnitTests plan excludes all serialized suites for fast local iteration
+- 31 test suites use `.serialized` to prevent parallel UserDefaults/Keychain/URLProtocol/SwiftData/NSPasteboard contamination; ~758 tests total across ~65 test files; UnitTests plan excludes all serialized suites for fast local iteration
 
 ## CI Workflows
 
