@@ -186,7 +186,7 @@ struct MenuBarView: View {
             if let summary = viewModel.latestSummary {
                 Divider()
                 Text(summary)
-                    .font(.caption)
+                    .font(DS.Typography.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(4)
                     .fixedSize(horizontal: false, vertical: true)
@@ -259,12 +259,12 @@ struct MenuBarView: View {
                 HStack {
                     Image(systemName: "clock")
                         .foregroundStyle(.secondary)
-                    VStack(alignment: .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: DS.Spacing.xxs) {
                         Text(next.title.isEmpty ? "Scheduled" : next.title)
-                            .font(.caption)
+                            .font(DS.Typography.caption)
                             .fontWeight(.medium)
                         Text(fireTime, style: .relative)
-                            .font(.caption2)
+                            .font(DS.Typography.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -288,6 +288,7 @@ struct MenuBarView: View {
         Button("Open Main Window") {
             openWindow(id: "main")
         }
+        .keyboardShortcut("o", modifiers: [.command])
 
         SettingsLink()
 
