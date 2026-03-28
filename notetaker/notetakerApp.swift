@@ -2,6 +2,17 @@ import SwiftUI
 import SwiftData
 import os
 
+// MARK: - Playback Notification Names
+
+extension Notification.Name {
+    static let togglePlayback = Notification.Name("notetaker.togglePlayback")
+    static let seekForward = Notification.Name("notetaker.seekForward")
+    static let seekBackward = Notification.Name("notetaker.seekBackward")
+    static let seekForwardLong = Notification.Name("notetaker.seekForwardLong")
+    static let seekBackwardLong = Notification.Name("notetaker.seekBackwardLong")
+    static let toggleCommandPalette = Notification.Name("notetaker.toggleCommandPalette")
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate {
     var viewModel: RecordingViewModel?
     var schedulerViewModel: SchedulerViewModel?
@@ -148,6 +159,40 @@ struct notetakerApp: App {
                     // Reset disclosure flag so the sheet re-appears on next Settings open
                     UserDefaults.standard.set(false, forKey: "hasShownPrivacyDisclosure")
                 }
+            }
+
+            CommandMenu("Playback") {
+                Button("Play/Pause") {
+                    NotificationCenter.default.post(name: .togglePlayback, object: nil)
+                }
+                .keyboardShortcut(.space, modifiers: [])
+
+                Button("Skip Forward 5s") {
+                    NotificationCenter.default.post(name: .seekForward, object: nil)
+                }
+                .keyboardShortcut(.rightArrow, modifiers: [])
+
+                Button("Skip Back 5s") {
+                    NotificationCenter.default.post(name: .seekBackward, object: nil)
+                }
+                .keyboardShortcut(.leftArrow, modifiers: [])
+
+                Button("Skip Forward 15s") {
+                    NotificationCenter.default.post(name: .seekForwardLong, object: nil)
+                }
+                .keyboardShortcut(.rightArrow, modifiers: .shift)
+
+                Button("Skip Back 15s") {
+                    NotificationCenter.default.post(name: .seekBackwardLong, object: nil)
+                }
+                .keyboardShortcut(.leftArrow, modifiers: .shift)
+            }
+
+            CommandGroup(after: .toolbar) {
+                Button("Command Palette") {
+                    NotificationCenter.default.post(name: .toggleCommandPalette, object: nil)
+                }
+                .keyboardShortcut("k", modifiers: .command)
             }
         }
     }
