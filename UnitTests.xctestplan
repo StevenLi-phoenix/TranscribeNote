@@ -33,6 +33,7 @@
         "LLMProviderTests",
         "LLMRoleCoverageTests",
         "NoopEngineTests",
+        "PinFavoriteTests",
         "PromptBuilderExtendedTests",
         "PromptBuilderTests",
         "RecordingSessionExtendedTests",
