@@ -5,6 +5,7 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var viewModel: RecordingViewModel
     var schedulerViewModel: SchedulerViewModel
+    @Binding var handoffSessionID: UUID?
     @State private var selectedSessionID: UUID?
     @State private var showScheduleSheet = false
 
@@ -86,13 +87,20 @@ struct ContentView: View {
                 handleCompletionIfNeeded()
             }
         }
+        .onChange(of: handoffSessionID) { _, newID in
+            if let newID {
+                selectedSessionID = newID
+                handoffSessionID = nil
+            }
+        }
     }
 }
 
 #Preview {
     ContentView(
         viewModel: RecordingViewModel(asrEngine: NoopASREngine()),
-        schedulerViewModel: SchedulerViewModel()
+        schedulerViewModel: SchedulerViewModel(),
+        handoffSessionID: .constant(nil)
     )
     .modelContainer(for: [RecordingSession.self, TranscriptSegment.self], inMemory: true)
 }

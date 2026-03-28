@@ -229,6 +229,13 @@ struct SessionDetailView: View {
                     .frame(width: chatPanelWidth)
             }
             }
+            .userActivity(HandoffService.viewSessionActivityType) { activity in
+                activity.title = session.title.isEmpty ? "Untitled Recording" : session.title
+                activity.userInfo = ["sessionID": session.id.uuidString]
+                activity.isEligibleForHandoff = true
+                activity.isEligibleForSearch = true
+                activity.requiredUserInfoKeys = ["sessionID"]
+            }
             .onAppear {
                 loadAudio(for: session)
                 startRefreshTimerIfNeeded()

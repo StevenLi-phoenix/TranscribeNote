@@ -33,6 +33,7 @@ struct notetakerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var viewModel: RecordingViewModel
     @State private var schedulerViewModel: SchedulerViewModel
+    @State private var handoffSessionID: UUID?
 
     private let sharedModelContainer: ModelContainer?
     private let containerError: String?
@@ -100,10 +101,16 @@ struct notetakerApp: App {
 
         WindowGroup(id: "main") {
             if let sharedModelContainer {
-                ContentView(viewModel: viewModel, schedulerViewModel: schedulerViewModel)
+                ContentView(viewModel: viewModel, schedulerViewModel: schedulerViewModel, handoffSessionID: $handoffSessionID)
                     .modelContainer(sharedModelContainer)
                     .onAppear {
                         schedulerViewModel.load(context: sharedModelContainer.mainContext)
+                    }
+                    .onContinueUserActivity(HandoffService.viewSessionActivityType) { activity in
+                        if let sessionID = HandoffService.sessionID(from: activity) {
+                            Self.logger.info("Handoff received for session \(sessionID)")
+                            handoffSessionID = sessionID
+                        }
                     }
             } else {
                 VStack(spacing: 12) {
