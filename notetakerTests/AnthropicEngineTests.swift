@@ -408,4 +408,129 @@ struct AnthropicEngineTests {
             )
         }
     }
+
+    // MARK: - Tool Calling Tests
+
+    private func makeTool() -> LLMTool {
+        let schemaData = try! JSONSerialization.data(withJSONObject: ["type": "object", "properties": ["q": ["type": "string"]]])
+        let schema = JSONSchema(name: "params", description: "params", schemaData: schemaData)
+        return LLMTool(name: "search", description: "Search the web", parameters: schema) { _ in "result" }
+    }
+
+    @Test("supportsToolCalling returns true")
+    func supportsToolCalling() {
+        #expect(engine.supportsToolCalling == true)
+    }
+
+    @Test("Tool calling request format includes input_schema")
+    func toolCallingRequestFormat() async throws {
+        let responseJSON = """
+        {"content": [{"type": "text", "text": "ok"}]}
+        """.data(using: .utf8)!
+
+        var capturedBody: Data?
+        AnthropicMockProtocol.requestHandler = { request in
+            capturedBody = request.httpBody
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        _ = try await engine.generateWithTools(messages: makeMessages("test"), tools: [makeTool()], config: makeConfig())
+
+        let body = try #require(capturedBody)
+        let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let tools = try #require(json["tools"] as? [[String: Any]])
+        #expect(tools.count == 1)
+        #expect(tools[0]["name"] as? String == "search")
+        #expect(tools[0]["description"] as? String == "Search the web")
+        let inputSchema = try #require(tools[0]["input_schema"] as? [String: Any])
+        #expect(inputSchema["type"] as? String == "object")
+    }
+
+    @Test("Tool calling text response")
+    func toolCallingTextResponse() async throws {
+        let responseJSON = """
+        {"content": [{"type": "text", "text": "  Text result  "}]}
+        """.data(using: .utf8)!
+
+        AnthropicMockProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        let result = try await engine.generateWithTools(messages: makeMessages("test"), tools: [makeTool()], config: makeConfig())
+        if case .text(let msg) = result {
+            #expect(msg.content == "Text result")
+        } else {
+            Issue.record("Expected .text response")
+        }
+    }
+
+    @Test("Tool calling returns toolCalls from tool_use blocks")
+    func toolCallingToolCalls() async throws {
+        let responseJSON = """
+        {"content": [{"type": "tool_use", "id": "toolu_1", "name": "search", "input": {"q": "test"}}], "usage": {"input_tokens": 20, "output_tokens": 10}}
+        """.data(using: .utf8)!
+
+        AnthropicMockProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        let result = try await engine.generateWithTools(messages: makeMessages("test"), tools: [makeTool()], config: makeConfig())
+        if case .toolCalls(let calls, let usage) = result {
+            #expect(calls.count == 1)
+            #expect(calls[0].id == "toolu_1")
+            #expect(calls[0].name == "search")
+            #expect(usage?.inputTokens == 20)
+        } else {
+            Issue.record("Expected .toolCalls response")
+        }
+    }
+
+    @Test("Tool result sent as user message with tool_result block")
+    func toolResultFormat() async throws {
+        let responseJSON = """
+        {"content": [{"type": "text", "text": "ok"}]}
+        """.data(using: .utf8)!
+
+        var capturedBody: Data?
+        AnthropicMockProtocol.requestHandler = { request in
+            capturedBody = request.httpBody
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, responseJSON)
+        }
+
+        let calls = [LLMToolCall(id: "toolu_1", name: "search", arguments: #"{"q":"test"}"#.data(using: .utf8)!)]
+        let messages = [
+            LLMMessage(role: .user, content: "Search"),
+            LLMMessage(role: .assistant, content: "", toolCalls: calls),
+            LLMMessage(role: .tool, content: "search result", toolCallId: "toolu_1"),
+        ]
+        _ = try await engine.generateWithTools(messages: messages, tools: [makeTool()], config: makeConfig())
+
+        let body = try #require(capturedBody)
+        let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let apiMessages = try #require(json["messages"] as? [[String: Any]])
+
+        // Find the user message with tool_result content
+        let toolResultMsg = apiMessages.first { msg in
+            guard let content = msg["content"] as? [[String: Any]] else { return false }
+            return content.first?["type"] as? String == "tool_result"
+        }
+        let content = try #require(toolResultMsg?["content"] as? [[String: Any]])
+        #expect(content[0]["tool_use_id"] as? String == "toolu_1")
+        #expect(content[0]["content"] as? String == "search result")
+    }
+
+    @Test("Tool calling with missing apiKey throws notConfigured")
+    func toolCallingMissingApiKey() async throws {
+        await #expect(throws: LLMEngineError.self) {
+            try await engine.generateWithTools(
+                messages: makeMessages("test"),
+                tools: [makeTool()],
+                config: makeConfig(apiKey: "")
+            )
+        }
+    }
 }
