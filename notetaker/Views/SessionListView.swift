@@ -21,11 +21,18 @@ struct SessionListView: View {
     @State private var searchText = ""
     @State private var dateFilter: DateFilter = .all
     @State private var searchDebounceTask: Task<Void, Never>?
+    @State private var sessionsToDelete: Set<UUID> = []
+    @State private var showDeleteConfirmation = false
 
     @State private var groupedSessions: [(date: Date, sessions: [RecordingSession])] = []
 
+    /// All non-deleted sessions (excludes trash).
+    private var activeSessions: [RecordingSession] {
+        sessions.filter { $0.deletedAt == nil }
+    }
+
     private var filteredSessions: [RecordingSession] {
-        var result = sessions
+        var result = activeSessions
 
         // Date filter
         if dateFilter != .all {
@@ -73,7 +80,26 @@ struct SessionListView: View {
         sessionList
             .listStyle(.sidebar)
             .searchable(text: $searchText, prompt: "Search sessions...")
-            .onDeleteCommand { deleteSessions(ids: selectedSessionIDs) }
+            .onDeleteCommand {
+                sessionsToDelete = selectedSessionIDs
+                showDeleteConfirmation = true
+            }
+            .confirmationDialog(
+                "Delete \(sessionsToDelete.count == 1 ? "Session" : "\(sessionsToDelete.count) Sessions")?",
+                isPresented: $showDeleteConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    deleteSessions(ids: sessionsToDelete)
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                if UserDefaults.standard.bool(forKey: "skipTrashOnDelete") {
+                    Text("This will permanently delete the recording\(sessionsToDelete.count == 1 ? "" : "s") and associated audio files.")
+                } else {
+                    Text("The recording\(sessionsToDelete.count == 1 ? "" : "s") will be moved to Trash and permanently deleted after 30 days.")
+                }
+            }
             .onAppear { updateGroupedSessions() }
             .onChange(of: sessions) { updateGroupedSessions() }
             .onChange(of: searchText) { _, newValue in
@@ -84,11 +110,11 @@ struct SessionListView: View {
                     searchDebounceTask = Task {
                         try? await Task.sleep(for: .milliseconds(300))
                         guard !Task.isCancelled else { return }
-                        updateGroupedSessions()
+                        withAnimation { updateGroupedSessions() }
                     }
                 }
             }
-            .onChange(of: dateFilter) { updateGroupedSessions() }
+            .onChange(of: dateFilter) { withAnimation { updateGroupedSessions() } }
             .onChange(of: selectedSessionIDs) { _, newValue in
                 if newValue.count == 1 {
                     selectedSessionID = newValue.first
@@ -106,7 +132,7 @@ struct SessionListView: View {
                 }
             }
             .overlay {
-                if sessions.isEmpty {
+                if activeSessions.isEmpty {
                     ContentUnavailableView(
                         "No Sessions",
                         systemImage: "tray",
@@ -129,6 +155,14 @@ struct SessionListView: View {
                         SessionRowView(session: session)
                             .tag(session.id)
                             .contextMenu {
+                                Button {
+                                    let sorted = session.segments.sorted { $0.startTime < $1.startTime }
+                                    TranscriptExporter.copyToClipboard(segments: sorted, title: session.title)
+                                } label: {
+                                    Label("Copy Transcript", systemImage: "doc.on.doc")
+                                }
+                                .disabled(session.segments.isEmpty)
+                                Divider()
                                 deleteButton(for: [session.id])
                             }
                     }
@@ -143,29 +177,31 @@ struct SessionListView: View {
     }
 
     private func deleteButton(for ids: Set<UUID>) -> some View {
-        let label = ids.count == 1 ? "Delete" : "Delete \(ids.count) Sessions"
+        let skipTrash = UserDefaults.standard.bool(forKey: "skipTrashOnDelete")
+        let label = ids.count == 1
+            ? (skipTrash ? "Delete Permanently" : "Move to Trash")
+            : (skipTrash ? "Delete \(ids.count) Permanently" : "Move \(ids.count) to Trash")
         return Button(label, role: .destructive) {
-            deleteSessions(ids: ids)
+            sessionsToDelete = ids
+            showDeleteConfirmation = true
         }
     }
 
     private func deleteSessions(ids: Set<UUID>) {
         let count = ids.count
+        let skipTrash = UserDefaults.standard.bool(forKey: "skipTrashOnDelete")
         for id in ids {
-            if let session = sessions.first(where: { $0.id == id }) {
-                for audioURL in session.audioFileURLs {
-                    do {
-                        try FileManager.default.removeItem(at: audioURL)
-                    } catch {
-                        Self.logger.warning("Failed to delete audio file \(audioURL.lastPathComponent): \(error.localizedDescription)")
-                    }
+            if let session = activeSessions.first(where: { $0.id == id }) {
+                if skipTrash {
+                    TrashCleanupService.permanentlyDelete(session: session, context: modelContext)
+                } else {
+                    session.moveToTrash()
                 }
-                modelContext.delete(session)
             }
         }
         do {
             try modelContext.save()
-            Self.logger.info("Deleted \(count) session(s)")
+            Self.logger.info("\(skipTrash ? "Permanently deleted" : "Moved to trash") \(count) session(s)")
         } catch {
             Self.logger.error("Failed to delete sessions: \(error.localizedDescription)")
         }
@@ -188,7 +224,7 @@ private struct SessionRowView: View {
                     .lineLimit(1)
                 if session.isPartial {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption2)
+                        .font(DS.Typography.caption2)
                         .foregroundStyle(.orange)
                         .help("Incomplete — saved on quit")
                 }
@@ -200,7 +236,7 @@ private struct SessionRowView: View {
                     .foregroundStyle(.secondary)
 
                 if session.totalDuration > 0 {
-                    Text("·")
+                    Text("\u{00b7}")
                         .foregroundStyle(.secondary)
                     Text(session.totalDuration.compactDuration)
                         .font(DS.Typography.caption)
@@ -208,15 +244,22 @@ private struct SessionRowView: View {
                 }
 
                 if !session.segments.isEmpty {
-                    Text("·")
+                    Text("\u{00b7}")
                         .foregroundStyle(.secondary)
                     Text("\(session.segments.count) segments")
                         .font(DS.Typography.caption)
                         .foregroundStyle(.secondary)
                 }
 
+                if !session.summaries.isEmpty {
+                    Text("\u{00b7}")
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "text.badge.checkmark")
+                        .font(DS.Typography.caption)
+                        .foregroundStyle(.secondary)
+                        .help("\(session.summaries.count) summary/summaries")
+                }
             }
-
         }
         .padding(.vertical, DS.Spacing.xxs)
         .accessibilityLabel(accessibilityDescription)
@@ -280,5 +323,6 @@ private struct DateFilterChip: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
