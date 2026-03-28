@@ -7,6 +7,7 @@ struct ContentView: View {
     var schedulerViewModel: SchedulerViewModel
     @State private var selectedSessionID: UUID?
     @State private var showScheduleSheet = false
+    @State private var showAnalytics = false
 
     /// Handle recording completion — works both on initial appear and state change.
     /// Background summary is already dispatched by the ViewModel's drainTask.
@@ -44,13 +45,27 @@ struct ContentView: View {
                         }
                         .accessibilityLabel("Scheduled recordings")
                     }
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            showAnalytics.toggle()
+                            if showAnalytics {
+                                selectedSessionID = nil
+                            }
+                        } label: {
+                            Image(systemName: "chart.bar.xaxis")
+                        }
+                        .accessibilityLabel("Analytics")
+                        .keyboardShortcut("a", modifiers: [.command, .shift])
+                    }
                 }
                 .sheet(isPresented: $showScheduleSheet) {
                     ScheduleView(schedulerViewModel: schedulerViewModel)
                         .frame(minWidth: 480, minHeight: 400)
                 }
         } detail: {
-            if viewModel.isActive || viewModel.state == .stopping {
+            if showAnalytics {
+                AnalyticsView()
+            } else if viewModel.isActive || viewModel.state == .stopping {
                 LiveRecordingView(
                     viewModel: viewModel,
                     onStop: {
@@ -81,9 +96,17 @@ struct ContentView: View {
         .onAppear {
             handleCompletionIfNeeded()
         }
+        .onChange(of: selectedSessionID) { _, newValue in
+            if newValue != nil {
+                showAnalytics = false
+            }
+        }
         .onChange(of: viewModel.state) { _, newState in
             if newState == .completed {
                 handleCompletionIfNeeded()
+            }
+            if viewModel.isActive {
+                showAnalytics = false
             }
         }
     }
