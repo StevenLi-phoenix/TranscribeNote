@@ -35,8 +35,17 @@ struct SessionDetailView: View {
             VStack(spacing: 0) {
                 // Header
                 VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-                    Text(session.title)
-                        .font(DS.Typography.title)
+                    TextField("Session Title", text: Binding(
+                        get: { session.title },
+                        set: { newTitle in
+                            let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !trimmed.isEmpty else { return }
+                            session.title = trimmed
+                            try? modelContext.save()
+                        }
+                    ))
+                    .font(DS.Typography.title)
+                    .textFieldStyle(.plain)
 
                     HStack {
                         Text(session.startedAt.formatted(date: .abbreviated, time: .shortened))
@@ -47,6 +56,14 @@ struct SessionDetailView: View {
                         if session.isPartial {
                             Label("Incomplete — saved on quit", systemImage: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.orange)
+                        }
+                        if !sortedSegments.isEmpty {
+                            Text("·")
+                            Text("\(sortedSegments.count) segments")
+                        }
+                        if !session.summaries.isEmpty {
+                            Text("·")
+                            Text("\(session.summaries.count) summaries")
                         }
                     }
                     .font(DS.Typography.callout)
