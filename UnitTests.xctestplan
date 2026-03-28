@@ -18,13 +18,19 @@
         "name" : "notetakerTests"
       },
       "selectedTests" : [
+        "AutoTitleTests",
         "AudioConfigTests",
         "ChatServiceTests",
+        "CommandPaletteTests",
+        "DateFilterBadgeTests",
+        "DragDropExportTests",
         "AudioExporterTests",
         "AudioLevelMeterTests",
         "BufferFactoryTests",
         "FileAudioSourceTests",
+        "GlobalHotkeyTests",
         "FoundationModelsEngineTests",
+        "KaraokeTranscriptSyncTests",
         "LLMConfigCoverageTests",
         "LLMHTTPHelpersTests",
         "LLMModelProfileCoverageTests",
@@ -32,14 +38,18 @@
         "LLMProviderCoverageTests",
         "LLMProviderTests",
         "LLMRoleCoverageTests",
+        "MarkdownExporterTests",
         "NoopEngineTests",
+        "PinFavoriteTests",
         "PromptBuilderExtendedTests",
         "PromptBuilderTests",
         "RecordingSessionExtendedTests",
         "RecordingSessionTests",
+        "SessionTrashTests",
         "RecordingViewModelTests",
         "RingBufferTests",
         "SimpleVADTests",
+        "SoundEffectTests",
         "SummarizerConfigExtendedTests",
         "SummarizerServiceExtendedTests",
         "SummarizerServiceTests",
@@ -49,7 +59,8 @@
         "SyntheticBufferInjectionTests",
         "TimeIntervalFormattingTests",
         "TranscriptSegmentTests",
-        "VADConfigTests"
+        "VADConfigTests",
+        "WordCounterTests"
       ]
     }
   ],
