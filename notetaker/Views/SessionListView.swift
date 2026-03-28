@@ -23,6 +23,9 @@ struct SessionListView: View {
     @State private var searchDebounceTask: Task<Void, Never>?
 
     @State private var groupedSessions: [(date: Date, sessions: [RecordingSession])] = []
+    @State private var showBatchResummarize = false
+    @State private var batchService = BatchResummarizeService()
+    @State private var batchProgress: BatchResummarizeService.BatchProgress?
 
     private var filteredSessions: [RecordingSession] {
         var result = sessions
@@ -129,6 +132,8 @@ struct SessionListView: View {
                         SessionRowView(session: session)
                             .tag(session.id)
                             .contextMenu {
+                                resummarizeButton(for: [session.id])
+                                Divider()
                                 deleteButton(for: [session.id])
                             }
                     }
@@ -137,8 +142,39 @@ struct SessionListView: View {
         }
         .contextMenu(forSelectionType: UUID.self) { ids in
             if !ids.isEmpty {
+                resummarizeButton(for: ids)
+                Divider()
                 deleteButton(for: ids)
             }
+        }
+        .sheet(isPresented: $showBatchResummarize) {
+            let selected = selectedSessionsForBatch
+            BatchResummarizeSheet(
+                sessionCount: selected.count,
+                isPresented: $showBatchResummarize,
+                onStart: {
+                    batchService.resummarize(
+                        sessions: selected,
+                        modelContext: modelContext,
+                        onProgress: { batchProgress = $0 }
+                    )
+                }
+            )
+        }
+    }
+
+    private var selectedSessionsForBatch: [RecordingSession] {
+        sessions.filter { selectedSessionIDs.contains($0.id) }
+    }
+
+    private func resummarizeButton(for ids: Set<UUID>) -> some View {
+        let count = ids.count
+        let label = count == 1 ? "Re-summarize" : "Re-summarize \(count) Sessions"
+        return Button {
+            selectedSessionIDs = ids
+            showBatchResummarize = true
+        } label: {
+            Label(label, systemImage: "arrow.trianglehead.2.counterclockwise")
         }
     }
 
