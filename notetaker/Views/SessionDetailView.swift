@@ -20,6 +20,7 @@ struct SessionDetailView: View {
     @State private var scrollToTime: TimeInterval?
     @State private var refreshTimer: Timer?
     @State private var isExportingAudio = false
+    @State private var markdownExportFeedback: String?
     @AppStorage("overallSummaryCollapsed") private var overallCollapsed = false
     @AppStorage("overallSummaryHeight") private var overallHeight: Double = 300
     @AppStorage("chunkSummariesHidden") private var chunkSummariesHidden = false
@@ -75,6 +76,26 @@ struct SessionDetailView: View {
                             Label("Share Transcript", systemImage: "square.and.arrow.up")
                         }
                         .disabled(sortedSegments.isEmpty)
+
+                        Button {
+                            exportMarkdown(session: session)
+                        } label: {
+                            Label("Export Markdown", systemImage: "doc.text")
+                        }
+                        .keyboardShortcut("e", modifiers: .command)
+                        .disabled(sortedSegments.isEmpty)
+
+                        if let markdownExportFeedback {
+                            Text(markdownExportFeedback)
+                                .font(DS.Typography.caption)
+                                .foregroundStyle(.secondary)
+                                .transition(.opacity)
+                                .task(id: markdownExportFeedback) {
+                                    try? await Task.sleep(for: .seconds(3))
+                                    guard !Task.isCancelled else { return }
+                                    self.markdownExportFeedback = nil
+                                }
+                        }
 
                         if isGeneratingSummary {
                             ProgressView().controlSize(.small)
@@ -244,6 +265,7 @@ struct SessionDetailView: View {
                 summaryGenerationError = nil
                 summaryProgress = nil
                 scrollToTime = nil
+                markdownExportFeedback = nil
                 showChatPanel = false
                 fetchSession()
             }
@@ -569,6 +591,45 @@ struct SessionDetailView: View {
                 summaryGenerationError = error.localizedDescription
             }
             isGeneratingSummary = false
+        }
+    }
+
+    private func exportMarkdown(session: RecordingSession) {
+        let segments = sortedSegments.map {
+            MarkdownExporter.SegmentInfo(startTime: $0.startTime, text: $0.text)
+        }
+        let summaries = session.summaries.map {
+            MarkdownExporter.SummaryInfo(
+                content: $0.displayContent,
+                coveringFrom: $0.coveringFrom,
+                coveringTo: $0.coveringTo,
+                isOverall: $0.isOverall
+            )
+        }
+
+        let markdown = MarkdownExporter.export(
+            title: session.title,
+            date: session.startedAt,
+            totalDuration: session.totalDuration,
+            segments: segments,
+            summaries: summaries,
+            options: .init()
+        )
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
+        let baseName = MarkdownExporter.sanitizeFilename(session.title)
+        panel.nameFieldStringValue = "\(baseName).md"
+
+        guard panel.runModal() == .OK, let destURL = panel.url else { return }
+
+        do {
+            try markdown.write(to: destURL, atomically: true, encoding: .utf8)
+            markdownExportFeedback = "Exported!"
+            Self.logger.info("Markdown exported to \(destURL.path)")
+        } catch {
+            Self.logger.error("Markdown export failed: \(error.localizedDescription)")
+            markdownExportFeedback = "Export failed"
         }
     }
 
