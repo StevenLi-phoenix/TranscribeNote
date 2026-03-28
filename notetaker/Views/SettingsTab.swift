@@ -216,10 +216,67 @@ struct SummarizationSettingsTab: View {
 
 struct RecordingSettingsTab: View {
     @AppStorage("vadConfigJSON") private var vadConfigJSON: String = ""
+    @AppStorage("globalHotkeyEnabled") private var globalHotkeyEnabled = true
+    @AppStorage("globalHotkeyKeyCode") private var hotkeyKeyCode = Int(GlobalHotkeyService.defaultKeyCode)
+    @AppStorage("globalHotkeyModifiers") private var hotkeyModifiers = Int(GlobalHotkeyService.defaultModifiers)
     @State private var config: VADConfig = .default
+    @State private var isRecordingHotkey = false
+    @State private var hotkeyMonitor: Any?
 
     var body: some View {
         SettingsGrid {
+            SettingsRow("Global Hotkey") {
+                Toggle("", isOn: $globalHotkeyEnabled)
+                    .labelsHidden()
+                    .help("Enable a system-wide keyboard shortcut to toggle recording.")
+                    .onChange(of: globalHotkeyEnabled) { _, _ in
+                        GlobalHotkeyService.shared.register()
+                    }
+            }
+
+            if globalHotkeyEnabled {
+                SettingsRow("Shortcut") {
+                    HStack(spacing: DS.Spacing.sm) {
+                        Button {
+                            if isRecordingHotkey {
+                                stopRecordingHotkey()
+                            } else {
+                                startRecordingHotkey()
+                            }
+                        } label: {
+                            if isRecordingHotkey {
+                                Text("Press shortcut…")
+                                    .foregroundStyle(.orange)
+                                    .font(DS.Typography.caption)
+                            } else {
+                                Text(HotkeyDisplayHelper.displayString(
+                                    keyCode: UInt16(hotkeyKeyCode),
+                                    modifiers: UInt(hotkeyModifiers)
+                                ))
+                                .font(.system(.body, design: .monospaced))
+                                .padding(.horizontal, DS.Spacing.sm)
+                                .padding(.vertical, DS.Spacing.xxs)
+                                .background(.quaternary)
+                                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sm))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Recording hotkey: \(HotkeyDisplayHelper.displayString(keyCode: UInt16(hotkeyKeyCode), modifiers: UInt(hotkeyModifiers)))")
+
+                        Button("Reset") {
+                            hotkeyKeyCode = Int(GlobalHotkeyService.defaultKeyCode)
+                            hotkeyModifiers = Int(GlobalHotkeyService.defaultModifiers)
+                            GlobalHotkeyService.shared.register()
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .font(DS.Typography.caption)
+                    }
+                }
+            }
+
+            Divider()
+
             SettingsRow("Voice Activity Detection") {
                 Toggle("", isOn: $config.vadEnabled)
                     .labelsHidden()
@@ -260,9 +317,36 @@ struct RecordingSettingsTab: View {
                 }
             }
         }
+        .animation(.easeInOut(duration: 0.2), value: globalHotkeyEnabled)
+        .animation(.easeInOut(duration: 0.2), value: config.silenceTimeoutSeconds != nil)
         .onAppear { loadConfig() }
+        .onDisappear { stopRecordingHotkey() }
         .onChange(of: config) { _, newValue in saveConfig(newValue) }
         .settingsFooter("Changes take effect on next recording.", icon: "arrow.clockwise")
+    }
+
+    private func startRecordingHotkey() {
+        isRecordingHotkey = true
+        // Temporarily unregister the global hotkey so it doesn't fire while recording a new one
+        GlobalHotkeyService.shared.unregister()
+        hotkeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [self] event in
+            let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            // Require at least one modifier key
+            guard !mods.isEmpty else { return event }
+            hotkeyKeyCode = Int(event.keyCode)
+            hotkeyModifiers = Int(mods.rawValue)
+            stopRecordingHotkey()
+            GlobalHotkeyService.shared.register()
+            return nil // Consume the event
+        }
+    }
+
+    private func stopRecordingHotkey() {
+        isRecordingHotkey = false
+        if let monitor = hotkeyMonitor {
+            NSEvent.removeMonitor(monitor)
+            hotkeyMonitor = nil
+        }
     }
 
     private func loadConfig() {

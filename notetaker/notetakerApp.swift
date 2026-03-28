@@ -22,6 +22,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Cancel all background summaries — don't wait for LLM responses
         BackgroundSummaryService.shared.cancelAll()
 
+        GlobalHotkeyService.shared.unregister()
+
         return .terminateNow
     }
 }
@@ -74,6 +76,34 @@ struct notetakerApp: App {
 
         // 3c: Auto-start is now handled directly by SchedulerViewModel.handleFire()
         // via direct callback to RecordingViewModel (no notification relay needed).
+
+        // Wire global hotkey to toggle recording
+        let hotkeyVM = vm
+        let hotkeyContainer = sharedModelContainer
+        GlobalHotkeyService.shared.onToggleRecording = { [weak hotkeyVM, weak hotkeyContainer] in
+            guard let vm = hotkeyVM else { return }
+            switch vm.state {
+            case .idle, .completed:
+                Task { @MainActor in
+                    await vm.startRecording(modelContext: hotkeyContainer?.mainContext)
+                }
+            case .recording, .paused:
+                vm.stopRecording(modelContext: hotkeyContainer?.mainContext)
+            case .stopping:
+                break // Ignore while stopping
+            }
+        }
+
+        // Set hotkey defaults if first launch
+        if UserDefaults.standard.object(forKey: "globalHotkeyEnabled") == nil {
+            UserDefaults.standard.set(true, forKey: "globalHotkeyEnabled")
+        }
+        if UserDefaults.standard.integer(forKey: "globalHotkeyKeyCode") == 0 {
+            UserDefaults.standard.set(Int(GlobalHotkeyService.defaultKeyCode), forKey: "globalHotkeyKeyCode")
+            UserDefaults.standard.set(Int(GlobalHotkeyService.defaultModifiers), forKey: "globalHotkeyModifiers")
+        }
+
+        GlobalHotkeyService.shared.register()
     }
 
     @ViewBuilder
