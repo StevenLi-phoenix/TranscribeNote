@@ -48,6 +48,7 @@
         "ToolCallingErrorTests",
         "SyntheticBufferInjectionTests",
         "TimeIntervalFormattingTests",
+        "TokenCountingTests",
         "TranscriptSegmentTests",
         "VADConfigTests"
       ]
