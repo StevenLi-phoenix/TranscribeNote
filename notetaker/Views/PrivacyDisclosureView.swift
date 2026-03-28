@@ -6,7 +6,7 @@ struct PrivacyDisclosureView: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: DS.Spacing.xl) {
             Image(systemName: "lock.shield")
                 .font(.system(size: 48))
                 .foregroundStyle(.blue)
@@ -43,8 +43,8 @@ struct PrivacyDisclosureView: View {
             }
             .font(.body)
             .padding()
-            .background(Color.secondary.opacity(0.1))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .background(.background.secondary)
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md))
 
             Button("I Understand") {
                 onDismiss()
@@ -56,12 +56,12 @@ struct PrivacyDisclosureView: View {
                  destination: Self.privacyPolicyURL)
                 .font(.caption)
         }
-        .padding(32)
+        .padding(DS.Spacing.xxl)
         .frame(width: 480)
     }
 
     private func disclosureSection(title: String, items: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
             Text(title)
                 .font(.headline)
                 .padding(.top, 4)

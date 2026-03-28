@@ -166,6 +166,21 @@ private struct ScheduledRecordingRow: View {
             Divider()
             Button("Delete", role: .destructive) { onDelete() }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(scheduleAccessibilityLabel)
+    }
+
+    private var scheduleAccessibilityLabel: String {
+        var parts = [recording.title.isEmpty ? "Untitled" : recording.title]
+        parts.append(recording.startTime.formatted(date: .abbreviated, time: .shortened))
+        if recording.rule != .once {
+            parts.append(recording.rule.displayName)
+        }
+        if let next = recording.nextFireTime {
+            parts.append("Next: \(next.formatted(date: .omitted, time: .shortened))")
+        }
+        parts.append(recording.isEnabled ? "Enabled" : "Disabled")
+        return parts.joined(separator: ", ")
     }
 }
 

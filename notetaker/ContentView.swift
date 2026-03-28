@@ -73,7 +73,7 @@ struct ContentView: View {
                 ContentUnavailableView(
                     "No Session Selected",
                     systemImage: "mic.badge.plus",
-                    description: Text("Select a session from the sidebar or press ⌘N to start recording")
+                    description: Text("Select a session from the sidebar, or press ⌘N to start a new recording.\nUse the menu bar icon for quick access.")
                 )
             }
         }

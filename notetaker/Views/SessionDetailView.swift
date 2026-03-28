@@ -107,6 +107,7 @@ struct SessionDetailView: View {
                                 } label: {
                                     Label("Save Audio", systemImage: "square.and.arrow.down")
                                 }
+                                .help("Export recording audio as M4A")
                             }
                         }
 
