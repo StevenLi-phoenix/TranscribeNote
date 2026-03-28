@@ -547,14 +547,17 @@ final class RecordingViewModel {
             // Save summaries
             self.persistSummaries(modelContext: modelContext)
 
-            // Dispatch background overall summary + action item extraction (independent of view lifecycle)
+            // Dispatch background overall summary (independent of view lifecycle)
             if let session = self.currentSession, let modelContext {
                 BackgroundSummaryService.shared.dispatchOverallSummary(
                     sessionID: session.id, container: modelContext.container
                 )
-                BackgroundSummaryService.shared.dispatchActionItemExtraction(
-                    sessionID: session.id, container: modelContext.container
-                )
+                // Only auto-extract action items if enabled in settings
+                if self.summarizerConfig.actionItemExtractionEnabled {
+                    BackgroundSummaryService.shared.dispatchActionItemExtraction(
+                        sessionID: session.id, container: modelContext.container
+                    )
+                }
             }
 
             self.state = .completed

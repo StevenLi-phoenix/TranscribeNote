@@ -9,6 +9,7 @@ nonisolated struct SummarizerConfig: Codable, Sendable, Equatable {
     var includeContext: Bool
     var maxContextTokens: Int
     var overallSummaryMode: OverallSummaryMode
+    var actionItemExtractionEnabled: Bool
 
     static let `default` = SummarizerConfig(
         liveSummarizationEnabled: true,
@@ -18,7 +19,8 @@ nonisolated struct SummarizerConfig: Codable, Sendable, Equatable {
         summaryStyle: .bullets,
         includeContext: true,
         maxContextTokens: 2000,
-        overallSummaryMode: .auto
+        overallSummaryMode: .auto,
+        actionItemExtractionEnabled: false
     )
 
     init(
@@ -29,7 +31,8 @@ nonisolated struct SummarizerConfig: Codable, Sendable, Equatable {
         summaryStyle: SummaryStyle = .bullets,
         includeContext: Bool = true,
         maxContextTokens: Int = 2000,
-        overallSummaryMode: OverallSummaryMode = .auto
+        overallSummaryMode: OverallSummaryMode = .auto,
+        actionItemExtractionEnabled: Bool = false
     ) {
         self.liveSummarizationEnabled = liveSummarizationEnabled
         self.intervalMinutes = intervalMinutes
@@ -39,6 +42,7 @@ nonisolated struct SummarizerConfig: Codable, Sendable, Equatable {
         self.includeContext = includeContext
         self.maxContextTokens = maxContextTokens
         self.overallSummaryMode = overallSummaryMode
+        self.actionItemExtractionEnabled = actionItemExtractionEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -51,6 +55,7 @@ nonisolated struct SummarizerConfig: Codable, Sendable, Equatable {
         includeContext = try container.decode(Bool.self, forKey: .includeContext)
         maxContextTokens = try container.decode(Int.self, forKey: .maxContextTokens)
         overallSummaryMode = try container.decodeIfPresent(OverallSummaryMode.self, forKey: .overallSummaryMode) ?? .auto
+        actionItemExtractionEnabled = try container.decodeIfPresent(Bool.self, forKey: .actionItemExtractionEnabled) ?? false
     }
 
     /// Load from UserDefaults, falling back to `.default`.

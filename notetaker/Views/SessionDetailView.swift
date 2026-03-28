@@ -24,6 +24,8 @@ struct SessionDetailView: View {
     @AppStorage("overallSummaryHeight") private var overallHeight: Double = 300
     @AppStorage("chunkSummariesHidden") private var chunkSummariesHidden = false
     @State private var showChatPanel = false
+    @State private var showActionItemsPopover = false
+    @State private var exportSuccessMessage: String?
     @AppStorage("chatPanelWidth") private var chatPanelWidth: Double = 320
 
     var body: some View {
@@ -116,6 +118,24 @@ struct SessionDetailView: View {
                             }
                         }
 
+                        if !session.actionItems.isEmpty {
+                            Button {
+                                showActionItemsPopover.toggle()
+                            } label: {
+                                Label("Action Items (\(session.actionItems.count))", systemImage: "checklist.checked")
+                            }
+                            .help("View extracted action items")
+                            .popover(isPresented: $showActionItemsPopover, arrowEdge: .bottom) {
+                                ActionItemListView(
+                                    actionItems: session.actionItems.sorted { $0.createdAt < $1.createdAt },
+                                    sessionTitle: session.title,
+                                    onExportReminders: { exportActionItemsToReminders() },
+                                    onExportCalendar: { exportActionItemsToCalendar() }
+                                )
+                                .frame(width: 400, height: 350)
+                            }
+                        }
+
                         Button {
                             withAnimation { showChatPanel.toggle() }
                         } label: {
@@ -175,30 +195,6 @@ struct SessionDetailView: View {
                     }
                 }
 
-                if let summaryGenerationError {
-                    Text(summaryGenerationError)
-                        .foregroundStyle(.secondary)
-                        .font(DS.Typography.caption)
-                        .padding(.horizontal)
-                        .transition(.opacity)
-                        .task(id: summaryGenerationError) {
-                            try? await Task.sleep(for: .seconds(5))
-                            guard !Task.isCancelled else { return }
-                            self.summaryGenerationError = nil
-                        }
-                }
-
-                // Action items (between summary and transcript)
-                if !session.actionItems.isEmpty {
-                    Divider()
-                    ActionItemListView(
-                        actionItems: session.actionItems.sorted { $0.createdAt < $1.createdAt },
-                        sessionTitle: session.title,
-                        onExportReminders: { exportActionItemsToReminders() },
-                        onExportCalendar: { exportActionItemsToCalendar() }
-                    )
-                }
-
                 Divider()
 
                 // Transcript with optional inline chunk summaries
@@ -237,6 +233,7 @@ struct SessionDetailView: View {
                         scrollToTime: $scrollToTime
                     )
                 }
+
             }
             .frame(maxWidth: .infinity)
 
@@ -262,6 +259,8 @@ struct SessionDetailView: View {
                 summaryProgress = nil
                 scrollToTime = nil
                 showChatPanel = false
+                showActionItemsPopover = false
+                exportSuccessMessage = nil
                 fetchSession()
             }
             .onDisappear {
@@ -269,6 +268,22 @@ struct SessionDetailView: View {
                 summaryTask?.cancel()
                 refreshTimer?.invalidate()
                 refreshTimer = nil
+            }
+            .alert("Error", isPresented: Binding(
+                get: { summaryGenerationError != nil },
+                set: { if !$0 { summaryGenerationError = nil } }
+            )) {
+                Button("OK") { summaryGenerationError = nil }
+            } message: {
+                Text(summaryGenerationError ?? "")
+            }
+            .alert("Success", isPresented: Binding(
+                get: { exportSuccessMessage != nil },
+                set: { if !$0 { exportSuccessMessage = nil } }
+            )) {
+                Button("OK") { exportSuccessMessage = nil }
+            } message: {
+                Text(exportSuccessMessage ?? "")
             }
         } else if let fetchError {
             ContentUnavailableView(
@@ -646,6 +661,11 @@ struct SessionDetailView: View {
                 try modelContext.save()
                 fetchSession()
                 Self.logger.info("Extracted \(rawItems.count) action items manually")
+                if rawItems.isEmpty {
+                    exportSuccessMessage = "No action items found in this transcript."
+                } else {
+                    exportSuccessMessage = "Extracted \(rawItems.count) action items."
+                }
             } catch {
                 Self.logger.error("Action item extraction failed: \(error.localizedDescription)")
                 summaryGenerationError = error.localizedDescription
@@ -657,7 +677,10 @@ struct SessionDetailView: View {
     private func exportActionItemsToReminders() {
         guard let session else { return }
         let items = session.actionItems.filter { !$0.isCompleted }
-        guard !items.isEmpty else { return }
+        guard !items.isEmpty else {
+            summaryGenerationError = "No incomplete action items to export."
+            return
+        }
 
         Task {
             let service = RemindersExportService()
@@ -667,9 +690,10 @@ struct SessionDetailView: View {
                     sessionTitle: session.title
                 )
                 Self.logger.info("Exported \(count) action items to Reminders")
+                exportSuccessMessage = "Exported \(count) action items to Reminders."
             } catch {
                 Self.logger.error("Reminders export failed: \(error.localizedDescription)")
-                summaryGenerationError = "Reminders export failed: \(error.localizedDescription)"
+                summaryGenerationError = error.localizedDescription
             }
         }
     }
@@ -690,9 +714,10 @@ struct SessionDetailView: View {
                     sessionTitle: session.title
                 )
                 Self.logger.info("Exported \(count) action items to Calendar")
+                exportSuccessMessage = "Exported \(count) events to Calendar."
             } catch {
                 Self.logger.error("Calendar export failed: \(error.localizedDescription)")
-                summaryGenerationError = "Calendar export failed: \(error.localizedDescription)"
+                summaryGenerationError = error.localizedDescription
             }
         }
     }

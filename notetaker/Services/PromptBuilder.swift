@@ -157,7 +157,17 @@ enum PromptBuilder {
 
         // System: instruct JSON array output (stable, cache candidate)
         var systemParts = [
-            "You are an action item extractor. Analyze the transcript and extract all action items, decisions, and follow-up tasks.",
+            """
+            You are an action item extractor. Extract ONLY explicit commitments and assignments from the transcript.
+
+            STRICT RULES — do NOT extract:
+            - Topics that were merely discussed or explained
+            - General observations or summaries of content
+            - Things that "should" happen with no one assigned
+            - Background information or context
+
+            ONLY extract items where someone explicitly said they WILL do something, or was ASKED to do something specific.
+            """,
             """
             Output a JSON array with this exact structure (no other text, no code fences):
             [
@@ -171,11 +181,11 @@ enum PromptBuilder {
             """,
             """
             Categories:
-            - "task": concrete actions someone needs to do
-            - "decision": decisions that were made during the discussion
-            - "followUp": items that need future follow-up or checking
+            - "task": someone explicitly committed to doing something (e.g. "I'll send the report", "Can you review this?")
+            - "decision": a concrete decision was agreed upon (e.g. "We decided to use Postgres", "Let's go with option B")
+            - "followUp": someone explicitly said they need to check back on something (e.g. "Let's revisit this next week")
             """,
-            "If there are no action items, return an empty array: []"
+            "If there are no clear action items, return an empty array: []. It is BETTER to return fewer, accurate items than many vague ones."
         ]
 
         if config.summaryLanguage != "auto" {
