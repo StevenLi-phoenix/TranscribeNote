@@ -1,6 +1,9 @@
 import SwiftUI
+import SwiftData
 
 struct AboutTab: View {
+    @Query private var sessions: [RecordingSession]
+    @State private var isRebuilding = false
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
     }
@@ -40,6 +43,29 @@ struct AboutTab: View {
                      destination: PrivacyDisclosureView.privacyPolicyURL)
             }
             .font(DS.Typography.body)
+
+            Divider()
+                .frame(maxWidth: 300)
+
+            // Maintenance
+            Button {
+                isRebuilding = true
+                let dataList = sessions.map { SpotlightIndexer.sessionData(from: $0) }
+                Task.detached {
+                    await SpotlightIndexer.shared.reindexAll(sessions: dataList)
+                    await MainActor.run { isRebuilding = false }
+                }
+            } label: {
+                if isRebuilding {
+                    ProgressView()
+                        .controlSize(.small)
+                        .padding(.trailing, DS.Spacing.xs)
+                    Text("Rebuilding...")
+                } else {
+                    Label("Rebuild Spotlight Index", systemImage: "magnifyingglass")
+                }
+            }
+            .disabled(isRebuilding)
 
             Spacer()
 

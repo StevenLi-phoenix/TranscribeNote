@@ -1,14 +1,31 @@
 import SwiftUI
 import SwiftData
+import CoreSpotlight
 import os
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var viewModel: RecordingViewModel?
     var schedulerViewModel: SchedulerViewModel?
     var modelContainer: ModelContainer?
+    /// Set by Spotlight deep link; ContentView observes this to navigate.
+    var spotlightSessionID: UUID?
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    func application(
+        _ application: NSApplication,
+        continue userActivity: NSUserActivity,
+        restorationHandler: @escaping ([any NSUserActivityRestoring]) -> Void
+    ) -> Bool {
+        guard userActivity.activityType == CSSearchableItemActionType,
+              let sessionID = SpotlightIndexer.sessionID(from: userActivity) else {
+            return false
+        }
+        spotlightSessionID = sessionID
+        NSApp.activate()
+        return true
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
