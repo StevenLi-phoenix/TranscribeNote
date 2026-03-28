@@ -306,6 +306,11 @@ struct SessionDetailView: View {
                 startRefreshTimerIfNeeded()
             }
             .onChange(of: sessionID) { _, _ in
+                // Auto-save title if changed
+                let trimmed = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    try? modelContext.save()
+                }
                 playbackService.stop()
                 summaryTask?.cancel()
                 refreshTimer?.invalidate()
@@ -320,6 +325,11 @@ struct SessionDetailView: View {
                 fetchSession()
             }
             .onDisappear {
+                // Auto-save title if changed
+                let trimmed = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    try? modelContext.save()
+                }
                 playbackService.stop()
                 summaryTask?.cancel()
                 refreshTimer?.invalidate()

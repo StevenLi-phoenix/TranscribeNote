@@ -153,6 +153,10 @@ struct ChatView: View {
             TextField("Ask about this transcript…", text: $inputText)
                 .textFieldStyle(.plain)
                 .onSubmit { sendMessage() }
+                .onKeyPress(.escape) {
+                    inputText = ""
+                    return .handled
+                }
 
             if isGenerating {
                 ProgressView()

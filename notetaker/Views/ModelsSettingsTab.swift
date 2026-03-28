@@ -12,6 +12,7 @@ struct ModelsSettingsTab: View {
     @State private var connectionStatus: StatusIndicator.Status = .unknown
     @State private var connectionError: String?
     @State private var connectionTask: Task<Void, Never>?
+    @State private var showDeleteConfirmation = false
 
     private var selectedProfile: Binding<LLMModelProfile>? {
         guard let id = selectedProfileID,
@@ -47,9 +48,7 @@ struct ModelsSettingsTab: View {
                     }
 
                     Button {
-                        if let id = selectedProfileID {
-                            deleteProfile(id: id)
-                        }
+                        showDeleteConfirmation = true
                     } label: {
                         Image(systemName: "minus")
                     }
@@ -111,6 +110,16 @@ struct ModelsSettingsTab: View {
                     description: Text("Choose a model profile from the list or add a new one")
                 )
             }
+        }
+        .confirmationDialog("Delete this model profile?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                if let id = selectedProfileID {
+                    deleteProfile(id: id)
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This action cannot be undone.")
         }
         .onAppear { loadProfiles() }
         .onChange(of: profiles) { _, _ in hasUnsavedChanges = true }

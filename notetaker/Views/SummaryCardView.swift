@@ -207,6 +207,7 @@ struct SummaryCardView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
+                .keyboardShortcut(.escape, modifiers: [])
 
                 Button("Save") {
                     onSave?(editText)
@@ -215,6 +216,7 @@ struct SummaryCardView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 .disabled(editText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .keyboardShortcut(.return, modifiers: [.command])
             }
         }
     }
@@ -236,6 +238,7 @@ struct SummaryCardView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
+                .keyboardShortcut(.escape, modifiers: [])
 
                 Button("Regenerate") {
                     onRegenerate?(regenerateInstructions)
@@ -244,6 +247,7 @@ struct SummaryCardView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 .disabled(regenerateInstructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .keyboardShortcut(.return, modifiers: [.command])
             }
         }
     }
