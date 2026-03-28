@@ -25,6 +25,8 @@ struct SessionDetailView: View {
     @AppStorage("chunkSummariesHidden") private var chunkSummariesHidden = false
     @State private var showChatPanel = false
     @AppStorage("chatPanelWidth") private var chatPanelWidth: Double = 320
+    @State private var waveformData: WaveformExtractor.WaveformData?
+    @State private var waveformTask: Task<Void, Never>?
 
     var body: some View {
         if isLoading {
@@ -123,6 +125,19 @@ struct SessionDetailView: View {
                 // Playback controls
                 if !session.audioFileURLs.isEmpty {
                     Divider()
+                    if let waveformData, !waveformData.samples.isEmpty {
+                        WaveformView(
+                            waveformData: waveformData,
+                            currentTime: playbackService.currentTime,
+                            duration: playbackService.duration,
+                            isPlaying: playbackService.isPlaying,
+                            onSeek: { time in
+                                playbackService.seek(to: time)
+                            }
+                        )
+                        .padding(.horizontal)
+                        .padding(.top, DS.Spacing.sm)
+                    }
                     PlaybackControlView(service: playbackService)
                 }
 
@@ -245,11 +260,14 @@ struct SessionDetailView: View {
                 summaryProgress = nil
                 scrollToTime = nil
                 showChatPanel = false
+                waveformData = nil
+                waveformTask?.cancel()
                 fetchSession()
             }
             .onDisappear {
                 playbackService.stop()
                 summaryTask?.cancel()
+                waveformTask?.cancel()
                 refreshTimer?.invalidate()
                 refreshTimer = nil
             }
@@ -290,6 +308,21 @@ struct SessionDetailView: View {
         let urls = session.audioFileURLs.filter { FileManager.default.fileExists(atPath: $0.path) }
         guard !urls.isEmpty else { return }
         playbackService.loadMultiple(urls: urls)
+        loadWaveform(urls: urls)
+    }
+
+    private func loadWaveform(urls: [URL]) {
+        waveformTask?.cancel()
+        waveformTask = Task { @MainActor in
+            do {
+                let data = try await WaveformExtractor.extract(from: urls)
+                guard !Task.isCancelled else { return }
+                waveformData = data
+            } catch {
+                guard !Task.isCancelled else { return }
+                Self.logger.error("Waveform extraction failed: \(error.localizedDescription)")
+            }
+        }
     }
 
     /// Load overall LLM config via profile store with inheritance and legacy fallback.

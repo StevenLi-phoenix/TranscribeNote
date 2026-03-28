@@ -56,5 +56,6 @@ enum DS {
         static let summaryMaxHeight: CGFloat = 300
         static let controlBarMinHeight: CGFloat = 48
         static let timeMinWidth: CGFloat = 64
+        static let waveformHeight: CGFloat = 60
     }
 }
