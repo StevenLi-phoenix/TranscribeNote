@@ -78,6 +78,11 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 600, minHeight: 400)
+        .overlay(alignment: .top) {
+            FocusReminderBanner(isVisible: $viewModel.showFocusReminder)
+                .padding(.horizontal, DS.Spacing.md)
+                .padding(.top, DS.Spacing.sm)
+        }
         .onAppear {
             handleCompletionIfNeeded()
         }

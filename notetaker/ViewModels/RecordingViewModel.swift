@@ -52,6 +52,8 @@ final class RecordingViewModel {
 
     // Duration-end prompt (2c)
     var showDurationEndPrompt = false
+    // Focus mode reminder banner
+    var showFocusReminder = false
     private(set) var scheduledInfo: ScheduledRecordingInfo?
 
     var isRecording: Bool { state == .recording }
@@ -186,6 +188,11 @@ final class RecordingViewModel {
             if let minutes = scheduledInfo?.durationMinutes {
                 remainingDurationSeconds = TimeInterval(minutes * 60)
                 startDurationEndTimer()
+            }
+
+            // Check Focus mode and show reminder if not active
+            if FocusModeService.shouldShowReminder() {
+                showFocusReminder = true
             }
         } catch {
             errorMessage = "Failed to start recording: \(error.localizedDescription)"
@@ -480,6 +487,7 @@ final class RecordingViewModel {
 
         let wasPaused = state == .paused
 
+        showFocusReminder = false
         timer?.invalidate()
         timer = nil
         summaryTimer?.invalidate()
@@ -620,6 +628,7 @@ final class RecordingViewModel {
         latestSummary = nil
         summaryError = nil
         stoppingStatus = "Saving..."
+        showFocusReminder = false
         lastSummarizedSegmentCount = 0
         nextPeriodicCoveringFrom = 0
         periodicWindowCount = 0

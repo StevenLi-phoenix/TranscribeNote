@@ -216,10 +216,17 @@ struct SummarizationSettingsTab: View {
 
 struct RecordingSettingsTab: View {
     @AppStorage("vadConfigJSON") private var vadConfigJSON: String = ""
+    @AppStorage("focusReminderEnabled") private var focusReminderEnabled = true
     @State private var config: VADConfig = .default
 
     var body: some View {
         SettingsGrid {
+            SettingsRow("Focus Reminder") {
+                Toggle("", isOn: $focusReminderEnabled)
+                    .labelsHidden()
+                    .help("Show a reminder to turn on Do Not Disturb when starting a recording")
+            }
+
             SettingsRow("Voice Activity Detection") {
                 Toggle("", isOn: $config.vadEnabled)
                     .labelsHidden()
