@@ -106,7 +106,7 @@ struct notetakerApp: App {
                         schedulerViewModel.load(context: sharedModelContainer.mainContext)
                     }
             } else {
-                VStack(spacing: 12) {
+                VStack(spacing: DS.Spacing.md) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.largeTitle)
                         .foregroundStyle(.yellow)

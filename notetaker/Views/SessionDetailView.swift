@@ -322,6 +322,7 @@ struct SessionDetailView: View {
                 summaryProgress = nil
                 scrollToTime = nil
                 showChatPanel = false
+                showCopiedTranscript = false
                 fetchSession()
             }
             .onDisappear {
