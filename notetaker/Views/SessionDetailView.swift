@@ -229,6 +229,26 @@ struct SessionDetailView: View {
                     .frame(width: chatPanelWidth)
             }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .togglePlayback)) { _ in
+                guard playbackService.duration > 0 else { return }
+                playbackService.togglePlayPause()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .seekForward)) { _ in
+                guard playbackService.duration > 0 else { return }
+                playbackService.seek(to: playbackService.currentTime + 5)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .seekBackward)) { _ in
+                guard playbackService.duration > 0 else { return }
+                playbackService.seek(to: playbackService.currentTime - 5)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .seekForwardLong)) { _ in
+                guard playbackService.duration > 0 else { return }
+                playbackService.seek(to: playbackService.currentTime + 15)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .seekBackwardLong)) { _ in
+                guard playbackService.duration > 0 else { return }
+                playbackService.seek(to: playbackService.currentTime - 15)
+            }
             .onAppear {
                 loadAudio(for: session)
                 startRefreshTimerIfNeeded()
