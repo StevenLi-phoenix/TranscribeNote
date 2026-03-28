@@ -18,6 +18,9 @@ struct SettingsView: View {
             RecordingSettingsTab()
                 .tabItem { Label("Recording", systemImage: "mic") }
 
+            RecipeListView()
+                .tabItem { Label("Recipes", systemImage: "list.bullet.rectangle") }
+
             AboutTab()
                 .tabItem { Label("About", systemImage: "info.circle") }
         }

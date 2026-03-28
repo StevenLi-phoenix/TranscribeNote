@@ -92,6 +92,36 @@ nonisolated final class SummarizerService: @unchecked Sendable {
         return result.content
     }
 
+    /// Regenerate a summary using an AI Recipe template.
+    func summarizeWithRecipe(
+        segments: [TranscriptSegment],
+        recipe: AIRecipe,
+        title: String,
+        config: SummarizerConfig,
+        llmConfig: LLMConfig
+    ) async throws -> String {
+        let transcript = segments
+            .sorted { $0.startTime < $1.startTime }
+            .map { "[\($0.startTime.mmss)] \($0.text)" }
+            .joined(separator: "\n")
+
+        let duration = segments.last.map { "\(Int($0.endTime / 60))m" } ?? ""
+        let date = ISO8601DateFormatter().string(from: Date())
+
+        let messages = PromptBuilder.buildRecipePrompt(
+            recipe: recipe,
+            transcript: transcript,
+            title: title,
+            duration: duration,
+            date: date,
+            config: config
+        )
+
+        Self.logger.info("Starting recipe regeneration (\(segments.count) segments, recipe: \(recipe.name))")
+        let result = try await retryableGenerate(messages: messages, llmConfig: llmConfig, label: "recipe regeneration")
+        return result.content
+    }
+
     /// Generate a short descriptive title from transcript segments.
     func generateTitle(
         segments: [TranscriptSegment],

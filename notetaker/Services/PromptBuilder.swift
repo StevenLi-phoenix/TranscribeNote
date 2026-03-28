@@ -176,4 +176,50 @@ enum PromptBuilder {
 
         return messages
     }
+
+    /// Build prompt messages using an AI Recipe template.
+    static func buildRecipePrompt(
+        recipe: AIRecipe,
+        transcript: String,
+        title: String = "",
+        duration: String = "",
+        date: String = "",
+        config: SummarizerConfig
+    ) -> [LLMMessage] {
+        let vars: [String: String] = [
+            "transcript": transcript,
+            "title": title,
+            "duration": duration,
+            "date": date,
+        ]
+        let interpolated = RecipeStore.interpolate(template: recipe.promptTemplate, vars: vars)
+
+        // Build section instructions if recipe has outputSections
+        var sectionHint = ""
+        if !recipe.outputSections.isEmpty {
+            sectionHint = "\nOrganize your response into these sections: "
+                + recipe.outputSections.joined(separator: ", ")
+        }
+
+        // Map recipe summaryStyle string to SummaryStyle enum (fallback to bullets)
+        let style: SummaryStyle = switch recipe.summaryStyle {
+        case "paragraph": .paragraph
+        case "actionItems": .actionItems
+        case "lectureNotes": .lectureNotes
+        default: .bullets
+        }
+
+        let task = "Summarize the following content."
+        let (role, format) = styleInstructions(style: style, task: task)
+        let constraints = constraintBlock(config: config)
+
+        let systemContent = [role, format, sectionHint, constraints]
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
+
+        return [
+            LLMMessage(role: .system, content: systemContent),
+            LLMMessage(role: .user, content: interpolated),
+        ]
+    }
 }

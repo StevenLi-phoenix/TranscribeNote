@@ -156,6 +156,9 @@ struct SessionDetailView: View {
                                     },
                                     onRegenerate: { instructions in
                                         regenerateSummary(block: overall, instructions: instructions)
+                                    },
+                                    onRegenerateWithRecipe: { recipe in
+                                        regenerateWithRecipe(block: overall, recipe: recipe)
                                     }
                                 )
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -566,6 +569,71 @@ struct SessionDetailView: View {
                 }
             } catch {
                 Self.logger.error("Guided regeneration failed: \(error.localizedDescription)")
+                summaryGenerationError = error.localizedDescription
+            }
+            isGeneratingSummary = false
+        }
+    }
+
+    private func regenerateWithRecipe(block: SummaryBlock, recipe: AIRecipe) {
+        let id = sessionID
+        let blockCoveringFrom = block.coveringFrom
+        let blockCoveringTo = block.coveringTo
+        let blockID = block.id
+        let capturedSegments = sortedSegments
+        let sessionTitle = session?.title ?? ""
+
+        isGeneratingSummary = true
+        summaryGenerationError = nil
+
+        summaryTask = Task { @MainActor in
+            do {
+                let llmConfig = Self.loadOverallLLMConfig()
+                let summarizerConfig = SummarizerConfig.fromUserDefaults()
+                let engine = LLMEngineFactory.create(from: llmConfig)
+                let service = SummarizerService(engine: engine)
+
+                let relevantSegments = capturedSegments.filter {
+                    $0.startTime >= blockCoveringFrom && $0.startTime < blockCoveringTo
+                }
+
+                guard !relevantSegments.isEmpty else {
+                    summaryGenerationError = "No transcript segments in this time range."
+                    isGeneratingSummary = false
+                    return
+                }
+
+                let content = try await service.summarizeWithRecipe(
+                    segments: relevantSegments,
+                    recipe: recipe,
+                    title: sessionTitle,
+                    config: summarizerConfig,
+                    llmConfig: llmConfig
+                )
+
+                guard !Task.isCancelled, !content.isEmpty else {
+                    isGeneratingSummary = false
+                    return
+                }
+
+                // Re-fetch session after await
+                let predicate = #Predicate<RecordingSession> { $0.id == id }
+                guard let currentSession = try? modelContext.fetch(FetchDescriptor(predicate: predicate)).first else {
+                    summaryGenerationError = "Session was deleted during regeneration."
+                    isGeneratingSummary = false
+                    return
+                }
+
+                if let targetBlock = currentSession.summaries.first(where: { $0.id == blockID }) {
+                    targetBlock.content = content
+                    targetBlock.generatedAt = Date()
+                    targetBlock.editedContent = nil
+                    targetBlock.userEdited = false
+                    try modelContext.save()
+                    fetchSession()
+                }
+            } catch {
+                Self.logger.error("Recipe regeneration failed: \(error.localizedDescription)")
                 summaryGenerationError = error.localizedDescription
             }
             isGeneratingSummary = false

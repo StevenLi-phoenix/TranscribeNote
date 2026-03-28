@@ -12,6 +12,7 @@ struct SummaryCardView: View {
     var onTimeTap: (() -> Void)?
     var onSave: ((String) -> Void)?
     var onRegenerate: ((String) -> Void)?
+    var onRegenerateWithRecipe: ((AIRecipe) -> Void)?
 
     @State private var isEditing = false
     @State private var editText = ""
@@ -32,7 +33,8 @@ struct SummaryCardView: View {
         isUserEdited: Bool = false,
         onTimeTap: (() -> Void)? = nil,
         onSave: ((String) -> Void)? = nil,
-        onRegenerate: ((String) -> Void)? = nil
+        onRegenerate: ((String) -> Void)? = nil,
+        onRegenerateWithRecipe: ((AIRecipe) -> Void)? = nil
     ) {
         self.coveringFrom = coveringFrom
         self.coveringTo = coveringTo
@@ -44,6 +46,7 @@ struct SummaryCardView: View {
         self.onTimeTap = onTimeTap
         self.onSave = onSave
         self.onRegenerate = onRegenerate
+        self.onRegenerateWithRecipe = onRegenerateWithRecipe
     }
 
     init(
@@ -51,7 +54,8 @@ struct SummaryCardView: View {
         isCompact: Bool = false,
         onTimeTap: (() -> Void)? = nil,
         onSave: ((String) -> Void)? = nil,
-        onRegenerate: ((String) -> Void)? = nil
+        onRegenerate: ((String) -> Void)? = nil,
+        onRegenerateWithRecipe: ((AIRecipe) -> Void)? = nil
     ) {
         self.coveringFrom = block.coveringFrom
         self.coveringTo = block.coveringTo
@@ -63,6 +67,7 @@ struct SummaryCardView: View {
         self.onTimeTap = onTimeTap
         self.onSave = onSave
         self.onRegenerate = onRegenerate
+        self.onRegenerateWithRecipe = onRegenerateWithRecipe
     }
 
     var body: some View {
@@ -126,6 +131,9 @@ struct SummaryCardView: View {
                         .foregroundStyle(.tertiary)
                         .help("Regenerate with instructions")
                     }
+                    if onRegenerateWithRecipe != nil {
+                        recipeMenu
+                    }
                 }
             }
         }
@@ -167,6 +175,30 @@ struct SummaryCardView: View {
                 showCopiedFeedback = false
             }
         }
+    }
+
+    // MARK: - Recipe Menu
+
+    @ViewBuilder
+    private var recipeMenu: some View {
+        Menu {
+            ForEach(RecipeStore.loadRecipes()) { recipe in
+                Button {
+                    Self.logger.debug("Selected recipe: \(recipe.name)")
+                    onRegenerateWithRecipe?(recipe)
+                } label: {
+                    Label(recipe.name, systemImage: recipe.icon)
+                }
+            }
+        } label: {
+            Image(systemName: "list.bullet.rectangle")
+                .font(DS.Typography.caption2)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .frame(width: 16)
+        .foregroundStyle(.tertiary)
+        .help("Regenerate with recipe")
     }
 
     // MARK: - Subviews

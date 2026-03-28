@@ -35,6 +35,7 @@
         "NoopEngineTests",
         "PromptBuilderExtendedTests",
         "PromptBuilderTests",
+        "RecipeStoreTests",
         "RecordingSessionExtendedTests",
         "RecordingSessionTests",
         "RecordingViewModelTests",
