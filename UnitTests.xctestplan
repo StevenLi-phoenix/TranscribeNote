@@ -29,6 +29,7 @@
         "LLMHTTPHelpersTests",
         "LLMModelProfileCoverageTests",
         "LLMModelProfileTests",
+        "MeetingTemplateTests",
         "LLMProviderCoverageTests",
         "LLMProviderTests",
         "LLMRoleCoverageTests",

@@ -18,6 +18,9 @@ struct SettingsView: View {
             RecordingSettingsTab()
                 .tabItem { Label("Recording", systemImage: "mic") }
 
+            TemplateManagerView()
+                .tabItem { Label("Templates", systemImage: "doc.text") }
+
             AboutTab()
                 .tabItem { Label("About", systemImage: "info.circle") }
         }
