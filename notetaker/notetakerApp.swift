@@ -208,6 +208,7 @@ struct MenuBarView: View {
             } label: {
                 Label("Stop Recording", systemImage: "stop.fill")
             }
+            .keyboardShortcut(".", modifiers: [.command])
         } else if viewModel.state == .paused {
             HStack(spacing: DS.Spacing.xs) {
                 Image(systemName: "pause.circle.fill")
@@ -236,6 +237,21 @@ struct MenuBarView: View {
             } label: {
                 Label("Stop Recording", systemImage: "stop.fill")
             }
+            .keyboardShortcut(".", modifiers: [.command])
+        } else if viewModel.state == .stopping {
+            HStack(spacing: DS.Spacing.xs) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Saving…")
+                    .fontWeight(.medium)
+                Spacer()
+                Text(viewModel.clock.formatted)
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, DS.Spacing.md)
+            .padding(.vertical, DS.Spacing.xs)
+            .frame(minWidth: 280)
         } else {
             Label("Not Recording", systemImage: "mic.slash")
                 .foregroundStyle(.secondary)
@@ -264,6 +280,7 @@ struct MenuBarView: View {
             } label: {
                 Label("Start Recording", systemImage: "record.circle")
             }
+            .keyboardShortcut("r", modifiers: [.command])
         }
 
         Divider()

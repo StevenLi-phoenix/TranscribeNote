@@ -21,6 +21,8 @@ struct SessionListView: View {
     @State private var searchText = ""
     @State private var dateFilter: DateFilter = .all
     @State private var searchDebounceTask: Task<Void, Never>?
+    @State private var sessionsToDelete: Set<UUID> = []
+    @State private var showDeleteConfirmation = false
 
     @State private var groupedSessions: [(date: Date, sessions: [RecordingSession])] = []
 
@@ -73,7 +75,22 @@ struct SessionListView: View {
         sessionList
             .listStyle(.sidebar)
             .searchable(text: $searchText, prompt: "Search sessions...")
-            .onDeleteCommand { deleteSessions(ids: selectedSessionIDs) }
+            .onDeleteCommand {
+                sessionsToDelete = selectedSessionIDs
+                showDeleteConfirmation = true
+            }
+            .confirmationDialog(
+                "Delete \(sessionsToDelete.count == 1 ? "Session" : "\(sessionsToDelete.count) Sessions")?",
+                isPresented: $showDeleteConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    deleteSessions(ids: sessionsToDelete)
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("This will permanently delete the recording\(sessionsToDelete.count == 1 ? "" : "s") and associated audio files.")
+            }
             .onAppear { updateGroupedSessions() }
             .onChange(of: sessions) { updateGroupedSessions() }
             .onChange(of: searchText) { _, newValue in
@@ -145,7 +162,8 @@ struct SessionListView: View {
     private func deleteButton(for ids: Set<UUID>) -> some View {
         let label = ids.count == 1 ? "Delete" : "Delete \(ids.count) Sessions"
         return Button(label, role: .destructive) {
-            deleteSessions(ids: ids)
+            sessionsToDelete = ids
+            showDeleteConfirmation = true
         }
     }
 

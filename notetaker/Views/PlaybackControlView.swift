@@ -20,6 +20,7 @@ struct PlaybackControlView: View {
                 service.togglePlayPause()
             } label: {
                 Image(systemName: service.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                    .contentTransition(.symbolEffect(.replace))
                     .font(.title)
             }
             .buttonStyle(.plain)
