@@ -255,6 +255,7 @@ struct MenuBarView: View {
         } else {
             Label("Not Recording", systemImage: "mic.slash")
                 .foregroundStyle(.secondary)
+                .accessibilityLabel("Microphone idle, not recording")
             if let next = schedulerViewModel.nextScheduled, let fireTime = next.nextFireTime {
                 HStack {
                     Image(systemName: "clock")
@@ -271,6 +272,8 @@ struct MenuBarView: View {
                 .padding(.horizontal, DS.Spacing.md)
                 .padding(.vertical, DS.Spacing.xs)
                 .frame(minWidth: 200, alignment: .leading)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Next scheduled recording: \(next.title.isEmpty ? "Untitled" : next.title)")
             }
             Divider()
             Button {
