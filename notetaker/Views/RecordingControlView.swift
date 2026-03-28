@@ -40,6 +40,7 @@ struct RecordingControlView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Pause recording")
+                .help("Pause recording")
 
                 Button {
                     onStop()
@@ -50,6 +51,7 @@ struct RecordingControlView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Stop recording")
+                .help("Stop recording")
             }
             .opacity(isRecording ? 1 : 0)
             .allowsHitTesting(isRecording)
@@ -89,6 +91,7 @@ struct RecordingControlView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Resume recording")
+                .help("Resume recording")
 
                 Button {
                     onStop()
@@ -99,6 +102,7 @@ struct RecordingControlView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Stop recording")
+                .help("Stop recording")
             }
             .opacity(isPaused ? 1 : 0)
             .allowsHitTesting(isPaused)
@@ -133,6 +137,7 @@ struct RecordingControlView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Start recording")
+            .help("Start recording (\u{2318}R)")
             .opacity(state == .idle ? 1 : 0)
             .allowsHitTesting(state == .idle)
             .accessibilityHidden(state != .idle)
