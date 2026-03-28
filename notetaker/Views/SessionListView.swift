@@ -21,13 +21,28 @@ struct SessionListView: View {
     @State private var searchText = ""
     @State private var dateFilter: DateFilter = .all
     @State private var searchDebounceTask: Task<Void, Never>?
+    @State private var sessionsToDelete: Set<UUID> = []
+    @State private var showDeleteConfirmation = false
 
     @State private var groupedSessions: [(date: Date, sessions: [RecordingSession])] = []
+    @State private var pinnedSessions: [RecordingSession] = []
+
+    /// Applies text search filter to sessions. Pinned sessions skip date filter but respect search.
+    private func searchFiltered(_ sessions: [RecordingSession]) -> [RecordingSession] {
+        guard !searchText.isEmpty else { return sessions }
+        let query = searchText
+        return sessions.filter { session in
+            if session.title.localizedCaseInsensitiveContains(query) { return true }
+            if session.segments.contains(where: { $0.text.localizedCaseInsensitiveContains(query) }) { return true }
+            if session.summaries.contains(where: { $0.content.localizedCaseInsensitiveContains(query) }) { return true }
+            return false
+        }
+    }
 
     private var filteredSessions: [RecordingSession] {
-        var result = sessions
+        var result = sessions.filter { !$0.isPinned }
 
-        // Date filter
+        // Date filter (only for unpinned sessions)
         if dateFilter != .all {
             let calendar = Calendar.current
             let now = Date()
@@ -46,20 +61,14 @@ struct SessionListView: View {
         }
 
         // Text search
-        if !searchText.isEmpty {
-            let query = searchText
-            result = result.filter { session in
-                if session.title.localizedCaseInsensitiveContains(query) { return true }
-                if session.segments.contains(where: { $0.text.localizedCaseInsensitiveContains(query) }) { return true }
-                if session.summaries.contains(where: { $0.content.localizedCaseInsensitiveContains(query) }) { return true }
-                return false
-            }
-        }
-
-        return result
+        return searchFiltered(result)
     }
 
     private func updateGroupedSessions() {
+        // Pinned sessions: not affected by date filter, but affected by search
+        pinnedSessions = searchFiltered(sessions.filter { $0.isPinned })
+            .sorted { ($0.pinnedAt ?? .distantPast) > ($1.pinnedAt ?? .distantPast) }
+
         let calendar = Calendar.current
         let filtered = filteredSessions
         let grouped = Dictionary(grouping: filtered) { session in
@@ -73,7 +82,22 @@ struct SessionListView: View {
         sessionList
             .listStyle(.sidebar)
             .searchable(text: $searchText, prompt: "Search sessions...")
-            .onDeleteCommand { deleteSessions(ids: selectedSessionIDs) }
+            .onDeleteCommand {
+                sessionsToDelete = selectedSessionIDs
+                showDeleteConfirmation = true
+            }
+            .confirmationDialog(
+                "Delete \(sessionsToDelete.count == 1 ? "Session" : "\(sessionsToDelete.count) Sessions")?",
+                isPresented: $showDeleteConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    deleteSessions(ids: sessionsToDelete)
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("This will permanently delete the recording\(sessionsToDelete.count == 1 ? "" : "s") and associated audio files.")
+            }
             .onAppear { updateGroupedSessions() }
             .onChange(of: sessions) { updateGroupedSessions() }
             .onChange(of: searchText) { _, newValue in
@@ -84,11 +108,11 @@ struct SessionListView: View {
                     searchDebounceTask = Task {
                         try? await Task.sleep(for: .milliseconds(300))
                         guard !Task.isCancelled else { return }
-                        updateGroupedSessions()
+                        withAnimation { updateGroupedSessions() }
                     }
                 }
             }
-            .onChange(of: dateFilter) { updateGroupedSessions() }
+            .onChange(of: dateFilter) { withAnimation { updateGroupedSessions() } }
             .onChange(of: selectedSessionIDs) { _, newValue in
                 if newValue.count == 1 {
                     selectedSessionID = newValue.first
@@ -112,7 +136,7 @@ struct SessionListView: View {
                         systemImage: "tray",
                         description: Text("Start a recording to create your first session")
                     )
-                } else if filteredSessions.isEmpty {
+                } else if filteredSessions.isEmpty && pinnedSessions.isEmpty {
                     ContentUnavailableView.search(text: searchText)
                 }
             }
@@ -123,29 +147,81 @@ struct SessionListView: View {
 
     private var sessionList: some View {
         List(selection: $selectedSessionIDs) {
+            if !pinnedSessions.isEmpty {
+                Section("Pinned") {
+                    ForEach(pinnedSessions, id: \.id) { session in
+                        SessionRowView(session: session)
+                            .tag(session.id)
+                            .contextMenu { sessionContextMenu(for: session) }
+                    }
+                }
+            }
             ForEach(groupedSessions, id: \.date) { group in
                 Section(group.date.formatted(date: .abbreviated, time: .omitted)) {
                     ForEach(group.sessions, id: \.id) { session in
                         SessionRowView(session: session)
                             .tag(session.id)
-                            .contextMenu {
-                                deleteButton(for: [session.id])
-                            }
+                            .contextMenu { sessionContextMenu(for: session) }
                     }
                 }
             }
         }
         .contextMenu(forSelectionType: UUID.self) { ids in
             if !ids.isEmpty {
+                bulkPinButton(for: ids)
                 deleteButton(for: ids)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func sessionContextMenu(for session: RecordingSession) -> some View {
+        Button {
+            session.togglePin()
+            withAnimation { updateGroupedSessions() }
+        } label: {
+            Label(
+                session.isPinned ? "Unpin" : "Pin",
+                systemImage: session.isPinned ? "pin.slash" : "pin"
+            )
+        }
+        .accessibilityLabel(session.isPinned ? "Unpin session" : "Pin session")
+        Button {
+            let sorted = session.segments.sorted { $0.startTime < $1.startTime }
+            TranscriptExporter.copyToClipboard(segments: sorted, title: session.title)
+        } label: {
+            Label("Copy Transcript", systemImage: "doc.on.doc")
+        }
+        .disabled(session.segments.isEmpty)
+        Divider()
+        deleteButton(for: [session.id])
+    }
+
+    private func bulkPinButton(for ids: Set<UUID>) -> some View {
+        let selected = sessions.filter { ids.contains($0.id) }
+        let allPinned = selected.allSatisfy(\.isPinned)
+        return Button {
+            for session in selected {
+                if allPinned {
+                    if session.isPinned { session.togglePin() }
+                } else {
+                    if !session.isPinned { session.togglePin() }
+                }
+            }
+            withAnimation { updateGroupedSessions() }
+        } label: {
+            Label(
+                allPinned ? "Unpin" : "Pin",
+                systemImage: allPinned ? "pin.slash" : "pin"
+            )
         }
     }
 
     private func deleteButton(for ids: Set<UUID>) -> some View {
         let label = ids.count == 1 ? "Delete" : "Delete \(ids.count) Sessions"
         return Button(label, role: .destructive) {
-            deleteSessions(ids: ids)
+            sessionsToDelete = ids
+            showDeleteConfirmation = true
         }
     }
 
@@ -186,9 +262,15 @@ private struct SessionRowView: View {
                 Text(session.title)
                     .font(DS.Typography.sectionHeader)
                     .lineLimit(1)
+                if session.isPinned {
+                    Image(systemName: "pin.fill")
+                        .font(DS.Typography.caption2)
+                        .foregroundStyle(.orange)
+                        .accessibilityLabel("Pinned")
+                }
                 if session.isPartial {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption2)
+                        .font(DS.Typography.caption2)
                         .foregroundStyle(.orange)
                         .help("Incomplete — saved on quit")
                 }
@@ -215,6 +297,15 @@ private struct SessionRowView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                if !session.summaries.isEmpty {
+                    Text("·")
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "text.badge.checkmark")
+                        .font(DS.Typography.caption)
+                        .foregroundStyle(.secondary)
+                        .help("\(session.summaries.count) summary/summaries")
+                }
+
             }
 
         }
@@ -223,7 +314,9 @@ private struct SessionRowView: View {
     }
 
     private var accessibilityDescription: String {
-        var parts = [session.title, session.startedAt.formatted(date: .omitted, time: .shortened)]
+        var parts: [String] = []
+        if session.isPinned { parts.append("Pinned") }
+        parts.append(contentsOf: [session.title, session.startedAt.formatted(date: .omitted, time: .shortened)])
         if session.totalDuration > 0 {
             parts.append(session.totalDuration.compactDuration)
         }
@@ -280,5 +373,6 @@ private struct DateFilterChip: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
