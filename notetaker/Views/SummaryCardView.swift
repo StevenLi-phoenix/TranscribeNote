@@ -9,6 +9,9 @@ struct SummaryCardView: View {
     let isCompact: Bool
     let isOverall: Bool
     let isUserEdited: Bool
+    let sessionTitle: String
+    let sessionDate: Date
+    let sessionDuration: TimeInterval
     var onTimeTap: (() -> Void)?
     var onSave: ((String) -> Void)?
     var onRegenerate: ((String) -> Void)?
@@ -19,6 +22,7 @@ struct SummaryCardView: View {
     @State private var regenerateInstructions = ""
     @State private var isHovered = false
     @State private var showCopiedFeedback = false
+    @State private var showCardCopiedFeedback = false
 
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "notetaker", category: "SummaryCardView")
 
@@ -30,6 +34,9 @@ struct SummaryCardView: View {
         isCompact: Bool = false,
         isOverall: Bool = false,
         isUserEdited: Bool = false,
+        sessionTitle: String = "Untitled",
+        sessionDate: Date = Date(),
+        sessionDuration: TimeInterval = 0,
         onTimeTap: (() -> Void)? = nil,
         onSave: ((String) -> Void)? = nil,
         onRegenerate: ((String) -> Void)? = nil
@@ -41,6 +48,9 @@ struct SummaryCardView: View {
         self.isCompact = isCompact
         self.isOverall = isOverall
         self.isUserEdited = isUserEdited
+        self.sessionTitle = sessionTitle
+        self.sessionDate = sessionDate
+        self.sessionDuration = sessionDuration
         self.onTimeTap = onTimeTap
         self.onSave = onSave
         self.onRegenerate = onRegenerate
@@ -49,6 +59,9 @@ struct SummaryCardView: View {
     init(
         block: SummaryBlock,
         isCompact: Bool = false,
+        sessionTitle: String = "Untitled",
+        sessionDate: Date = Date(),
+        sessionDuration: TimeInterval = 0,
         onTimeTap: (() -> Void)? = nil,
         onSave: ((String) -> Void)? = nil,
         onRegenerate: ((String) -> Void)? = nil
@@ -60,6 +73,9 @@ struct SummaryCardView: View {
         self.isCompact = isCompact
         self.isOverall = block.isOverall
         self.isUserEdited = block.userEdited
+        self.sessionTitle = sessionTitle
+        self.sessionDate = sessionDate
+        self.sessionDuration = sessionDuration
         self.onTimeTap = onTimeTap
         self.onSave = onSave
         self.onRegenerate = onRegenerate
@@ -98,9 +114,11 @@ struct SummaryCardView: View {
         }
         .padding(.vertical, DS.Spacing.xs)
         .overlay(alignment: .topTrailing) {
-            if !isEditing && !showRegenerateField && (isHovered || showCopiedFeedback) {
+            if !isEditing && !showRegenerateField && (isHovered || showCopiedFeedback || showCardCopiedFeedback) {
                 HStack(spacing: DS.Spacing.xs) {
                     copyButton
+
+                    shareCardMenu
 
                     if onSave != nil {
                         Button {
@@ -165,6 +183,75 @@ struct SummaryCardView: View {
             try? await Task.sleep(for: .seconds(1.5))
             withAnimation(.easeInOut(duration: 0.2)) {
                 showCopiedFeedback = false
+            }
+        }
+    }
+
+    // MARK: - Share as Card
+
+    @ViewBuilder
+    private var shareCardMenu: some View {
+        Menu {
+            ForEach(SummaryCardStyle.allCases, id: \.self) { style in
+                Button("Copy as \(style.rawValue.capitalized)") {
+                    shareAsCard(style: style)
+                }
+            }
+            Divider()
+            Menu("Save Image\u{2026}") {
+                ForEach(SummaryCardStyle.allCases, id: \.self) { style in
+                    Button(style.rawValue.capitalized) {
+                        saveCardAsFile(style: style)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: showCardCopiedFeedback ? "checkmark" : "square.and.arrow.up")
+                .font(DS.Typography.caption2)
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(showCardCopiedFeedback ? AnyShapeStyle(.green) : AnyShapeStyle(.tertiary))
+        .help("Share as card image")
+        .accessibilityLabel("Share summary as card image")
+    }
+
+    private func buildCardData(style: SummaryCardStyle) -> SummaryCardData {
+        let bullets = SummaryCardExporter.extractBulletPoints(from: content)
+        let plainText = SummaryCardExporter.extractPlainSummary(from: content)
+        return SummaryCardData(
+            title: sessionTitle,
+            date: sessionDate,
+            duration: sessionDuration,
+            summaryText: plainText,
+            bulletPoints: bullets,
+            style: style
+        )
+    }
+
+    private func shareAsCard(style: SummaryCardStyle) {
+        let data = buildCardData(style: style)
+        let success = SummaryCardExporter.copyToClipboard(data: data)
+        if success {
+            Self.logger.debug("Shared summary as \(style.rawValue) card image to clipboard")
+            withAnimation(.easeInOut(duration: 0.2)) {
+                showCardCopiedFeedback = true
+            }
+            Task {
+                try? await Task.sleep(for: .seconds(1.5))
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showCardCopiedFeedback = false
+                }
+            }
+        }
+    }
+
+    private func saveCardAsFile(style: SummaryCardStyle) {
+        let data = buildCardData(style: style)
+        Task { @MainActor in
+            let success = await SummaryCardExporter.saveToFile(data: data)
+            if success {
+                Self.logger.debug("Saved summary as \(style.rawValue) card image to file")
             }
         }
     }

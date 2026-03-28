@@ -151,6 +151,9 @@ struct SessionDetailView: View {
                             ScrollView {
                                 SummaryCardView(
                                     block: overall,
+                                    sessionTitle: session.title.isEmpty ? "Untitled" : session.title,
+                                    sessionDate: session.startedAt,
+                                    sessionDuration: session.totalDuration,
                                     onSave: { newContent in
                                         saveEditedSummary(block: overall, content: newContent)
                                     },

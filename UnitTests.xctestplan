@@ -44,6 +44,7 @@
         "SummarizerServiceExtendedTests",
         "SummarizerServiceTests",
         "SummaryBlockTests",
+        "SummaryCardExporterTests",
         "ToolCallingTypeTests",
         "ToolCallingErrorTests",
         "SyntheticBufferInjectionTests",
