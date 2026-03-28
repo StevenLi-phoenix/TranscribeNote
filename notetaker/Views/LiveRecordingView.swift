@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LiveRecordingView: View {
     @Bindable var viewModel: RecordingViewModel
+    var heroNamespace: Namespace.ID? = nil
     let onStop: () -> Void
     var onPause: (() -> Void)?
     var onResume: (() -> Void)?
@@ -15,6 +16,7 @@ struct LiveRecordingView: View {
                 elapsedTime: viewModel.clock.formatted,
                 audioLevel: viewModel.audioMeter.level,
                 stoppingStatus: viewModel.stoppingStatus,
+                heroNamespace: heroNamespace,
                 onStart: {
                     Task {
                         await viewModel.startRecording()

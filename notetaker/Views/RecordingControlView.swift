@@ -5,6 +5,7 @@ struct RecordingControlView: View {
     let elapsedTime: String
     var audioLevel: Float = 0
     var stoppingStatus: String = "Saving..."
+    var heroNamespace: Namespace.ID? = nil
     let onStart: () -> Void
     let onStop: () -> Void
     var onPause: (() -> Void)?
@@ -28,6 +29,7 @@ struct RecordingControlView: View {
                     .font(ControlBarMetrics.timeFont)
                     .frame(minWidth: ControlBarMetrics.timeMinWidth)
                     .foregroundStyle(.primary)
+                    .matchedGeometryEffectIfPresent(id: "sessionTimer", in: heroNamespace, properties: .position, isSource: true)
 
                 Spacer()
 

@@ -7,6 +7,7 @@ struct SessionDetailView: View {
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "notetaker", category: "SessionDetailView")
 
     let sessionID: UUID
+    var heroNamespace: Namespace.ID? = nil
     @Environment(\.modelContext) private var modelContext
     @State private var playbackService = AudioPlaybackService()
     @State private var session: RecordingSession?
@@ -37,12 +38,14 @@ struct SessionDetailView: View {
                 VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                     Text(session.title)
                         .font(DS.Typography.title)
+                        .matchedGeometryEffectIfPresent(id: "sessionTitle", in: heroNamespace, properties: .position, isSource: false)
 
                     HStack {
                         Text(session.startedAt.formatted(date: .abbreviated, time: .shortened))
                         if session.totalDuration > 0 {
                             Text("·")
                             Text(session.totalDuration.compactDuration)
+                                .matchedGeometryEffectIfPresent(id: "sessionTimer", in: heroNamespace, properties: .position, isSource: false)
                         }
                         if session.isPartial {
                             Label("Incomplete — saved on quit", systemImage: "exclamationmark.triangle.fill")

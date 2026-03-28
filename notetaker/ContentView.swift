@@ -5,6 +5,7 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var viewModel: RecordingViewModel
     var schedulerViewModel: SchedulerViewModel
+    @Namespace private var heroTransition
     @State private var selectedSessionID: UUID?
     @State private var showScheduleSheet = false
 
@@ -12,10 +13,12 @@ struct ContentView: View {
     /// Background summary is already dispatched by the ViewModel's drainTask.
     private func handleCompletionIfNeeded() {
         guard viewModel.state == .completed else { return }
-        if let session = viewModel.currentSession {
-            selectedSessionID = session.id
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+            if let session = viewModel.currentSession {
+                selectedSessionID = session.id
+            }
+            viewModel.dismissCompletedRecording()
         }
-        viewModel.dismissCompletedRecording()
     }
 
     var body: some View {
@@ -53,6 +56,7 @@ struct ContentView: View {
             if viewModel.isActive || viewModel.state == .stopping {
                 LiveRecordingView(
                     viewModel: viewModel,
+                    heroNamespace: heroTransition,
                     onStop: {
                         viewModel.stopRecording(modelContext: modelContext)
                     },
@@ -68,7 +72,7 @@ struct ContentView: View {
                     }
                 )
             } else if let sessionID = selectedSessionID {
-                SessionDetailView(sessionID: sessionID)
+                SessionDetailView(sessionID: sessionID, heroNamespace: heroTransition)
             } else {
                 ContentUnavailableView(
                     "No Session Selected",
