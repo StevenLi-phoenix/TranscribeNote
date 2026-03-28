@@ -128,6 +128,7 @@ struct SessionListView: View {
                     ForEach(group.sessions, id: \.id) { session in
                         SessionRowView(session: session)
                             .tag(session.id)
+                            .draggable(SessionExportItem(session: session))
                             .contextMenu {
                                 deleteButton(for: [session.id])
                             }
