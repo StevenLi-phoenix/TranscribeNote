@@ -40,5 +40,15 @@ struct PlaybackControlView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, DS.Spacing.sm)
+        .background {
+            Button {
+                service.togglePlayPause()
+            } label: {
+                EmptyView()
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.space, modifiers: [])
+            .accessibilityHidden(true)
+        }
     }
 }

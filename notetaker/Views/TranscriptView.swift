@@ -165,5 +165,6 @@ struct InlineSummaryRow: View {
             .textSelection(.enabled)
         }
         .padding(.vertical, DS.Spacing.xs)
+        .background(Color.accentColor.opacity(0.04), in: RoundedRectangle(cornerRadius: DS.Radius.sm))
     }
 }

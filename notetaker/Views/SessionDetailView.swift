@@ -77,7 +77,14 @@ struct SessionDetailView: View {
                         .disabled(sortedSegments.isEmpty)
 
                         if isGeneratingSummary {
-                            ProgressView().controlSize(.small)
+                            HStack(spacing: DS.Spacing.xs) {
+                                ProgressView().controlSize(.small)
+                                if let summaryProgress {
+                                    Text(summaryProgress)
+                                        .font(DS.Typography.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                         } else {
                             Menu {
                                 Button {

@@ -28,11 +28,17 @@ struct LiveRecordingView: View {
             Divider()
 
             if let error = viewModel.errorMessage {
-                Text(error)
-                    .foregroundStyle(.red)
-                    .font(.caption)
-                    .padding(.horizontal)
-                    .padding(.vertical, DS.Spacing.xs)
+                HStack(spacing: DS.Spacing.xs) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                    Text(error)
+                        .textSelection(.enabled)
+                    Spacer()
+                }
+                .font(DS.Typography.caption)
+                .padding(DS.Spacing.sm)
+                .padding(.horizontal)
+                .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: DS.Radius.sm))
             }
 
             // Summary error — shown independently of summary section
