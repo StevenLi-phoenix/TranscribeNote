@@ -52,6 +52,7 @@ struct SessionListView: View {
     @State private var searchDebounceTask: Task<Void, Never>?
     @State private var sessionsToDelete: Set<UUID> = []
     @State private var showDeleteConfirmation = false
+    @State private var selectedTags: Set<String> = []
 
     @State private var groupedSessions: [(date: Date, sessions: [RecordingSession])] = []
     @State private var pinnedSessions: [RecordingSession] = []
@@ -91,6 +92,13 @@ struct SessionListView: View {
                 case .all:
                     return true
                 }
+            }
+        }
+
+        // Tag filter (AND logic: session must have ALL selected tags)
+        if !selectedTags.isEmpty {
+            result = result.filter { session in
+                selectedTags.isSubset(of: Set(session.tags))
             }
         }
 
@@ -151,6 +159,7 @@ struct SessionListView: View {
                 }
             }
             .onChange(of: dateFilter) { withAnimation { updateGroupedSessions() } }
+            .onChange(of: selectedTags) { withAnimation { updateGroupedSessions() } }
             .onChange(of: selectedSessionIDs) { _, newValue in
                 if newValue.count == 1 {
                     selectedSessionID = newValue.first
@@ -179,8 +188,44 @@ struct SessionListView: View {
                 }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
-                DateFilterBar(selection: $dateFilter, sessions: activeSessions)
+                VStack(spacing: 0) {
+                    DateFilterBar(selection: $dateFilter, sessions: activeSessions)
+                    if !selectedTags.isEmpty {
+                        HStack(spacing: DS.Spacing.xxs) {
+                            ForEach(Array(selectedTags).sorted(), id: \.self) { tag in
+                                TagPillView(tag: tag, isSelected: true) {
+                                    selectedTags.remove(tag)
+                                }
+                            }
+                            Button("Clear") {
+                                withAnimation { selectedTags.removeAll() }
+                            }
+                            .font(DS.Typography.caption2)
+                            .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        .padding(.horizontal, DS.Spacing.sm)
+                        .padding(.vertical, DS.Spacing.xs)
+                    }
+                }
             }
+    }
+
+    private func sessionRow(for session: RecordingSession) -> some View {
+        SessionRowView(
+            session: session,
+            selectedTags: selectedTags,
+            onTagTap: { tag in
+                if selectedTags.contains(tag) {
+                    selectedTags.remove(tag)
+                } else {
+                    selectedTags.insert(tag)
+                }
+            }
+        )
+        .tag(session.id)
+        .draggable(SessionExportItem(session: session))
+        .contextMenu { sessionContextMenu(for: session) }
     }
 
     private var sessionList: some View {
@@ -188,20 +233,14 @@ struct SessionListView: View {
             if !pinnedSessions.isEmpty {
                 Section("Pinned") {
                     ForEach(pinnedSessions, id: \.id) { session in
-                        SessionRowView(session: session)
-                            .tag(session.id)
-                            .draggable(SessionExportItem(session: session))
-                            .contextMenu { sessionContextMenu(for: session) }
+                        sessionRow(for: session)
                     }
                 }
             }
             ForEach(groupedSessions, id: \.date) { group in
                 Section(group.date.formatted(date: .abbreviated, time: .omitted)) {
                     ForEach(group.sessions, id: \.id) { session in
-                        SessionRowView(session: session)
-                            .tag(session.id)
-                            .draggable(SessionExportItem(session: session))
-                            .contextMenu { sessionContextMenu(for: session) }
+                        sessionRow(for: session)
                     }
                 }
             }
@@ -293,6 +332,8 @@ struct SessionListView: View {
 
 private struct SessionRowView: View {
     let session: RecordingSession
+    var selectedTags: Set<String> = []
+    var onTagTap: ((String) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.xxs) {
@@ -320,7 +361,7 @@ private struct SessionRowView: View {
                     .foregroundStyle(.secondary)
 
                 if session.totalDuration > 0 {
-                    Text("·")
+                    Text("\u{00B7}")
                         .foregroundStyle(.secondary)
                     Text(session.totalDuration.compactDuration)
                         .font(DS.Typography.caption)
@@ -328,7 +369,7 @@ private struct SessionRowView: View {
                 }
 
                 if !session.segments.isEmpty {
-                    Text("·")
+                    Text("\u{00B7}")
                         .foregroundStyle(.secondary)
                     Text("\(session.segments.count) segments")
                         .font(DS.Typography.caption)
@@ -336,7 +377,7 @@ private struct SessionRowView: View {
                 }
 
                 if !session.summaries.isEmpty {
-                    Text("·")
+                    Text("\u{00B7}")
                         .foregroundStyle(.secondary)
                     Image(systemName: "text.badge.checkmark")
                         .font(DS.Typography.caption)
@@ -344,6 +385,15 @@ private struct SessionRowView: View {
                         .help("\(session.summaries.count) summary/summaries")
                 }
 
+            }
+
+            if !session.tags.isEmpty {
+                TagRow(
+                    tags: session.tags,
+                    maxVisible: 2,
+                    selectedTags: selectedTags,
+                    onTagTap: onTagTap
+                )
             }
 
         }
