@@ -235,13 +235,14 @@ struct SessionDetailView: View {
                             .font(DS.Typography.caption)
                         Spacer()
                         Button {
-                            self.summaryGenerationError = nil
+                            withAnimation { self.summaryGenerationError = nil }
                         } label: {
                             Image(systemName: "xmark")
                                 .font(DS.Typography.caption2)
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
+                        .accessibilityLabel("Dismiss error")
                     }
                     .padding(.horizontal)
                     .padding(.vertical, DS.Spacing.xs)
