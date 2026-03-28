@@ -64,29 +64,33 @@ struct ModelsSettingsTab: View {
             // Profile editor (detail)
             if let binding = selectedProfile {
                 ScrollView {
-                    Form {
-                        TextField("Name", text: binding.name)
+                    VStack(alignment: .leading, spacing: DS.Spacing.md) {
+                        recommendationSection(for: binding)
 
-                        LLMConfigSection(config: binding.config)
+                        Form {
+                            TextField("Name", text: binding.name)
 
-                        HStack {
-                            Button("Save") {
-                                saveProfiles()
-                                NotificationCenter.default.post(name: .llmConfigDidSave, object: nil)
-                                hasUnsavedChanges = false
+                            LLMConfigSection(config: binding.config)
+
+                            HStack {
+                                Button("Save") {
+                                    saveProfiles()
+                                    NotificationCenter.default.post(name: .llmConfigDidSave, object: nil)
+                                    hasUnsavedChanges = false
+                                }
+                                .disabled(!hasUnsavedChanges)
+                                .buttonStyle(.borderedProminent)
+
+                                Button("Test Connection") {
+                                    testConnection(config: binding.wrappedValue.config)
+                                }
+
+                                StatusIndicator(connectionStatus, error: connectionError)
                             }
-                            .disabled(!hasUnsavedChanges)
-                            .buttonStyle(.borderedProminent)
-
-                            Button("Test Connection") {
-                                testConnection(config: binding.wrappedValue.config)
-                            }
-
-                            StatusIndicator(connectionStatus, error: connectionError)
                         }
+                        .formStyle(.columns)
+                        .toggleStyle(.switch)
                     }
-                    .formStyle(.columns)
-                    .toggleStyle(.switch)
                     .padding()
                 }
             } else {
@@ -125,6 +129,50 @@ struct ModelsSettingsTab: View {
     private func deleteProfile(id: UUID) {
         LLMProfileStore.deleteProfile(id: id, from: &profiles)
         selectedProfileID = profiles.first?.id
+    }
+
+    // MARK: - Model Recommendations
+
+    private func recommendationSection(for binding: Binding<LLMModelProfile>) -> some View {
+        DisclosureGroup("Recommended for Your Mac") {
+            let hw = ModelRecommendation.detectHardware()
+            Text("\(hw.processorDescription) \u{00B7} \(hw.totalMemoryGB)GB RAM")
+                .font(DS.Typography.caption)
+                .foregroundStyle(.secondary)
+                .padding(.bottom, DS.Spacing.xs)
+
+            ForEach(ModelRecommendation.recommendedModels()) { model in
+                HStack {
+                    VStack(alignment: .leading, spacing: DS.Spacing.xxs) {
+                        HStack(spacing: DS.Spacing.xs) {
+                            Text(model.name).fontWeight(.medium)
+                            Text(model.tier.rawValue)
+                                .font(DS.Typography.caption2)
+                                .padding(.horizontal, DS.Spacing.xs)
+                                .background(.quaternary)
+                                .clipShape(Capsule())
+                        }
+                        Text(model.description)
+                            .font(DS.Typography.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Apply") {
+                        applyRecommendation(model, to: binding)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+                .padding(.vertical, DS.Spacing.xxs)
+            }
+        }
+    }
+
+    private func applyRecommendation(_ model: ModelRecommendation.RecommendedModel, to binding: Binding<LLMModelProfile>) {
+        binding.wrappedValue.config.provider = model.provider
+        binding.wrappedValue.config.model = model.modelID
+        binding.wrappedValue.config.baseURL = model.baseURL
+        Self.logger.info("Applied recommendation: \(model.name) (\(model.modelID))")
     }
 
     // MARK: - Connection Testing
