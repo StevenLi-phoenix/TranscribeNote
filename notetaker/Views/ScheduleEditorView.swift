@@ -27,6 +27,16 @@ struct ScheduleEditorView: View {
 
     private var isEditing: Bool { existing != nil }
 
+    private var durationLabel: String {
+        if durationMinutes < 60 {
+            return "\(durationMinutes) min"
+        } else if durationMinutes % 60 == 0 {
+            return "\(durationMinutes / 60)h"
+        } else {
+            return "\(durationMinutes / 60)h \(durationMinutes % 60)m"
+        }
+    }
+
     var body: some View {
         Form {
             Section("Recording") {
@@ -48,7 +58,7 @@ struct ScheduleEditorView: View {
             Section("Duration") {
                 Toggle("Limit recording duration", isOn: $hasDuration)
                 if hasDuration {
-                    Stepper("\(durationMinutes) minutes", value: $durationMinutes, in: 1...480, step: 5)
+                    Stepper(durationLabel, value: $durationMinutes, in: 1...480, step: 5)
                 }
             }
 
