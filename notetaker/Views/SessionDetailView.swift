@@ -20,6 +20,7 @@ struct SessionDetailView: View {
     @State private var scrollToTime: TimeInterval?
     @State private var refreshTimer: Timer?
     @State private var isExportingAudio = false
+    @State private var showExportedFeedback = false
     @AppStorage("overallSummaryCollapsed") private var overallCollapsed = false
     @AppStorage("overallSummaryHeight") private var overallHeight: Double = 300
     @AppStorage("chunkSummariesHidden") private var chunkSummariesHidden = false
@@ -161,7 +162,11 @@ struct SessionDetailView: View {
                                 Button {
                                     exportAudio(session: session)
                                 } label: {
-                                    Label("Save Audio", systemImage: "square.and.arrow.down")
+                                    Label(
+                                        showExportedFeedback ? "Exported!" : "Save Audio",
+                                        systemImage: showExportedFeedback ? "checkmark" : "square.and.arrow.down"
+                                    )
+                                    .contentTransition(.symbolEffect(.replace))
                                 }
                                 .help("Export recording audio as M4A")
                             }
@@ -192,9 +197,10 @@ struct SessionDetailView: View {
                             withAnimation { overallCollapsed.toggle() }
                         } label: {
                             HStack(spacing: DS.Spacing.xs) {
-                                Image(systemName: overallCollapsed ? "chevron.right" : "chevron.down")
+                                Image(systemName: "chevron.right")
                                     .font(DS.Typography.caption)
                                     .frame(width: 12)
+                                    .rotationEffect(.degrees(overallCollapsed ? 0 : 90))
                                 Text("Overall Summary")
                                     .font(DS.Typography.sectionHeader)
                                 Spacer()
@@ -202,6 +208,7 @@ struct SessionDetailView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(overallCollapsed ? "Expand summary" : "Collapse summary")
                         .padding(.horizontal)
                         .padding(.vertical, DS.Spacing.xs)
 
@@ -324,6 +331,7 @@ struct SessionDetailView: View {
                 scrollToTime = nil
                 showChatPanel = false
                 showCopiedTranscript = false
+                showExportedFeedback = false
                 fetchSession()
             }
             .onDisappear {
@@ -671,6 +679,9 @@ struct SessionDetailView: View {
         Task {
             do {
                 try await AudioExporter.mergeAndExport(urls: urls, to: destURL)
+                showExportedFeedback = true
+                try? await Task.sleep(for: .seconds(1.5))
+                showExportedFeedback = false
             } catch {
                 Self.logger.error("Audio export failed: \(error.localizedDescription)")
                 fetchError = "Failed to save audio: \(error.localizedDescription)"
