@@ -9,6 +9,7 @@ struct ModelsSettingsTab: View {
     @State private var profiles: [LLMModelProfile] = []
     @State private var selectedProfileID: UUID?
     @State private var hasUnsavedChanges = false
+    @State private var isInitialLoad = true
     @State private var connectionStatus: StatusIndicator.Status = .unknown
     @State private var connectionError: String?
     @State private var connectionTask: Task<Void, Never>?
@@ -124,7 +125,13 @@ struct ModelsSettingsTab: View {
             Text("This action cannot be undone.")
         }
         .onAppear { loadProfiles() }
-        .onChange(of: profiles) { _, _ in hasUnsavedChanges = true }
+        .onChange(of: profiles) { _, _ in
+            if isInitialLoad {
+                isInitialLoad = false
+            } else {
+                hasUnsavedChanges = true
+            }
+        }
         .onChange(of: selectedProfileID) { _, _ in
             connectionStatus = .unknown
             connectionError = nil

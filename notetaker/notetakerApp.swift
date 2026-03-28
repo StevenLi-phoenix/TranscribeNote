@@ -224,6 +224,18 @@ struct MenuBarView: View {
             .padding(.vertical, DS.Spacing.xs)
             .frame(minWidth: 280)
 
+            if let summary = viewModel.latestSummary {
+                Divider()
+                Text(summary)
+                    .font(DS.Typography.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, DS.Spacing.md)
+                    .padding(.vertical, DS.Spacing.xs)
+                    .frame(minWidth: 280, alignment: .leading)
+            }
+
             Divider()
 
             Button {

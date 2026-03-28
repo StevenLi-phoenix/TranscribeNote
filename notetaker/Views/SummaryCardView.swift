@@ -135,6 +135,13 @@ struct SummaryCardView: View {
             }
         }
         .onHover { isHovered = $0 }
+        .onChange(of: content) { _, _ in
+            // Reset editing/regenerate state when underlying content changes
+            // (e.g., from another regeneration or external edit)
+            isEditing = false
+            showRegenerateField = false
+            showCopiedFeedback = false
+        }
     }
 
     // MARK: - Copy
