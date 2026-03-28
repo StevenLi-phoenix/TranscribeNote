@@ -161,11 +161,16 @@ private struct ScheduledRecordingRow: View {
             .buttonStyle(.plain)
             .help("Delete")
         }
+        .opacity(isPassed ? 0.5 : 1.0)
         .contextMenu {
             Button("Edit") { onEdit() }
             Divider()
             Button("Delete", role: .destructive) { onDelete() }
         }
+    }
+
+    private var isPassed: Bool {
+        recording.rule == .once && recording.nextFireTime == nil
     }
 }
 
@@ -253,6 +258,8 @@ private struct CalendarImportView: View {
                                     .lineLimit(2)
                             }
                         }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(calendarEventAccessibilityLabel(for: item))
                     }
                 }
             }
@@ -285,5 +292,24 @@ private struct CalendarImportView: View {
             }
         }
         .frame(minWidth: 400, minHeight: 360)
+    }
+
+    private func calendarEventAccessibilityLabel(for item: CalendarEventItem) -> String {
+        var parts = [item.title]
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        parts.append(formatter.string(from: item.startDate))
+        if let endDate = item.endDate {
+            formatter.dateStyle = .none
+            parts.append("to \(formatter.string(from: endDate))")
+        }
+        if !item.calendarName.isEmpty {
+            parts.append("calendar: \(item.calendarName)")
+        }
+        if let location = item.location, !location.isEmpty {
+            parts.append("location: \(location)")
+        }
+        return parts.joined(separator: ", ")
     }
 }
