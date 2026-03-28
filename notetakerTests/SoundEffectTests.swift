@@ -1,11 +1,12 @@
 import Testing
+import Foundation
 @testable import notetaker
 
 @Suite("SoundEffectService")
 struct SoundEffectTests {
-    @Test func allEffects_haveSoundNames() {
+    @Test func allEffects_haveSoundURLs() {
         for effect in SoundEffectService.Effect.allCases {
-            #expect(!effect.soundName.isEmpty)
+            #expect(effect.soundURL != nil)
         }
     }
 
@@ -13,26 +14,27 @@ struct SoundEffectTests {
         #expect(SoundEffectService.Effect.allCases.count == 4)
     }
 
-    @Test func soundNames_areSystemSounds() {
-        let validNames = ["Tink", "Pop", "Purr", "Funk", "Basso", "Blow", "Bottle", "Frog", "Glass", "Hero", "Morse", "Ping", "Submarine", "Sosumi"]
+    @Test func soundURLs_pointToSystemSounds() {
         for effect in SoundEffectService.Effect.allCases {
-            #expect(validNames.contains(effect.soundName), "Sound '\(effect.soundName)' for \(effect) should be a valid system sound")
+            let url = effect.soundURL!
+            #expect(url.path().hasPrefix("/System/Library/Sounds/"))
+            #expect(url.path().hasSuffix(".aiff"))
         }
     }
 
-    @Test func recordingStart_soundName() {
-        #expect(SoundEffectService.Effect.recordingStart.soundName == "Tink")
+    @Test func recordingStart_soundURL() {
+        #expect(SoundEffectService.Effect.recordingStart.soundURL?.lastPathComponent == "Purr.aiff")
     }
 
-    @Test func pause_soundName() {
-        #expect(SoundEffectService.Effect.pause.soundName == "Pop")
+    @Test func pause_soundURL() {
+        #expect(SoundEffectService.Effect.pause.soundURL?.lastPathComponent == "Pop.aiff")
     }
 
-    @Test func resume_soundName() {
-        #expect(SoundEffectService.Effect.resume.soundName == "Tink")
+    @Test func resume_soundURL() {
+        #expect(SoundEffectService.Effect.resume.soundURL?.lastPathComponent == "Tink.aiff")
     }
 
-    @Test func stop_soundName() {
-        #expect(SoundEffectService.Effect.stop.soundName == "Purr")
+    @Test func stop_soundURL() {
+        #expect(SoundEffectService.Effect.stop.soundURL?.lastPathComponent == "Tink.aiff")
     }
 }
