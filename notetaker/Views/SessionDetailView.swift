@@ -24,6 +24,7 @@ struct SessionDetailView: View {
     @AppStorage("overallSummaryHeight") private var overallHeight: Double = 300
     @AppStorage("chunkSummariesHidden") private var chunkSummariesHidden = false
     @State private var showChatPanel = false
+    @State private var showRecapSheet = false
     @AppStorage("chatPanelWidth") private var chatPanelWidth: Double = 320
 
     var body: some View {
@@ -108,6 +109,15 @@ struct SessionDetailView: View {
                                     Label("Save Audio", systemImage: "square.and.arrow.down")
                                 }
                             }
+                        }
+
+                        if !session.summaries.isEmpty {
+                            Button {
+                                showRecapSheet = true
+                            } label: {
+                                Label("Meeting Recap", systemImage: "envelope")
+                            }
+                            .help("Generate meeting recap email")
                         }
 
                         Button {
@@ -245,6 +255,7 @@ struct SessionDetailView: View {
                 summaryProgress = nil
                 scrollToTime = nil
                 showChatPanel = false
+                showRecapSheet = false
                 fetchSession()
             }
             .onDisappear {
@@ -252,6 +263,9 @@ struct SessionDetailView: View {
                 summaryTask?.cancel()
                 refreshTimer?.invalidate()
                 refreshTimer = nil
+            }
+            .sheet(isPresented: $showRecapSheet) {
+                MeetingRecapSheet(recapData: MeetingRecapFormatter.recapData(from: session))
             }
         } else if let fetchError {
             ContentUnavailableView(
