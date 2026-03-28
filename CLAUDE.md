@@ -84,6 +84,7 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - `LLMMessage` struct: `role` (`.system`/`.user`/`.assistant`/`.tool`), `content`, `cacheHint`, `usage: TokenUsage?`, `toolCalls: [LLMToolCall]?` (assistant messages requesting tool invocations), `toolCallId: String?` (tool result messages)
 - Five implementations: `FoundationModelsEngine` (Apple Intelligence on-device), `OllamaEngine`, `OpenAIEngine`, `AnthropicEngine`, `NoopLLMEngine` — created via `LLMEngineFactory.create(from:session:)`; `.custom` provider maps to `OpenAIEngine` (OpenAI-compatible API for LM Studio etc.)
 - **Foundation Models fallback**: `LLMEngineFactory.createWithFallback()` tries primary engine, falls back to `FoundationModelsEngine` if primary unavailable and Apple Intelligence is enabled; `FoundationModelsEngine.isModelAvailable` checks `SystemLanguageModel.default.availability`
+- **Structured Summary**: `StructuredSummary` (`@Generable` + `Codable` + `Sendable`) with `summary`, `keyPoints: [String]`, `sentiment` — stored as JSON in `SummaryBlock.structuredContent`; `SummarySchemaProvider.schema` provides runtime JSON Schema for non-Apple engines; `SummarizerService.summarizeWithFallback()` tries structured output first, falls back to plain text; `SummaryCardView` renders sectioned display (key points, sentiment badge) when structured data available
 - `SummarizerService` orchestrates: guard minTranscriptLength → build prompt via `PromptBuilder` → call LLM with retry (3 attempts, 10s/30s/60s backoff, only retries network/HTTP errors)
 - `SummarizerService.summarizeInChunks()` yields `ChunkProgress` per time window; `summarizeOverall()` synthesizes chunk summaries into a single overall summary
 - `SummarizerService.splitIntoChunks()` uses zero-based windows: window 0 = `[0, interval)`, window 1 = `[interval, 2*interval)` — segments assigned by `Int(startTime / intervalSeconds)`; `splitIntoChunksWithWindowIndices()` returns window indices for boundary calculations
@@ -137,6 +138,7 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - **Recurrence mapping**: `CalendarService.mapRecurrenceRule()` maps `EKRecurrenceRule` to `RepeatRule`; only `interval == 1`; weekday detection via `Set<EKWeekday>` equality
 - **SchemaV6**: Adds `calendarEventIdentifier: String? = nil` to `ScheduledRecording`, `scheduledRecordingID: UUID? = nil` to `RecordingSession`
   - **V7**: Adds `ActionItem` model and `actionItems: [ActionItem] = []` relationship on `RecordingSession`
+  - **V8**: Adds `structuredContent: String? = nil` to SummaryBlock for structured summary output (JSON-encoded `StructuredSummary`)
 
 ## Architecture
 
@@ -145,7 +147,7 @@ Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Mo
 - **`notetaker/`** — Main app target
   - `notetakerApp.swift` — Entry point, shared `ModelContainer`, `MenuBarExtra`, `Settings` scene
   - `ContentView.swift` — `NavigationSplitView` (sidebar session list + detail routing)
-  - `Models/` — SwiftData models (`RecordingSession`, `TranscriptSegment`, `SummaryBlock`, `ScheduledRecording`, `ActionItem`), config types (`LLMConfig`, `SummarizerConfig`, `LLMModelProfile`, `VADConfig`, `OverallSummaryMode`, `RepeatRule`, `ActionItemCategory`), ephemeral types (`ChatMessage`), schema versioning (`Schemas/` V1–V7)
+  - `Models/` — SwiftData models (`RecordingSession`, `TranscriptSegment`, `SummaryBlock`, `ScheduledRecording`, `ActionItem`), config types (`LLMConfig`, `SummarizerConfig`, `LLMModelProfile`, `VADConfig`, `OverallSummaryMode`, `RepeatRule`, `ActionItemCategory`), ephemeral types (`ChatMessage`), schema versioning (`Schemas/` V1–V8)
   - `Services/` — Protocol-based engines (`ASREngine`, `LLMEngine`) with multiple implementations (including `FoundationModelsEngine` for Apple Intelligence), `AudioCaptureService`, `AudioPlaybackService`, `AudioExporter`, `SummarizerService`, `BackgroundSummaryService`, `SummaryMarkdownFormatter`, `ChatService`, `PromptBuilder`, `KeychainService`, `CrashLogService`, `SchedulerService`, `CalendarService`, `ActionItemParser`, `ActionItemMarkdownFormatter`, `RemindersExportService`
   - `ViewModels/` — `RecordingViewModel` (`@Observable`) — central state machine for recording lifecycle; `SchedulerViewModel` — scheduled recordings + calendar integration
   - `DesignSystem.swift` — `DS` enum (spacing, typography, colors, radius, layout tokens)

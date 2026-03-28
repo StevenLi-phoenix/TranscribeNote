@@ -90,7 +90,8 @@ final class BackgroundSummaryService {
             let chunkSummaries = session.summaries.filter { !$0.isOverall && !$0.isPinned && !$0.userEdited }
 
             do {
-                let content: String
+                var content: String
+                var structuredResult: StructuredSummary?
                 let sortedChunks = chunkSummaries
                     .sorted { $0.coveringFrom < $1.coveringFrom }
                     .map { (coveringFrom: $0.coveringFrom, coveringTo: $0.coveringTo, content: $0.content) }
@@ -98,23 +99,27 @@ final class BackgroundSummaryService {
                 switch summarizerConfig.overallSummaryMode {
                 case .rawText:
                     Self.logger.info("Mode: rawText — generating from transcript for \(sessionID)")
-                    content = try await service.summarize(
+                    let result = try await service.summarizeWithFallback(
                         segments: segments,
                         previousSummary: nil,
                         config: summarizerConfig,
                         llmConfig: llmConfig
                     )
+                    content = result.content
+                    structuredResult = result.structured
                 case .chunkSummaries:
                     if sortedChunks.isEmpty {
                         Self.logger.warning("Mode: chunkSummaries but no chunks available, falling back to raw text for \(sessionID)")
-                        content = try await service.summarize(
+                        let result = try await service.summarizeWithFallback(
                             segments: segments,
                             previousSummary: nil,
                             config: summarizerConfig,
                             llmConfig: llmConfig
                         )
+                        content = result.content
+                        structuredResult = result.structured
                     } else {
-                        Self.logger.info("Mode: chunkSummaries — synthesizing \(sortedChunks.count) chunks for \(sessionID)")
+                        Self.logger.info("Mode: chunkSummaries — synthesizing \(sortedChunks.count) chunks for \(sessionID) (structured output not available for chunk synthesis)")
                         content = try await service.summarizeOverall(
                             chunkSummaries: sortedChunks,
                             config: summarizerConfig,
@@ -124,14 +129,16 @@ final class BackgroundSummaryService {
                 case .auto:
                     if chunkSummaries.isEmpty {
                         Self.logger.info("Mode: auto, no chunks — generating from transcript for \(sessionID)")
-                        content = try await service.summarize(
+                        let result = try await service.summarizeWithFallback(
                             segments: segments,
                             previousSummary: nil,
                             config: summarizerConfig,
                             llmConfig: llmConfig
                         )
+                        content = result.content
+                        structuredResult = result.structured
                     } else {
-                        Self.logger.info("Mode: auto — synthesizing \(sortedChunks.count) chunks for \(sessionID)")
+                        Self.logger.info("Mode: auto — synthesizing \(sortedChunks.count) chunks for \(sessionID) (structured output not available for chunk synthesis)")
                         content = try await service.summarizeOverall(
                             chunkSummaries: sortedChunks,
                             config: summarizerConfig,
@@ -160,7 +167,8 @@ final class BackgroundSummaryService {
                     content: content,
                     style: summarizerConfig.summaryStyle,
                     model: llmConfig.model,
-                    isOverall: true
+                    isOverall: true,
+                    structuredContent: structuredResult?.toJSON()
                 )
                 block.session = currentSession
                 context.insert(block)

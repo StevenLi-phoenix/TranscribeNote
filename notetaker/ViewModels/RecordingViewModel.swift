@@ -444,7 +444,7 @@ final class RecordingViewModel {
         summaryTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                let content = try await self.summarizerService.summarize(
+                let result = try await self.summarizerService.summarizeWithFallback(
                     segments: unsummarized,
                     previousSummary: previousSummary,
                     config: config,
@@ -453,16 +453,17 @@ final class RecordingViewModel {
                 guard !Task.isCancelled else { return }
                 // Clear previous error only on success
                 self.summaryError = nil
-                if !content.isEmpty {
+                if !result.content.isEmpty {
                     let block = SummaryBlock(
                         coveringFrom: coveringFrom,
                         coveringTo: coveringTo,
-                        content: content,
+                        content: result.content,
                         style: config.summaryStyle,
-                        model: llmCfg.model
+                        model: llmCfg.model,
+                        structuredContent: result.structured?.toJSON()
                     )
                     self.summaries.append(block)
-                    self.latestSummary = content
+                    self.latestSummary = result.content
                     self.lastSummarizedSegmentCount = self.segments.count
                     self.nextPeriodicCoveringFrom = coveringTo
                 }

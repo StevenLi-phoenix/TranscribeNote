@@ -379,15 +379,18 @@ struct SessionDetailView: View {
                 try? modelContext.save()
 
                 summaryProgress = "Generating complete summary…"
-                let content: String
+                var content: String
+                var structuredResult: StructuredSummary?
                 switch summarizerConfig.overallSummaryMode {
                 case .rawText:
-                    content = try await service.summarize(
+                    let rawResult = try await service.summarizeWithFallback(
                         segments: segments,
                         previousSummary: nil,
                         config: summarizerConfig,
                         llmConfig: llmConfig
                     )
+                    content = rawResult.content
+                    structuredResult = rawResult.structured
                 case .chunkSummaries, .auto:
                     let chunks = freshSession.summaries
                         .filter { !$0.isOverall && !$0.isPinned }
@@ -404,12 +407,14 @@ struct SessionDetailView: View {
                         if summarizerConfig.overallSummaryMode == .chunkSummaries {
                             Self.logger.warning("No chunk summaries available, falling back to raw text")
                         }
-                        content = try await service.summarize(
+                        let fallbackResult = try await service.summarizeWithFallback(
                             segments: segments,
                             previousSummary: nil,
                             config: summarizerConfig,
                             llmConfig: llmConfig
                         )
+                        content = fallbackResult.content
+                        structuredResult = fallbackResult.structured
                     }
                 }
                 guard !content.isEmpty else {
@@ -436,7 +441,8 @@ struct SessionDetailView: View {
                     content: content,
                     style: summarizerConfig.summaryStyle,
                     model: llmConfig.model,
-                    isOverall: true
+                    isOverall: true,
+                    structuredContent: structuredResult?.toJSON()
                 )
                 block.session = currentSession
                 modelContext.insert(block)
