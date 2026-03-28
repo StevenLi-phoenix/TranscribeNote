@@ -552,6 +552,12 @@ final class RecordingViewModel {
                 BackgroundSummaryService.shared.dispatchOverallSummary(
                     sessionID: session.id, container: modelContext.container
                 )
+                // Only auto-extract action items if enabled in settings
+                if self.summarizerConfig.actionItemExtractionEnabled {
+                    BackgroundSummaryService.shared.dispatchActionItemExtraction(
+                        sessionID: session.id, container: modelContext.container
+                    )
+                }
             }
 
             self.state = .completed

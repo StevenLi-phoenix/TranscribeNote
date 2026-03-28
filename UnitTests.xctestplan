@@ -18,6 +18,8 @@
         "name" : "notetakerTests"
       },
       "selectedTests" : [
+        "ActionItemMarkdownFormatterTests",
+        "ActionItemParserTests",
         "AudioConfigTests",
         "ChatServiceTests",
         "AudioExporterTests",
