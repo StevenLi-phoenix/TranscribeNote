@@ -55,6 +55,10 @@ struct notetakerApp: App {
         KeychainMigration.migrateIfNeeded()
         SchedulerService.install()
 
+        if UserDefaults.standard.object(forKey: "soundEffectsEnabled") == nil {
+            UserDefaults.standard.set(true, forKey: "soundEffectsEnabled")
+        }
+
         let llmConfig = LLMProfileStore.resolveConfig(for: .live)
         let summarizerConfig = SummarizerConfig.fromUserDefaults()
         let vadConfig = VADConfig.fromUserDefaults()
