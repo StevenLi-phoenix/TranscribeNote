@@ -55,6 +55,14 @@ struct ModelsSettingsTab: View {
                     }
                     .disabled(selectedProfileID == nil || profiles.count <= 1)
 
+                    Button {
+                        duplicateProfile()
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                    }
+                    .disabled(selectedProfileID == nil)
+                    .help("Duplicate profile")
+
                     Spacer()
                 }
                 .padding(DS.Spacing.xs)
@@ -83,6 +91,13 @@ struct ModelsSettingsTab: View {
                             }
 
                             StatusIndicator(connectionStatus, error: connectionError)
+
+                            if hasUnsavedChanges {
+                                Circle()
+                                    .fill(.orange)
+                                    .frame(width: 8, height: 8)
+                                    .help("Unsaved changes")
+                            }
                         }
                     }
                     .formStyle(.columns)
@@ -99,6 +114,11 @@ struct ModelsSettingsTab: View {
         }
         .onAppear { loadProfiles() }
         .onChange(of: profiles) { _, _ in hasUnsavedChanges = true }
+        .onChange(of: selectedProfileID) { _, _ in
+            connectionStatus = .unknown
+            connectionError = nil
+            connectionTask?.cancel()
+        }
     }
 
     // MARK: - Profile CRUD
@@ -125,6 +145,14 @@ struct ModelsSettingsTab: View {
     private func deleteProfile(id: UUID) {
         LLMProfileStore.deleteProfile(id: id, from: &profiles)
         selectedProfileID = profiles.first?.id
+    }
+
+    private func duplicateProfile() {
+        guard let id = selectedProfileID,
+              let source = profiles.first(where: { $0.id == id }) else { return }
+        let copy = LLMModelProfile(name: "\(source.name) Copy", config: source.config)
+        profiles.append(copy)
+        selectedProfileID = copy.id
     }
 
     // MARK: - Connection Testing
