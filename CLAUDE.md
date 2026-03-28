@@ -78,9 +78,10 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - **VAD logger gotcha**: `OSAllocatedUnfairLock.withLock` closure captures `inout state` — `Logger` string interpolation of state fields is an escaping autoclosure that captures inout, causing compile error; extract values before logging outside the lock
 
 ### LLM & Summarization
-- `LLMEngine` protocol: `generate(messages:config:)`, `isAvailable(config:)`, `supportsStructuredOutput`, `generateStructured(messages:schema:config:)` — `nonisolated`, `AnyObject`, `Sendable`, injectable `URLSession` for testing; protocol extension provides default `supportsStructuredOutput = false` and `generateStructured()` throwing `.notSupported`
+- `LLMEngine` protocol: `generate(messages:config:)`, `isAvailable(config:)`, `supportsStructuredOutput`, `generateStructured(messages:schema:config:)`, `supportsToolCalling`, `generateWithTools(messages:tools:config:)` — `nonisolated`, `AnyObject`, `Sendable`, injectable `URLSession` for testing; protocol extension provides defaults returning `false` / throwing `.notSupported`
 - **Structured Output**: `JSONSchema` (name, description, schemaData as raw JSON `Data`, strict) + `StructuredOutput` (data, usage, `decode<T>()`) — enables JSON schema-constrained generation; OpenAI uses `response_format`, Anthropic uses `output_config.format`, Ollama uses `format` parameter; FoundationModels does not support runtime schemas (`@Generable` is compile-time only)
-- `LLMMessage` struct: `role` (`.system`/`.user`/`.assistant`), `content`, `cacheHint` (marks stable content for prompt caching), `usage: TokenUsage?` (input/output/cache tokens from API response)
+- **Tool Calling**: `LLMTool` (name, description, parameters as `JSONSchema`, async handler) + `LLMToolCall` (id, name, arguments as raw `Data`) + `LLMToolResponse` (`.text(LLMMessage)` or `.toolCalls([LLMToolCall], usage:)`) — enables multi-tool function calling; `executeToolLoop()` convenience function automates the call→execute→feed-back cycle with configurable `maxIterations` (default 10); OpenAI uses `tools`+`tool_calls`, Anthropic uses `tools`+`tool_use`/`tool_result` content blocks, Ollama uses `/api/chat`+`tools`; FoundationModels does not support runtime tool calling (compile-time `Tool` protocol only)
+- `LLMMessage` struct: `role` (`.system`/`.user`/`.assistant`/`.tool`), `content`, `cacheHint` (marks stable content for prompt caching), `usage: TokenUsage?` (input/output/cache tokens from API response), `toolCalls: [LLMToolCall]?` (on assistant messages), `toolCallId: String?` (on tool result messages)
 - Five implementations: `FoundationModelsEngine` (Apple Intelligence on-device), `OllamaEngine`, `OpenAIEngine`, `AnthropicEngine`, `NoopLLMEngine` — created via `LLMEngineFactory.create(from:session:)`; `.custom` provider maps to `OpenAIEngine` (OpenAI-compatible API for LM Studio etc.)
 - **Foundation Models fallback**: `LLMEngineFactory.createWithFallback()` tries primary engine, falls back to `FoundationModelsEngine` if primary unavailable and Apple Intelligence is enabled; `FoundationModelsEngine.isModelAvailable` checks `SystemLanguageModel.default.availability`
 - `SummarizerService` orchestrates: guard minTranscriptLength → build prompt via `PromptBuilder` → call LLM with retry (3 attempts, 10s/30s/60s backoff, only retries network/HTTP errors)
@@ -170,6 +171,23 @@ Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Mo
 - **`ci.yml`**: Runs on PR/push to `main`/`release` on `macos-26` runner; builds with `CODE_SIGNING_ALLOWED=NO`; runs FullTests plan (unit + UI tests); caches DerivedData; filtered test output with last-50-lines on failure
 - **`auto-merge.yml`**: Waits for `ci.yml` build-and-test to pass, runs Claude Code review, then merges; closes linked issues after merge
 - **`codeql.yml`**: CodeQL analysis for release branch protection
+
+## Development Workflow
+
+1. **Phase 0 — Setup**: 读取 issue → 获取 project item ID → 移到 `In Progress`（缓存所有 ID，不要中途再查）
+2. **Post plan to issue**: 在 GitHub issue 上发评论公布实现计划（写代码之前）
+3. **Worktree 隔离**: 必须在隔离 worktree 中开发（Agent tool `isolation: "worktree"` 或 `EnterWorktree`），不在主工作区直接改——主工作区可能有其他分支的未提交改动，会反复污染 build
+4. **TDD**: 先写测试，再实现
+5. **更新配套文件**: `UnitTests.xctestplan`（新测试套件）、`CLAUDE.md`（新架构/API/gotcha）
+6. **Commit + Push**: commit message 引用 `(#N)`，使用 `git push`（永远不 force push）
+7. **创建 PR**: body 包含 `Closes #N`
+8. **修 CI** 直到通过
+9. **Git 策略**: 集成上游变更用 `git merge origin/main`，永远不用 `git rebase` + force push
+
+**Cached project board constants:**
+- Project ID: `PVT_kwHOBIVR584BSuKM`, Number: `6`
+- Status Field ID: `PVTSSF_lAHOBIVR584BSuKMzhALCpk`
+- In Progress: `7c8435a9`, Done: `43995073`
 
 ## CI/CD & Branch Protection
 

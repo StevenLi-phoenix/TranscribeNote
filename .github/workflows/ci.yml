@@ -40,12 +40,41 @@ jobs:
           restore-keys: |
             deriveddata-${{ runner.os }}-
 
-      - name: Build
+      - name: Build (Debug)
         run: |
           set -euo pipefail
           xcodebuild -scheme notetaker -configuration Debug build \
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tail -5
+
+      - name: Build Release Archive
+        run: |
+          set -euo pipefail
+          xcodebuild -scheme notetaker -configuration Release \
+            -destination 'platform=macOS' \
+            -archivePath "$RUNNER_TEMP/notetaker.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            archive 2>&1 | tail -10
+
+      - name: Export App from Archive
+        run: |
+          set -euo pipefail
+          APP_PATH="$RUNNER_TEMP/notetaker.xcarchive/Products/Applications/notetaker.app"
+          if [ -d "$APP_PATH" ]; then
+            mkdir -p "$RUNNER_TEMP/artifact"
+            cp -R "$APP_PATH" "$RUNNER_TEMP/artifact/"
+          else
+            echo "App not found at $APP_PATH, listing archive contents:"
+            find "$RUNNER_TEMP/notetaker.xcarchive" -maxdepth 4 -type d
+            exit 1
+          fi
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: notetaker-${{ github.sha }}
+          path: ${{ runner.temp }}/artifact/notetaker.app
+          retention-days: 30
 
       - name: Run Full Tests
         run: |
