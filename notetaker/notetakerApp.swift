@@ -38,6 +38,8 @@ struct notetakerApp: App {
     private let containerError: String?
 
     init() {
+        UserDefaults.standard.register(defaults: ["soundEffectsEnabled": true])
+
         CrashLogService.install()
         KeychainMigration.migrateIfNeeded()
         SchedulerService.install()
