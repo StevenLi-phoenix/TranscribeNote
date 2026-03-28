@@ -280,6 +280,7 @@ final class RecordingViewModel {
 
         recordingStartTime = Date()
         state = .recording
+        SoundEffectService.play(.recordingStart)
         segments = []
         partialText = ""
         clock.reset()
@@ -332,6 +333,7 @@ final class RecordingViewModel {
         // 6. Save elapsed time and transition to paused
         pausedElapsedTime = clock.elapsedTime
         state = .paused
+        SoundEffectService.play(.pause)
         Self.logger.info("Recording paused at \(self.pausedElapsedTime.hhmmss)")
     }
 
@@ -365,6 +367,7 @@ final class RecordingViewModel {
         resumeDurationEndTimer()
 
         state = .recording
+        SoundEffectService.play(.resume)
         Self.logger.info("Recording resumed from \(self.pausedElapsedTime.hhmmss)")
     }
 
@@ -508,6 +511,7 @@ final class RecordingViewModel {
 
         // Show stopping UI while draining ASR results
         state = .stopping
+        SoundEffectService.play(.stop)
         stoppingStatus = "Finishing transcription..."
 
         // Background: drain ASR results → persist to SwiftData → signal completed

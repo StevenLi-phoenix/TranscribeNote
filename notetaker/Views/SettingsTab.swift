@@ -244,6 +244,7 @@ struct SummarizationSettingsTab: View {
 struct RecordingSettingsTab: View {
     @AppStorage("vadConfigJSON") private var vadConfigJSON: String = ""
     @AppStorage("skipTrashOnDelete") private var skipTrash = false
+    @AppStorage("soundEffectsEnabled") private var soundEffectsEnabled = true
     @AppStorage("globalHotkeyEnabled") private var globalHotkeyEnabled = true
     @AppStorage("globalHotkeyKeyCode") private var hotkeyKeyCode = Int(GlobalHotkeyService.defaultKeyCode)
     @AppStorage("globalHotkeyModifiers") private var hotkeyModifiers = Int(GlobalHotkeyService.defaultModifiers)
@@ -343,6 +344,12 @@ struct RecordingSettingsTab: View {
                     }
                     .disabled(!config.vadEnabled)
                 }
+            }
+
+            SettingsRow("Sound Effects") {
+                Toggle("", isOn: $soundEffectsEnabled)
+                    .labelsHidden()
+                    .help("Play subtle sounds when recording starts, pauses, resumes, or stops.")
             }
 
             SettingsRow("Skip Trash on Delete") {
