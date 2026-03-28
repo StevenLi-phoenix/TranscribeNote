@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026-03-28]
+
+- Comprehensive UX/UI polish across all 22 view files (~97 improvements over 25 autonomous rounds):
+  - **Bug fixes**: Chat task cancellation on session change/disappear; MenuBar stopping state; ModelsSettingsTab false unsaved-changes indicator; SummaryCardView stale editing state on content change; PlaybackControlView error message display (was never shown); duration formatting hours support; title auto-save on navigate
+  - **Accessibility**: Every interactive element now has accessibilityLabel, help tooltip, or descriptive Label; error banners, resize handles, chat buttons, summary card actions, schedule editor, calendar import rows, menu bar states all annotated
+  - **Animations**: Smooth chevron rotation on summary collapse; animated date filter/search transitions; settings toggle sections animate in/out; error banner dismiss animates; symbol effects on icon state changes
+  - **Design System**: All hardcoded spacing/font values replaced with DS tokens; consistent use across all views
+  - **UX features**: Copy Transcript in session context menu; export audio success feedback; skip ±15s buttons in playback; space bar keyboard shortcut for play/pause; summary progress text in toolbar; segment/summary counts in header; chat message count; expired scheduled recordings dimmed; latestSummary visible during paused state
+  Files: All 22 files in Views/, notetakerApp.swift, ContentView.swift, Extensions/TimeInterval+Formatting.swift, notetakerTests/TimeIntervalFormattingTests.swift
+
 ## [2026-03-24]
 
 - Security review and fixes: resolved VAD data race (CRITICAL), multi-clip audio deletion, prompt injection mitigation, resultTask timeout cancellation, NoopASREngine thread safety, Keychain empty-key guard, migration failure cleanup, URL scheme validation, HTTP error truncation, smart retry logic, API key leak warning, and sensitive data logging cleanup
@@ -53,3 +63,8 @@
 
 - feat: one-click copy summary as Markdown (#38) — hover-to-reveal copy button on SummaryCardView with checkmark animation feedback; SummaryMarkdownFormatter for testable Markdown formatting; 6 unit tests
   Files: SummaryMarkdownFormatter.swift, SummaryCardView.swift, SummaryMarkdownFormatterTests.swift
+
+## [2026-03-26 12:58]
+
+- feat: full tool calling support for LLM engines (#56) — LLMTool/LLMToolCall/LLMToolResponse types, LLMMessage.Role.tool + toolCalls/toolCallId properties, executeToolLoop() convenience function, OpenAI/Anthropic/Ollama engine implementations with provider-specific API mapping, 30+ new tests across 7 suites (106 total, all passing); PR #60
+  Files: LLMEngine.swift, OpenAIEngine.swift, AnthropicEngine.swift, OllamaEngine.swift, SummarizerService.swift, MockLLMEngine.swift, ToolCallingTests.swift, OpenAIEngineTests.swift, AnthropicEngineTests.swift, OllamaEngineTests.swift, NoopEngineTests.swift, UnitTests.xctestplan, CLAUDE.md
