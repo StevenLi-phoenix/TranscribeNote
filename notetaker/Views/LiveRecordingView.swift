@@ -39,6 +39,8 @@ struct LiveRecordingView: View {
                 .padding(DS.Spacing.sm)
                 .padding(.horizontal)
                 .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: DS.Radius.sm))
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Error: \(error)")
             }
 
             // Summary error — shown independently of summary section
@@ -57,6 +59,8 @@ struct LiveRecordingView: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Dismiss error")
+                    .help("Dismiss error")
                 }
                 .font(DS.Typography.caption)
                 .padding(DS.Spacing.sm)
