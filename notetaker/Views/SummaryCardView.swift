@@ -97,6 +97,7 @@ struct SummaryCardView: View {
 
         }
         .padding(.vertical, DS.Spacing.xs)
+        .accessibilityElement(children: .contain)
         .overlay(alignment: .topTrailing) {
             if !isEditing && !showRegenerateField && (isHovered || showCopiedFeedback) {
                 HStack(spacing: DS.Spacing.xs) {
@@ -113,6 +114,7 @@ struct SummaryCardView: View {
                         .buttonStyle(.plain)
                         .foregroundStyle(.tertiary)
                         .help("Edit summary")
+                        .accessibilityLabel("Edit summary")
                     }
                     if onRegenerate != nil {
                         Button {
@@ -125,6 +127,7 @@ struct SummaryCardView: View {
                         .buttonStyle(.plain)
                         .foregroundStyle(.tertiary)
                         .help("Regenerate with instructions")
+                        .accessibilityLabel("Regenerate summary")
                     }
                 }
             }
