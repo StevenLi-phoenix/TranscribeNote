@@ -35,7 +35,7 @@ struct RecordingControlView: View {
                     onPause?()
                 } label: {
                     Image(systemName: "pause.circle")
-                        .font(.title)
+                        .font(DS.Typography.title)
                         .foregroundStyle(.orange)
                 }
                 .buttonStyle(.plain)
@@ -45,8 +45,8 @@ struct RecordingControlView: View {
                     onStop()
                 } label: {
                     Image(systemName: "stop.circle")
-                        .font(.title)
-                        .foregroundStyle(.red)
+                        .font(DS.Typography.title)
+                        .foregroundStyle(DS.Colors.recording)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Stop recording")
@@ -84,7 +84,7 @@ struct RecordingControlView: View {
                     onResume?()
                 } label: {
                     Image(systemName: "play.circle")
-                        .font(.title)
+                        .font(DS.Typography.title)
                         .foregroundStyle(.green)
                 }
                 .buttonStyle(.plain)
@@ -94,8 +94,8 @@ struct RecordingControlView: View {
                     onStop()
                 } label: {
                     Image(systemName: "stop.circle")
-                        .font(.title)
-                        .foregroundStyle(.red)
+                        .font(DS.Typography.title)
+                        .foregroundStyle(DS.Colors.recording)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Stop recording")
@@ -129,7 +129,7 @@ struct RecordingControlView: View {
             } label: {
                 Image(systemName: "record.circle.fill")
                     .font(.system(size: 48))
-                    .foregroundStyle(.red)
+                    .foregroundStyle(DS.Colors.recording)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Start recording")

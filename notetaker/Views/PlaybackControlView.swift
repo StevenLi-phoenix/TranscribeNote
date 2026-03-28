@@ -11,7 +11,7 @@ struct PlaybackControlView: View {
                 service.togglePlayPause()
             } label: {
                 Image(systemName: service.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.title)
+                    .font(DS.Typography.title)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(service.isPlaying ? "Pause" : "Play")

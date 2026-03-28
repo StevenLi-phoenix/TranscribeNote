@@ -166,7 +166,8 @@ struct ActionItemListView: View {
         NSPasteboard.general.setString(markdown, forType: .string)
         Self.logger.info("Copied \(actionItems.count) action items as markdown")
         copyFeedback = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+        Task {
+            try? await Task.sleep(for: .seconds(1.5))
             copyFeedback = false
         }
     }
