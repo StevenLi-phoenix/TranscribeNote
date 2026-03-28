@@ -73,6 +73,7 @@ final class RecordingViewModel {
     private var periodicWindowCount: Int = 0
     private var llmConfigObserver: NSObjectProtocol?
     private let vadConfig: VADConfig
+    private var hasAutoTitled = false
 
     // Duration-end timer state (2c)
     private var durationEndTimer: Timer?
@@ -284,6 +285,7 @@ final class RecordingViewModel {
         clock.reset()
         clipTimeOffset = 0
         pausedElapsedTime = 0
+        hasAutoTitled = false
     }
 
     // MARK: - Pause / Resume
@@ -715,6 +717,16 @@ final class RecordingViewModel {
             )
             segments.append(segment)
             partialText = ""
+
+            // Auto-title from first meaningful segment (try up to first 5 segments)
+            if !hasAutoTitled && segments.count <= 5,
+               let session = currentSession,
+               AutoTitleGenerator.isDefaultTitle(session.title),
+               let title = AutoTitleGenerator.generate(from: result.text) {
+                session.title = title
+                hasAutoTitled = true
+                Self.logger.info("Auto-titled session: \(title)")
+            }
         } else {
             partialText = result.text
         }
