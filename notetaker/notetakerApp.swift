@@ -78,7 +78,10 @@ struct notetakerApp: App {
 
     @ViewBuilder
     private var menuBarIcon: some View {
-        if viewModel.state == .paused {
+        if viewModel.state == .stopping {
+            Image(systemName: "ellipsis.circle.fill")
+                .symbolRenderingMode(.multicolor)
+        } else if viewModel.state == .paused {
             Image(systemName: "pause.circle.fill")
                 .symbolRenderingMode(.multicolor)
         } else if viewModel.isRecording {

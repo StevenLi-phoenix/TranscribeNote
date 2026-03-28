@@ -56,6 +56,9 @@ struct LLMAssignmentTab: View {
                 }
             }
         }
+        .animation(.easeInOut(duration: 0.2), value: overallInheritsLive)
+        .animation(.easeInOut(duration: 0.2), value: titleInheritsLive)
+        .animation(.easeInOut(duration: 0.2), value: chatInheritsLive)
         .onAppear { loadAssignments() }
         .onChange(of: liveProfileID) { _, newValue in
             if let id = newValue { LLMProfileStore.setAssignedProfileID(id, for: .live) }
@@ -209,6 +212,8 @@ struct SummarizationSettingsTab: View {
                 }
             }
         }
+        .animation(.easeInOut(duration: 0.2), value: pickerSelection == "custom")
+        .animation(.easeInOut(duration: 0.2), value: config.includeContext)
         .onAppear { loadConfig() }
         .onChange(of: config) { _, newValue in saveConfig(newValue) }
         .settingsFooter("Changes take effect after restarting the app.", icon: "arrow.clockwise")
@@ -282,6 +287,7 @@ struct RecordingSettingsTab: View {
                 }
             }
         }
+        .animation(.easeInOut(duration: 0.2), value: config.silenceTimeoutSeconds != nil)
         .onAppear { loadConfig() }
         .onChange(of: config) { _, newValue in saveConfig(newValue) }
         .settingsFooter("Changes take effect on next recording.", icon: "arrow.clockwise")
