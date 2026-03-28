@@ -52,15 +52,22 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - Re-fetch SwiftData `@Model` objects after `await` in async Tasks — captured references may be stale; re-fetch by ID with `#Predicate`
 - Reset transient view state (`isGeneratingSummary`, `hasAutoTriggered`, errors) in `onChange(of: sessionID)` — prevents stale flags blocking behavior on navigation
 - **SwiftData property defaults for migration**: New non-optional stored properties on `@Model` classes MUST have inline default values on the property declaration (e.g., `var isOverall: Bool = false`), NOT just in `init()` — SwiftData uses the property-level default to fill existing rows during lightweight migration; `init` defaults are ignored
-- **Schema versioning**: `NotetakerMigrationPlan` in `Models/Schemas/` — ModelContainer initialized with `migrationPlan: NotetakerMigrationPlan.self`; all 6 versions use lightweight migrations:
+- **Schema versioning**: `NotetakerMigrationPlan` in `Models/Schemas/` — ModelContainer initialized with `migrationPlan: NotetakerMigrationPlan.self`; all 8 versions use lightweight migrations:
   - **V1**: Initial schema (RecordingSession, TranscriptSegment, SummaryBlock)
   - **V2**: Adds `editedContent: String? = nil` to SummaryBlock; `displayContent` computed property returns editedContent ?? content
   - **V3**: Adds `ScheduledRecording` model for timed recording scheduling
   - **V4**: Adds `audioFilePaths: [String] = []` to RecordingSession for multi-clip pause/resume
   - **V5**: Adds `isPartial: Bool = false` to RecordingSession for force-quit detection
   - **V6**: Adds `calendarEventIdentifier: String? = nil` to ScheduledRecording, `scheduledRecordingID: UUID? = nil` to RecordingSession
+  - **V7**: Adds `isPinned: Bool = false` and `pinnedAt: Date? = nil` to RecordingSession for pin/favorite feature
+  - **V8**: Adds `deletedAt: Date? = nil` to RecordingSession for trash/recycle bin feature
 - **Design System tokens**: `DS` enum in `DesignSystem.swift` centralizes spacing (4pt grid), typography, colors, radii, layout constants; `ViewModifiers.swift` provides `.cardStyle()` and `.badgeStyle()`; `ControlBarMetrics` aliases DS values
 - **Session search**: `SessionListView` uses `.searchable()` filtering by title, segment text, summary content; debounced 300ms to prevent SwiftData fault storms; `DateFilter` enum for Today/This Week/This Month quick filters
+- **Pin/favorite sessions**: Pinned sessions appear in a separate "Pinned" section at the top of the session list, sorted by `pinnedAt` descending; not affected by date filter but filtered by search text; `RecordingSession.togglePin()` sets `isPinned` and `pinnedAt`; context menu Pin/Unpin on single and multi-select
+- **Session Trash/Recycle Bin**: Soft-delete via `RecordingSession.deletedAt`; `moveToTrash()`/`restore()` methods; `daysUntilPermanentDeletion` computed property (30-day retention); `TrashCleanupService.cleanupExpired()` runs on app launch; `TrashView` shows trashed sessions with restore/permanent-delete; `SessionListView` filters out deleted sessions via `activeSessions`; `ContentView` sidebar has trash link with badge count; `@AppStorage("skipTrashOnDelete")` toggle in Recording settings bypasses trash
+- **Command Palette**: `CommandPaletteView` (⌘K) — Raycast-style overlay with fuzzy search, category grouping, keyboard navigation (↑/↓/Enter/Escape); `CommandPaletteSearch` enum has testable `filter(commands:query:)` and `grouped(commands:)` static methods; `PaletteCommand` model + `CommandCategory` enum; commands built dynamically in `ContentView.buildPaletteCommands()` based on current ViewModel state
+- **Playback keyboard shortcuts**: `Notification.Name` extensions (`.togglePlayback`, `.seekForward`, `.seekBackward`, `.seekForwardLong`, `.seekBackwardLong`) in `notetakerApp.swift`; `CommandMenu("Playback")` provides Space (play/pause), ←/→ (±5s), Shift+←/→ (±15s); `SessionDetailView` listens via `.onReceive` and delegates to `AudioPlaybackService`
+- **Karaoke transcript sync**: `KaraokeSync.findActiveIndex(at:in:)` binary search for active segment; `TranscriptView` passes `activeSegmentID` through to `TranscriptSegmentRow.isActive` for highlight styling; `ScrollViewReader.scrollTo(id:, anchor: .center)` for auto-scroll; user scroll detection via `onScrollPhaseChange` pauses auto-scroll for 3s; timestamp tap seeks playback and starts playing
 
 ### Privacy & App Store
 - **Privacy disclosure**: `PrivacyDisclosureView` shown as sheet on first `LLMSettingsTab` `onAppear` via `@AppStorage("hasShownPrivacyDisclosure")`; reset via Help > Data Usage Information menu or `defaults delete <bundle-id> hasShownPrivacyDisclosure`
@@ -138,11 +145,11 @@ Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Mo
 - **`notetaker/`** — Main app target
   - `notetakerApp.swift` — Entry point, shared `ModelContainer`, `MenuBarExtra`, `Settings` scene
   - `ContentView.swift` — `NavigationSplitView` (sidebar session list + detail routing)
-  - `Models/` — SwiftData models (`RecordingSession`, `TranscriptSegment`, `SummaryBlock`, `ScheduledRecording`), config types (`LLMConfig`, `SummarizerConfig`, `LLMModelProfile`, `VADConfig`, `OverallSummaryMode`, `RepeatRule`), ephemeral types (`ChatMessage`), schema versioning (`Schemas/` V1–V6)
-  - `Services/` — Protocol-based engines (`ASREngine`, `LLMEngine`) with multiple implementations (including `FoundationModelsEngine` for Apple Intelligence), `AudioCaptureService`, `AudioPlaybackService`, `AudioExporter`, `SummarizerService`, `BackgroundSummaryService`, `SummaryMarkdownFormatter`, `ChatService`, `PromptBuilder`, `KeychainService`, `CrashLogService`, `SchedulerService`, `CalendarService`
+  - `Models/` — SwiftData models (`RecordingSession`, `TranscriptSegment`, `SummaryBlock`, `ScheduledRecording`), config types (`LLMConfig`, `SummarizerConfig`, `LLMModelProfile`, `VADConfig`, `OverallSummaryMode`, `RepeatRule`), ephemeral types (`ChatMessage`), schema versioning (`Schemas/` V1–V8)
+  - `Services/` — Protocol-based engines (`ASREngine`, `LLMEngine`) with multiple implementations (including `FoundationModelsEngine` for Apple Intelligence), `AudioCaptureService`, `AudioPlaybackService`, `AudioExporter`, `SummarizerService`, `BackgroundSummaryService`, `SummaryMarkdownFormatter`, `ChatService`, `PromptBuilder`, `KeychainService`, `CrashLogService`, `SchedulerService`, `CalendarService`, `TrashCleanupService`
   - `ViewModels/` — `RecordingViewModel` (`@Observable`) — central state machine for recording lifecycle; `SchedulerViewModel` — scheduled recordings + calendar integration
   - `DesignSystem.swift` — `DS` enum (spacing, typography, colors, radius, layout tokens)
-  - `Views/` — SwiftUI views including `SettingsView` (4-tab layout: `SettingsTab`, `ModelsSettingsTab`, `AboutTab`), `ScheduleView`, `ScheduleEditorView`, `PrivacyDisclosureView`, `SummaryCardView`, `TranscriptSegmentRow`, `AudioLevelBar`, `ResizeHandle`, `VerticalResizeHandle`, `ChatView`, `SettingsComponents` (reusable settings UI), `ViewModifiers`
+  - `Views/` — SwiftUI views including `SettingsView` (4-tab layout: `SettingsTab`, `ModelsSettingsTab`, `AboutTab`), `ScheduleView`, `ScheduleEditorView`, `PrivacyDisclosureView`, `SummaryCardView`, `TranscriptSegmentRow`, `AudioLevelBar`, `ResizeHandle`, `VerticalResizeHandle`, `ChatView`, `SettingsComponents` (reusable settings UI), `ViewModifiers`, `TrashView`
 - **`notetakerTests/`** — Swift Testing (`@Test`, `#expect`); ~64 test files; `Mocks/` has `MockASREngine`, `MockLLMEngine`, `MockSchedulerService`, per-suite `MockURLProtocol` subclasses; `Helpers/` has `BufferFactory` and `FileAudioSource`
 - **`notetakerUITests/`** — XCTest UI tests (light/dark mode via `runsForEachTargetApplicationUIConfiguration`)
 - **`scripts/`** — `increment_build_number.sh`
@@ -171,6 +178,23 @@ Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Mo
 - **`ci.yml`**: Runs on PR/push to `main`/`release` on `macos-26` runner; builds with `CODE_SIGNING_ALLOWED=NO`; runs FullTests plan (unit + UI tests); caches DerivedData; filtered test output with last-50-lines on failure
 - **`auto-merge.yml`**: Waits for `ci.yml` build-and-test to pass, runs Claude Code review, then merges; closes linked issues after merge
 - **`codeql.yml`**: CodeQL analysis for release branch protection
+
+## Development Workflow
+
+1. **Phase 0 — Setup**: 读取 issue → 获取 project item ID → 移到 `In Progress`（缓存所有 ID，不要中途再查）
+2. **Post plan to issue**: 在 GitHub issue 上发评论公布实现计划（写代码之前）
+3. **Worktree 隔离**: 必须在隔离 worktree 中开发（Agent tool `isolation: "worktree"` 或 `EnterWorktree`），不在主工作区直接改——主工作区可能有其他分支的未提交改动，会反复污染 build
+4. **TDD**: 先写测试，再实现
+5. **更新配套文件**: `UnitTests.xctestplan`（新测试套件）、`CLAUDE.md`（新架构/API/gotcha）
+6. **Commit + Push**: commit message 引用 `(#N)`，使用 `git push`（永远不 force push）
+7. **创建 PR**: body 包含 `Closes #N`
+8. **修 CI** 直到通过
+9. **Git 策略**: 集成上游变更用 `git merge origin/main`，永远不用 `git rebase` + force push
+
+**Cached project board constants:**
+- Project ID: `PVT_kwHOBIVR584BSuKM`, Number: `6`
+- Status Field ID: `PVTSSF_lAHOBIVR584BSuKMzhALCpk`
+- In Progress: `7c8435a9`, Done: `43995073`
 
 ## CI/CD & Branch Protection
 

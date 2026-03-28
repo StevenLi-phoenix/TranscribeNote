@@ -37,6 +37,7 @@
         "PromptBuilderTests",
         "RecordingSessionExtendedTests",
         "RecordingSessionTests",
+        "SessionTrashTests",
         "RecordingViewModelTests",
         "RingBufferTests",
         "SimpleVADTests",
