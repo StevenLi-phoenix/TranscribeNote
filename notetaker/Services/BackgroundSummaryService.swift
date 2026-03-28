@@ -159,6 +159,9 @@ final class BackgroundSummaryService {
                     context: context,
                     summarizerConfig: summarizerConfig
                 )
+
+                // Trigger auto-export after summary + title complete
+                await Self.triggerAutoExport(sessionID: sessionID, context: context)
             } catch is CancellationError {
                 Self.logger.info("Background summary cancelled for \(sessionID)")
             } catch {
@@ -171,10 +174,46 @@ final class BackgroundSummaryService {
                     context: context,
                     summarizerConfig: summarizerConfig
                 )
+
+                // Trigger auto-export even if summary failed (transcript still available)
+                await Self.triggerAutoExport(sessionID: sessionID, context: context)
             }
         }
 
         activeTasks[sessionID] = task
+    }
+
+    /// Trigger auto-export pipeline if enabled.
+    private static func triggerAutoExport(sessionID: UUID, context: ModelContext) async {
+        let exportConfig = AutoExportConfig.fromUserDefaults()
+        guard exportConfig.isEnabled, !exportConfig.actions.isEmpty else { return }
+
+        let predicate = #Predicate<RecordingSession> { $0.id == sessionID }
+        guard let session = try? context.fetch(FetchDescriptor(predicate: predicate)).first else {
+            logger.error("Session \(sessionID) not found for auto-export")
+            return
+        }
+
+        let segments = session.segments
+            .sorted { $0.startTime < $1.startTime }
+            .map { (startTime: $0.startTime, text: $0.text) }
+        let overallSummary = session.summaries
+            .first { $0.isOverall }?
+            .displayContent
+
+        let info = ExportSessionInfo(
+            title: session.title,
+            date: session.startedAt,
+            duration: session.totalDuration,
+            segments: segments,
+            overallSummary: overallSummary
+        )
+
+        logger.info("Triggering auto-export for session \(sessionID) with \(exportConfig.actions.count) action(s)")
+        let results = await AutoExportService.execute(actions: exportConfig.actions, sessionInfo: info)
+        let succeeded = results.filter(\.success).count
+        let failed = results.count - succeeded
+        logger.info("Auto-export complete for \(sessionID): \(succeeded) succeeded, \(failed) failed")
     }
 
     /// Generate a descriptive title for the session using the title LLM config.

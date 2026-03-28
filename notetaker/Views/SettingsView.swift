@@ -18,6 +18,9 @@ struct SettingsView: View {
             RecordingSettingsTab()
                 .tabItem { Label("Recording", systemImage: "mic") }
 
+            AutoExportSettingsTab()
+                .tabItem { Label("Export", systemImage: "square.and.arrow.up") }
+
             AboutTab()
                 .tabItem { Label("About", systemImage: "info.circle") }
         }
