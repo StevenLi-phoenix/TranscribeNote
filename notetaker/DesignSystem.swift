@@ -35,6 +35,7 @@ enum DS {
         static let cardBackground: Color = .init(nsColor: .controlBackgroundColor)
         static let error: Color = .red
         static let success: Color = .green
+        static let paused: Color = .orange
         static let subtleError: Color = .orange
         static let separator: Color = .init(nsColor: .separatorColor)
         static let audioLevel: Color = .green

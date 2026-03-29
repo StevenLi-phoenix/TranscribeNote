@@ -213,7 +213,7 @@ struct MenuBarView: View {
         } else if viewModel.state == .paused {
             HStack(spacing: DS.Spacing.xs) {
                 Image(systemName: "pause.circle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DS.Colors.paused)
                 Text("Paused")
                     .fontWeight(.medium)
                 Spacer()

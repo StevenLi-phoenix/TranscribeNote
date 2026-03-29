@@ -48,7 +48,7 @@ struct SessionDetailView: View {
                         }
                         if session.isPartial {
                             Label("Incomplete — saved on quit", systemImage: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(DS.Colors.subtleError)
                         }
                     }
                     .font(DS.Typography.callout)

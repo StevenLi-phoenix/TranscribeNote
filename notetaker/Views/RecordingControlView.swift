@@ -36,7 +36,7 @@ struct RecordingControlView: View {
                 } label: {
                     Image(systemName: "pause.circle")
                         .font(DS.Typography.title)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(DS.Colors.paused)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Pause recording")
@@ -66,7 +66,7 @@ struct RecordingControlView: View {
             // Paused state
             HStack(spacing: DS.Spacing.lg) {
                 Image(systemName: "pause.circle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DS.Colors.paused)
                     .font(DS.Typography.body)
 
                 Text(elapsedTime)
@@ -75,7 +75,7 @@ struct RecordingControlView: View {
                     .foregroundStyle(.secondary)
 
                 Text("Paused")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DS.Colors.paused)
                     .font(DS.Typography.caption)
 
                 Spacer()
