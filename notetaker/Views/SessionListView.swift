@@ -188,8 +188,8 @@ private struct SessionRowView: View {
                     .lineLimit(1)
                 if session.isPartial {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
+                        .font(DS.Typography.caption2)
+                        .foregroundStyle(DS.Colors.subtleError)
                         .help("Incomplete — saved on quit")
                 }
             }

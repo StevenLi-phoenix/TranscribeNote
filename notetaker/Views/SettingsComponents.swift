@@ -133,14 +133,14 @@ struct StatusIndicator: View {
         case .testing:
             ProgressView().controlSize(.small)
         case .available:
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(DS.Colors.success)
         case .unavailable:
             HStack(spacing: DS.Spacing.xs) {
-                Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+                Image(systemName: "xmark.circle.fill").foregroundStyle(DS.Colors.error)
                 if let error {
                     Text(error)
                         .font(DS.Typography.caption)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(DS.Colors.error)
                         .lineLimit(2)
                 }
             }

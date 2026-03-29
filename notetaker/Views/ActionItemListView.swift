@@ -107,8 +107,8 @@ struct ActionItemListView: View {
                 try? modelContext.save()
             } label: {
                 Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(item.isCompleted ? .green : .secondary)
-                    .font(.body)
+                    .foregroundStyle(item.isCompleted ? DS.Colors.success : .secondary)
+                    .font(DS.Typography.body)
             }
             .buttonStyle(.plain)
 

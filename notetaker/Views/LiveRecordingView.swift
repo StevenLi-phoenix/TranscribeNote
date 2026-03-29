@@ -39,9 +39,9 @@ struct LiveRecordingView: View {
             if let error = viewModel.summaryError {
                 HStack(alignment: .top, spacing: DS.Spacing.xs) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
+                        .foregroundStyle(DS.Colors.error)
                     Text(error)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(DS.Colors.error)
                         .textSelection(.enabled)
                     Spacer()
                     Button {
@@ -56,7 +56,7 @@ struct LiveRecordingView: View {
                 .font(DS.Typography.caption)
                 .padding(DS.Spacing.sm)
                 .padding(.horizontal)
-                .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: DS.Radius.sm))
+                .background(DS.Colors.error.opacity(0.08), in: RoundedRectangle(cornerRadius: DS.Radius.sm))
                 .transition(.opacity)
             }
 

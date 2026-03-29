@@ -67,7 +67,7 @@ struct RecordingControlView: View {
             HStack(spacing: DS.Spacing.lg) {
                 Image(systemName: "pause.circle.fill")
                     .foregroundStyle(.orange)
-                    .font(.body)
+                    .font(DS.Typography.body)
 
                 Text(elapsedTime)
                     .font(ControlBarMetrics.timeFont)
@@ -85,7 +85,7 @@ struct RecordingControlView: View {
                 } label: {
                     Image(systemName: "play.circle")
                         .font(DS.Typography.title)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(DS.Colors.success)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Resume recording")
