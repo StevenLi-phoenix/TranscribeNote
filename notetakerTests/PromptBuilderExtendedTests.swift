@@ -38,7 +38,7 @@ struct PromptBuilderExtendedTests {
         #expect(text.contains("Introduction and agenda"))
         #expect(text.contains("Technical discussion on API design"))
         #expect(text.contains("Action items and next steps"))
-        #expect(text.contains("Section summaries:"))
+        #expect(text.contains("<summaries>"))
     }
 
     @Test func overallPromptWithEmptyChunks() {
@@ -50,7 +50,7 @@ struct PromptBuilderExtendedTests {
         let systemMsgs = messages.filter { $0.role == .system }
         #expect(systemMsgs.count == 1)
         // No user message with section summaries
-        #expect(!fullText(messages).contains("Section summaries:"))
+        #expect(!fullText(messages).contains("<summaries>"))
     }
 
     @Test func overallPromptParagraphStyle() {
@@ -463,7 +463,7 @@ struct PromptBuilderExtendedTests {
         #expect(messages[0].role == .system)
         #expect(messages[1].content.contains("Additional user instructions"))
         #expect(messages[2].content.contains("Previous"))
-        #expect(messages[3].content.contains("Transcript:"))
+        #expect(messages[3].content.contains("<transcript>"))
     }
 
     // MARK: - Edge cases with multiple segments
@@ -489,7 +489,7 @@ struct PromptBuilderExtendedTests {
 
         let messages = PromptBuilder.buildSummarizationPrompt(segments: segments, previousSummary: nil, config: config)
         let text = userContent(messages)
-        #expect(text.contains("Transcript:"))
+        #expect(text.contains("<transcript>"))
         #expect(text.contains("Only segment"))
     }
 

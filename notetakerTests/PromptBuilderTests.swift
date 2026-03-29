@@ -148,7 +148,7 @@ struct PromptBuilderTests {
         let config = SummarizerConfig.default
         let messages = PromptBuilder.buildSummarizationPrompt(segments: [], previousSummary: nil, config: config)
         #expect(!messages.isEmpty) // At least system message
-        #expect(!fullText(messages).contains("Transcript:"))
+        #expect(!fullText(messages).contains("<transcript>"))
     }
 
     @Test func lectureNotesStyleContainsDetailedInstructions() {
