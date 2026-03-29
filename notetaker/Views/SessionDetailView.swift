@@ -376,7 +376,7 @@ struct SessionDetailView: View {
                 for existing in freshSession.summaries where !existing.isPinned && !existing.userEdited {
                     modelContext.delete(existing)
                 }
-                try? modelContext.save()
+                modelContext.saveQuietly()
 
                 summaryProgress = "Generating complete summary…"
                 var content: String
@@ -446,7 +446,7 @@ struct SessionDetailView: View {
                 )
                 block.session = currentSession
                 modelContext.insert(block)
-                try? modelContext.save()
+                modelContext.saveQuietly()
                 fetchSession()
             } catch {
                 Self.logger.error("Complete summary generation failed: \(error.localizedDescription)")

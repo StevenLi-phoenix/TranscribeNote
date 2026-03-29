@@ -104,7 +104,7 @@ struct ActionItemListView: View {
         HStack(alignment: .top, spacing: DS.Spacing.sm) {
             Button {
                 item.isCompleted.toggle()
-                try? modelContext.save()
+                modelContext.saveQuietly()
             } label: {
                 Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(item.isCompleted ? DS.Colors.success : .secondary)
@@ -140,22 +140,22 @@ struct ActionItemListView: View {
             if item.dueDate == nil {
                 Button("Set Due Date to Tomorrow") {
                     item.dueDate = Calendar.current.date(byAdding: .day, value: 1, to: Date())
-                    try? modelContext.save()
+                    modelContext.saveQuietly()
                 }
                 Button("Set Due Date to Next Week") {
                     item.dueDate = Calendar.current.date(byAdding: .weekOfYear, value: 1, to: Date())
-                    try? modelContext.save()
+                    modelContext.saveQuietly()
                 }
             } else {
                 Button("Clear Due Date") {
                     item.dueDate = nil
-                    try? modelContext.save()
+                    modelContext.saveQuietly()
                 }
             }
             Divider()
             Button("Delete", role: .destructive) {
                 modelContext.delete(item)
-                try? modelContext.save()
+                modelContext.saveQuietly()
             }
         }
     }
