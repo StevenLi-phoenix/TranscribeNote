@@ -429,6 +429,7 @@
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "Notetaker reads your calendar to auto-schedule recordings for meetings.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "notetaker needs microphone access to record and transcribe audio.";
+				INFOPLIST_KEY_NSRemindersUsageDescription = "Notetaker exports action items to Reminders so you can track follow-ups.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "notetaker uses speech recognition to transcribe audio in real time.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -468,6 +469,7 @@
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "Notetaker reads your calendar to auto-schedule recordings for meetings.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "notetaker needs microphone access to record and transcribe audio.";
+				INFOPLIST_KEY_NSRemindersUsageDescription = "Notetaker exports action items to Reminders so you can track follow-ups.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "notetaker uses speech recognition to transcribe audio in real time.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

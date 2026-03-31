@@ -1,7 +1,7 @@
 import AppKit
 
 enum TranscriptExporter {
-    static func formatAsText(segments: [TranscriptSegment], title: String = "") -> String {
+    static func formatAsText(segments: [TranscriptSegment], title: String = "", actionItems: [ActionItem] = []) -> String {
         var lines: [String] = []
         if !title.isEmpty {
             lines.append(title)
@@ -10,6 +10,10 @@ enum TranscriptExporter {
         for segment in segments {
             let timestamp = segment.startTime.mmss
             lines.append("[\(timestamp)] \(segment.text)")
+        }
+        if !actionItems.isEmpty {
+            lines.append("")
+            lines.append(ActionItemMarkdownFormatter.format(actionItems: actionItems))
         }
         return lines.joined(separator: "\n")
     }

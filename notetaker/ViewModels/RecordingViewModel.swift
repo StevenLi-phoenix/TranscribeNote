@@ -43,6 +43,7 @@ final class RecordingViewModel {
     let clock = ElapsedTimeClock()
     let audioMeter = AudioLevelMeter()
     private(set) var errorMessage: String?
+    var criticalError: String?
     private(set) var currentSession: RecordingSession?
     private(set) var summaries: [SummaryBlock] = []
     private(set) var isSummarizing: Bool = false
@@ -187,8 +188,12 @@ final class RecordingViewModel {
                 remainingDurationSeconds = TimeInterval(minutes * 60)
                 startDurationEndTimer()
             }
+        } catch let error as AudioCaptureService.AudioCaptureError where error == .noInputDevice {
+            Self.logger.error("Critical: no audio input device")
+            criticalError = error.localizedDescription
         } catch {
-            errorMessage = "Failed to start recording: \(error.localizedDescription)"
+            Self.logger.error("Failed to start recording: \(error.localizedDescription)")
+            criticalError = "Failed to start recording: \(error.localizedDescription)"
         }
     }
 
@@ -279,6 +284,7 @@ final class RecordingViewModel {
 
         recordingStartTime = Date()
         state = .recording
+        SoundEffectService.play(.recordingStart)
         segments = []
         partialText = ""
         clock.reset()
@@ -330,6 +336,7 @@ final class RecordingViewModel {
         // 6. Save elapsed time and transition to paused
         pausedElapsedTime = clock.elapsedTime
         state = .paused
+        SoundEffectService.play(.pause)
         Self.logger.info("Recording paused at \(self.pausedElapsedTime.hhmmss)")
     }
 
@@ -363,6 +370,7 @@ final class RecordingViewModel {
         resumeDurationEndTimer()
 
         state = .recording
+        SoundEffectService.play(.resume)
         Self.logger.info("Recording resumed from \(self.pausedElapsedTime.hhmmss)")
     }
 
@@ -444,7 +452,7 @@ final class RecordingViewModel {
         summaryTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                let content = try await self.summarizerService.summarize(
+                let result = try await self.summarizerService.summarizeWithFallback(
                     segments: unsummarized,
                     previousSummary: previousSummary,
                     config: config,
@@ -453,16 +461,17 @@ final class RecordingViewModel {
                 guard !Task.isCancelled else { return }
                 // Clear previous error only on success
                 self.summaryError = nil
-                if !content.isEmpty {
+                if !result.content.isEmpty {
                     let block = SummaryBlock(
                         coveringFrom: coveringFrom,
                         coveringTo: coveringTo,
-                        content: content,
+                        content: result.content,
                         style: config.summaryStyle,
-                        model: llmCfg.model
+                        model: llmCfg.model,
+                        structuredContent: result.structured?.toJSON()
                     )
                     self.summaries.append(block)
-                    self.latestSummary = content
+                    self.latestSummary = result.content
                     self.lastSummarizedSegmentCount = self.segments.count
                     self.nextPeriodicCoveringFrom = coveringTo
                 }
@@ -506,6 +515,7 @@ final class RecordingViewModel {
 
         // Show stopping UI while draining ASR results
         state = .stopping
+        SoundEffectService.play(.stop)
         stoppingStatus = "Finishing transcription..."
 
         // Background: drain ASR results → persist to SwiftData → signal completed
@@ -552,6 +562,12 @@ final class RecordingViewModel {
                 BackgroundSummaryService.shared.dispatchOverallSummary(
                     sessionID: session.id, container: modelContext.container
                 )
+                // Only auto-extract action items if enabled in settings
+                if self.summarizerConfig.actionItemExtractionEnabled {
+                    BackgroundSummaryService.shared.dispatchActionItemExtraction(
+                        sessionID: session.id, container: modelContext.container
+                    )
+                }
             }
 
             self.state = .completed

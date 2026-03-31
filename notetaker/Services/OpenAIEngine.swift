@@ -206,6 +206,9 @@ nonisolated final class OpenAIEngine: LLMEngine, @unchecked Sendable {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if !config.apiKey.isEmpty {
+            if let host = url.host, !host.hasSuffix("openai.com") && !host.contains("localhost") && host != "127.0.0.1" {
+                Self.logger.warning("Sending API key to non-OpenAI host: \(host)")
+            }
             request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
         }
 
@@ -339,6 +342,9 @@ nonisolated final class OpenAIEngine: LLMEngine, @unchecked Sendable {
         do {
             var request = URLRequest(url: url)
             if !config.apiKey.isEmpty {
+                if let host = url.host, !host.hasSuffix("openai.com") && !host.contains("localhost") && host != "127.0.0.1" {
+                    Self.logger.warning("Sending API key to non-OpenAI host: \(host)")
+                }
                 request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
             }
             let (_, response) = try await session.data(for: request)

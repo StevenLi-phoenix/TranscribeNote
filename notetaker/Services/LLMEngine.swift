@@ -236,6 +236,8 @@ nonisolated enum LLMHTTPHelpers {
         return url
     }
 
+    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "notetaker", category: "LLMHTTPHelpers")
+
     /// Validate that a base URL uses http or https scheme, and normalize it.
     static func validateBaseURL(_ raw: String, stripV1: Bool = false) throws -> String {
         let normalized = normalizeBaseURL(raw, stripV1: stripV1)
@@ -243,6 +245,12 @@ nonisolated enum LLMHTTPHelpers {
               let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https" else {
             throw LLMEngineError.invalidURL(raw)
+        }
+        // Warn when sending data over plaintext HTTP to a non-localhost host
+        if scheme == "http",
+           let host = url.host?.lowercased(),
+           host != "localhost" && host != "127.0.0.1" && !host.hasPrefix("[::1]") {
+            logger.warning("Using plaintext HTTP for remote host '\(host)' — transcript data may be exposed to network eavesdropping")
         }
         return normalized
     }

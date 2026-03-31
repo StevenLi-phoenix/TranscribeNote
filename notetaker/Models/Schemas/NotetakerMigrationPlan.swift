@@ -68,7 +68,7 @@ import Foundation
 /// - https://www.hackingwithswift.com/quick-start/swiftdata/how-to-create-a-complex-migration-using-versionedschema
 enum NotetakerMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [SchemaV1.self, SchemaV2.self, SchemaV3.self, SchemaV4.self, SchemaV5.self, SchemaV6.self]
+        [SchemaV1.self, SchemaV2.self, SchemaV3.self, SchemaV4.self, SchemaV5.self, SchemaV6.self, SchemaV7.self, SchemaV8.self]
     }
 
     static var stages: [MigrationStage] {
@@ -82,6 +82,10 @@ enum NotetakerMigrationPlan: SchemaMigrationPlan {
             .lightweight(fromVersion: SchemaV4.self, toVersion: SchemaV5.self),
             // V6 adds calendarEventIdentifier to ScheduledRecording, scheduledRecordingID to RecordingSession.
             .lightweight(fromVersion: SchemaV5.self, toVersion: SchemaV6.self),
+            // V7 adds ActionItem model and actionItems relationship on RecordingSession.
+            .lightweight(fromVersion: SchemaV6.self, toVersion: SchemaV7.self),
+            // V8 adds structuredContent to SummaryBlock for structured summary output.
+            .lightweight(fromVersion: SchemaV7.self, toVersion: SchemaV8.self),
         ]
     }
 }

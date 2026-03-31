@@ -126,6 +126,9 @@ nonisolated final class AnthropicEngine: LLMEngine, @unchecked Sendable {
         guard !config.apiKey.isEmpty else {
             throw LLMEngineError.notConfigured
         }
+        if let host = url.host, !host.hasSuffix("anthropic.com") && !host.contains("localhost") && host != "127.0.0.1" {
+            Self.logger.warning("Sending API key to non-Anthropic host: \(host)")
+        }
         request.setValue(config.apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         request.setValue("prompt-caching-2024-07-31", forHTTPHeaderField: "anthropic-beta")
@@ -240,6 +243,9 @@ nonisolated final class AnthropicEngine: LLMEngine, @unchecked Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         guard !config.apiKey.isEmpty else {
             throw LLMEngineError.notConfigured
+        }
+        if let host = url.host, !host.hasSuffix("anthropic.com") && !host.contains("localhost") && host != "127.0.0.1" {
+            Self.logger.warning("Sending API key to non-Anthropic host: \(host)")
         }
         request.setValue(config.apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")

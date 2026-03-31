@@ -143,7 +143,8 @@ import Foundation
         #expect(response.content == "No transcript available.")
         // System prompt should still be present but without transcript content
         let systemMsg = mock.lastMessages![0]
-        #expect(!systemMsg.content.contains("Transcript:"))
+        // System prompt mentions <transcript> tags in security instructions, but no actual transcript block
+        #expect(!systemMsg.content.contains("<transcript>\n"))
     }
 
     @Test func engineErrorPropagates() async throws {
