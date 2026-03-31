@@ -323,7 +323,6 @@ struct SessionDetailView: View {
                 showActionItemsPopover = false
                 exportSuccessMessage = nil
                 fetchSession()
-                chatWindowController?.updateTitle(session.title)
             }
             .onDisappear {
                 playbackService.stop()
@@ -373,6 +372,7 @@ struct SessionDetailView: View {
                 sortedSegments = session.segments.sorted { $0.startTime < $1.startTime }
                 loadAudio(for: session)
                 chatViewModel?.configure(sessionID: sessionID, segments: sortedSegments)
+                chatWindowController?.updateTitle(session.title)
             }
         } catch {
             Self.logger.error("Failed to fetch session \(id): \(error.localizedDescription)")
