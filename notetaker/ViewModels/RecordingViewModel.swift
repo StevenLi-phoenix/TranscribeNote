@@ -568,6 +568,10 @@ final class RecordingViewModel {
                         sessionID: session.id, container: modelContext.container
                     )
                 }
+                // Dispatch sentiment analysis for transcript segments
+                BackgroundSummaryService.shared.dispatchSentimentAnalysis(
+                    sessionID: session.id, container: modelContext.container
+                )
             }
 
             self.state = .completed
