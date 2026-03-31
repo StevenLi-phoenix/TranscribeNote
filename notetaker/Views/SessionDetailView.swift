@@ -274,7 +274,7 @@ struct SessionDetailView: View {
             if isInlineChat, let vm = chatViewModel {
                 VerticalResizeHandle(width: $chatPanelWidth, minWidth: 250, maxWidth: 500)
                 ChatViewContent(viewModel: vm)
-                    .frame(idealWidth: chatPanelWidth, maxWidth: chatPanelWidth)
+                    .frame(width: chatPanelWidth)
             }
             }
             .background(
