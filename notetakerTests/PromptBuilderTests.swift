@@ -148,7 +148,10 @@ struct PromptBuilderTests {
         let config = SummarizerConfig.default
         let messages = PromptBuilder.buildSummarizationPrompt(segments: [], previousSummary: nil, config: config)
         #expect(!messages.isEmpty) // At least system message
-        #expect(!fullText(messages).contains("<transcript>"))
+        // System message mentions <transcript> tags in instructions, but no actual transcript block
+        let userMessages = messages.filter { $0.role == .user }
+        let userText = userMessages.map(\.content).joined()
+        #expect(!userText.contains("<transcript>"))
     }
 
     @Test func lectureNotesStyleContainsDetailedInstructions() {

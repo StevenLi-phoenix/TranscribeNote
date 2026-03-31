@@ -50,7 +50,10 @@ struct PromptBuilderExtendedTests {
         let systemMsgs = messages.filter { $0.role == .system }
         #expect(systemMsgs.count == 1)
         // No user message with section summaries
-        #expect(!fullText(messages).contains("<summaries>"))
+        // System message mentions <summaries> tags in instructions, but no actual summaries block
+        let userMessages = messages.filter { $0.role == .user }
+        let userText = userMessages.map(\.content).joined()
+        #expect(!userText.contains("<summaries>"))
     }
 
     @Test func overallPromptParagraphStyle() {
