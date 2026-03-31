@@ -78,6 +78,14 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 600, minHeight: 400)
+        .alert("Recording Error", isPresented: Binding(
+            get: { viewModel.criticalError != nil },
+            set: { if !$0 { viewModel.criticalError = nil } }
+        )) {
+            Button("OK") { viewModel.criticalError = nil }
+        } message: {
+            Text(viewModel.criticalError ?? "")
+        }
         .onAppear {
             handleCompletionIfNeeded()
         }

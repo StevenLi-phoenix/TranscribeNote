@@ -138,6 +138,18 @@ struct notetakerApp: App {
             SettingsView()
         }
         .commands {
+            #if DEBUG
+            CommandMenu("Debug") {
+                Button("Import Sample Sessions") {
+                    guard let container = sharedModelContainer else { return }
+                    Task { @MainActor in
+                        Self.importSampleSessions(container: container)
+                    }
+                }
+            }
+            #endif
+        }
+        .commands {
             CommandGroup(replacing: .help) {
                 Button("Privacy Policy") {
                     NSWorkspace.shared.open(PrivacyDisclosureView.privacyPolicyURL)
@@ -150,6 +162,82 @@ struct notetakerApp: App {
             }
         }
     }
+
+    #if DEBUG
+    @MainActor
+    private static func importSampleSessions(container: ModelContainer) {
+        let context = container.mainContext
+        let sampleTexts = [
+            ("Team standup meeting", [
+                (0.0, "Good morning everyone, let's go through our updates."),
+                (5.0, "I finished the authentication module yesterday."),
+                (12.0, "Today I'm working on the dashboard API endpoints."),
+                (20.0, "The deployment pipeline needs some fixes too."),
+                (28.0, "Let's sync up after lunch about the database migration."),
+            ]),
+            ("Product review session", [
+                (0.0, "Welcome to the product review for Q1."),
+                (8.0, "Our user engagement increased by fifteen percent."),
+                (15.0, "The new onboarding flow is performing well."),
+                (22.0, "We need to address the loading time issues."),
+                (30.0, "Next quarter we'll focus on mobile optimization."),
+            ]),
+            ("Architecture discussion", [
+                (0.0, "Let's discuss the microservices migration plan."),
+                (7.0, "The current monolith is hitting scalability limits."),
+                (14.0, "We should start with the user service extraction."),
+                (21.0, "Event sourcing could help with data consistency."),
+                (28.0, "We need a proper API gateway before splitting services."),
+            ]),
+        ]
+
+        // Copy sample audio if available
+        let sampleAudioURL = URL(fileURLWithPath: "/tmp/test-audio.mp3")
+        let hasAudio = FileManager.default.fileExists(atPath: sampleAudioURL.path)
+
+        for (title, segments) in sampleTexts {
+            let session = RecordingSession()
+            session.title = title
+            session.startedAt = Date().addingTimeInterval(-Double.random(in: 3600...86400))
+            session.endedAt = session.startedAt.addingTimeInterval(35.0)
+
+            if hasAudio {
+                do {
+                    let recordingsDir = try AudioCaptureService.recordingsDirectory()
+                    try FileManager.default.createDirectory(at: recordingsDir, withIntermediateDirectories: true)
+                    let destURL = recordingsDir.appendingPathComponent("\(UUID().uuidString).mp3")
+                    try FileManager.default.copyItem(at: sampleAudioURL, to: destURL)
+                    session.audioFilePath = destURL.lastPathComponent
+                    logger.info("Copied sample audio to \(destURL.lastPathComponent)")
+                } catch {
+                    logger.warning("Could not copy sample audio: \(error.localizedDescription)")
+                }
+            }
+
+            context.insert(session)
+
+            for (time, text) in segments {
+                let segment = TranscriptSegment(startTime: time, endTime: time + 5.0, text: text)
+                segment.session = session
+                context.insert(segment)
+            }
+
+            let summary = SummaryBlock(
+                coveringFrom: 0, coveringTo: 35,
+                content: "This session covered key discussion points about \(title.lowercased()). Participants discussed progress, challenges, and next steps."
+            )
+            summary.session = session
+            context.insert(summary)
+        }
+
+        do {
+            try context.save()
+            logger.info("Imported 3 sample sessions")
+        } catch {
+            logger.error("Failed to save sample sessions: \(error.localizedDescription)")
+        }
+    }
+    #endif
 }
 
 struct MenuBarView: View {
