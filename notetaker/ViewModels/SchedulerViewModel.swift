@@ -98,7 +98,7 @@ final class SchedulerViewModel {
         if recording.modelContext == nil {
             context.insert(recording)
         }
-        try? context.save()
+        context.saveQuietly()
         schedulerService.schedule(recording)
         load(context: context)
         Self.logger.info("Saved scheduled recording '\(recording.title)'")
@@ -108,7 +108,7 @@ final class SchedulerViewModel {
     func delete(_ recording: ScheduledRecording, context: ModelContext) {
         schedulerService.cancel(recording)
         context.delete(recording)
-        try? context.save()
+        context.saveQuietly()
         load(context: context)
         Self.logger.info("Deleted scheduled recording '\(recording.title)'")
     }
@@ -120,7 +120,7 @@ final class SchedulerViewModel {
         } else {
             schedulerService.cancel(recording)
         }
-        try? context.save()
+        context.saveQuietly()
         load(context: context)
     }
 
@@ -205,7 +205,7 @@ final class SchedulerViewModel {
             Self.logger.info("Skipped \(skipped) duplicate event(s) during import")
         }
 
-        try? context.save()
+        context.saveQuietly()
         load(context: context)
     }
 
@@ -258,7 +258,7 @@ final class SchedulerViewModel {
 
         // 1b: Persist lastTriggeredAt
         recording.lastTriggeredAt = Date()
-        try? modelContext?.save()
+        modelContext?.saveQuietly()
 
         // Re-schedule if repeating
         if recording.rule != .once {

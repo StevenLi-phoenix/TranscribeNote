@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import os
 
 // MARK: - LLM Assignment Tab (assign models to roles)
@@ -173,6 +174,12 @@ struct SummarizationSettingsTab: View {
                 }
             }
 
+            SettingsRow("Auto-Extract Action Items") {
+                Toggle("", isOn: $config.actionItemExtractionEnabled)
+                    .labelsHidden()
+                    .help("Automatically extract action items after recording ends.")
+            }
+
             SettingsRow("Include Previous Context") {
                 Toggle("", isOn: $config.includeContext)
                     .labelsHidden()
@@ -216,10 +223,40 @@ struct SummarizationSettingsTab: View {
 
 struct RecordingSettingsTab: View {
     @AppStorage("vadConfigJSON") private var vadConfigJSON: String = ""
+    @AppStorage("weeklyDigestEnabled") private var weeklyDigestEnabled = false
+    @AppStorage("soundEffectsEnabled") private var soundEffectsEnabled: Bool = true
+    @Environment(\.modelContext) private var modelContext
     @State private var config: VADConfig = .default
 
     var body: some View {
         SettingsGrid {
+            SettingsRow("Weekly Meeting Digest") {
+                Toggle("", isOn: $weeklyDigestEnabled)
+                    .labelsHidden()
+                    .help("Receive a weekly summary of your meetings every Monday at 9 AM")
+                    .onChange(of: weeklyDigestEnabled) { _, enabled in
+                        if enabled {
+                            Task { @MainActor in
+                                let granted = await InsightNotificationService.requestPermission()
+                                if granted {
+                                    let body = Self.computeDigestBody(context: modelContext)
+                                    InsightNotificationService.scheduleWeeklyDigest(body: body)
+                                } else {
+                                    weeklyDigestEnabled = false
+                                }
+                            }
+                        } else {
+                            InsightNotificationService.cancelWeeklyDigest()
+                        }
+                    }
+            }
+
+            SettingsRow("Sound Effects") {
+                Toggle("", isOn: $soundEffectsEnabled)
+                    .labelsHidden()
+                    .help("Play subtle sounds on recording start, pause, resume, and stop.")
+            }
+
             SettingsRow("Voice Activity Detection") {
                 Toggle("", isOn: $config.vadEnabled)
                     .labelsHidden()
@@ -276,5 +313,12 @@ struct RecordingSettingsTab: View {
         guard let data = try? JSONEncoder().encode(config),
               let json = String(data: data, encoding: .utf8) else { return }
         vadConfigJSON = json
+    }
+
+    private static func computeDigestBody(context: ModelContext) -> String {
+        let sessions = (try? context.fetch(FetchDescriptor<RecordingSession>())) ?? []
+        let data = sessions.map { InsightEngine.sessionData(from: $0) }
+        let digest = InsightEngine.generateWeeklyDigest(sessions: data)
+        return InsightEngine.formatDigest(digest)
     }
 }

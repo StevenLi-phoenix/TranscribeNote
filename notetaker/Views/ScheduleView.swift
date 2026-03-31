@@ -120,7 +120,7 @@ private struct ScheduledRecordingRow: View {
 
     var body: some View {
         HStack(spacing: DS.Spacing.sm) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: DS.Spacing.xxs) {
                 Text(recording.title.isEmpty ? "Untitled" : recording.title)
                     .fontWeight(.medium)
                 HStack(spacing: DS.Spacing.xs) {
@@ -132,15 +132,15 @@ private struct ScheduledRecordingRow: View {
                         Text(recording.rule.displayName)
                     }
                 }
-                .font(.caption)
+                .font(DS.Typography.caption)
                 .foregroundStyle(.secondary)
                 if let next = recording.nextFireTime {
                     Text("Next: \(next, style: .relative)")
-                        .font(.caption2)
+                        .font(DS.Typography.caption2)
                         .foregroundStyle(.tertiary)
                 } else if recording.rule == .once {
                     Text("Passed")
-                        .font(.caption2)
+                        .font(DS.Typography.caption2)
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -218,7 +218,7 @@ private struct CalendarImportView: View {
                     )
                 } else {
                     List(schedulerViewModel.calendarEvents, selection: $selectedIDs) { item in
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: DS.Spacing.xxs) {
                             Text(item.title)
                                 .fontWeight(.medium)
                             HStack(spacing: DS.Spacing.xs) {
@@ -234,7 +234,7 @@ private struct CalendarImportView: View {
                                     Text(item.calendarName).foregroundStyle(.secondary)
                                 }
                             }
-                            .font(.caption)
+                            .font(DS.Typography.caption)
                             .foregroundStyle(.secondary)
 
                             // 4c: Show location and notes for context
@@ -243,12 +243,12 @@ private struct CalendarImportView: View {
                                     Image(systemName: "mappin")
                                     Text(location)
                                 }
-                                .font(.caption2)
+                                .font(DS.Typography.caption2)
                                 .foregroundStyle(.tertiary)
                             }
                             if let notes = item.notes, !notes.isEmpty {
                                 Text(notes)
-                                    .font(.caption2)
+                                    .font(DS.Typography.caption2)
                                     .foregroundStyle(.tertiary)
                                     .lineLimit(2)
                             }

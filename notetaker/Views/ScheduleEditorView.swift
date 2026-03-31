@@ -132,10 +132,11 @@ private struct LabelPicker: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Show label suggestions")
                 }
             }
             if showSuggestions && !existingLabels.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: DS.Spacing.xxs) {
                     ForEach(existingLabels.filter { label.isEmpty || $0.localizedCaseInsensitiveContains(label) }, id: \.self) { suggestion in
                         Button {
                             label = suggestion
@@ -143,7 +144,7 @@ private struct LabelPicker: View {
                         } label: {
                             Text(suggestion)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.vertical, 3)
+                                .padding(.vertical, DS.Spacing.xxs)
                                 .padding(.horizontal, DS.Spacing.sm)
                         }
                         .buttonStyle(.plain)

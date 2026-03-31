@@ -20,7 +20,7 @@ struct RecordingControlView: View {
             // Recording indicator — always rendered to prevent layout shift
             HStack(spacing: DS.Spacing.lg) {
                 Circle()
-                    .fill(.red)
+                    .fill(DS.Colors.recording)
                     .frame(width: 10, height: 10)
                     .opacity(pulseAnimation ? 0.3 : 1.0)
 
@@ -35,8 +35,8 @@ struct RecordingControlView: View {
                     onPause?()
                 } label: {
                     Image(systemName: "pause.circle")
-                        .font(.title)
-                        .foregroundStyle(.orange)
+                        .font(DS.Typography.title)
+                        .foregroundStyle(DS.Colors.paused)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Pause recording")
@@ -45,8 +45,8 @@ struct RecordingControlView: View {
                     onStop()
                 } label: {
                     Image(systemName: "stop.circle")
-                        .font(.title)
-                        .foregroundStyle(.red)
+                        .font(DS.Typography.title)
+                        .foregroundStyle(DS.Colors.recording)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Stop recording")
@@ -66,8 +66,8 @@ struct RecordingControlView: View {
             // Paused state
             HStack(spacing: DS.Spacing.lg) {
                 Image(systemName: "pause.circle.fill")
-                    .foregroundStyle(.orange)
-                    .font(.body)
+                    .foregroundStyle(DS.Colors.paused)
+                    .font(DS.Typography.body)
 
                 Text(elapsedTime)
                     .font(ControlBarMetrics.timeFont)
@@ -75,7 +75,7 @@ struct RecordingControlView: View {
                     .foregroundStyle(.secondary)
 
                 Text("Paused")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DS.Colors.paused)
                     .font(DS.Typography.caption)
 
                 Spacer()
@@ -84,8 +84,8 @@ struct RecordingControlView: View {
                     onResume?()
                 } label: {
                     Image(systemName: "play.circle")
-                        .font(.title)
-                        .foregroundStyle(.green)
+                        .font(DS.Typography.title)
+                        .foregroundStyle(DS.Colors.success)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Resume recording")
@@ -94,8 +94,8 @@ struct RecordingControlView: View {
                     onStop()
                 } label: {
                     Image(systemName: "stop.circle")
-                        .font(.title)
-                        .foregroundStyle(.red)
+                        .font(DS.Typography.title)
+                        .foregroundStyle(DS.Colors.recording)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Stop recording")
@@ -129,7 +129,7 @@ struct RecordingControlView: View {
             } label: {
                 Image(systemName: "record.circle.fill")
                     .font(.system(size: 48))
-                    .foregroundStyle(.red)
+                    .foregroundStyle(DS.Colors.recording)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Start recording")
