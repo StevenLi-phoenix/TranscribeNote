@@ -16,12 +16,6 @@ struct SentimentAnalyzerTests {
         #expect(SentimentAnalyzer.Sentiment(rawValue: "invalid") == nil)
     }
 
-    @Test func sentimentColorNames() {
-        #expect(SentimentAnalyzer.Sentiment.positive.colorName == "green")
-        #expect(SentimentAnalyzer.Sentiment.negative.colorName == "red")
-        #expect(SentimentAnalyzer.Sentiment.urgent.colorName == "orange")
-    }
-
     @Test func sentimentSymbolNames() {
         for sentiment in SentimentAnalyzer.Sentiment.allCases {
             #expect(!sentiment.symbolName.isEmpty)

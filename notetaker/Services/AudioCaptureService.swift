@@ -40,8 +40,16 @@ nonisolated final class AudioCaptureService: @unchecked Sendable {
         lock.withLock { $0.vad = vad }
     }
 
-    enum AudioCaptureError: Error {
+    enum AudioCaptureError: Error, LocalizedError {
         case recordingsDirectoryUnavailable
+        case noInputDevice
+
+        var errorDescription: String? {
+            switch self {
+            case .recordingsDirectoryUnavailable: "Recordings directory unavailable"
+            case .noInputDevice: "No audio input device found.\nPlease connect a microphone to start recording."
+            }
+        }
     }
 
     init(config: AudioConfig = .default) {
@@ -65,6 +73,20 @@ nonisolated final class AudioCaptureService: @unchecked Sendable {
 
         let inputNode = audioEngine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
+        Self.logger.info("Input node format: \(inputFormat)")
+
+        // Guard against no audio input device (e.g., Mac Mini with no built-in microphone)
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            Self.logger.error("No audio input device available (sampleRate=\(inputFormat.sampleRate), channels=\(inputFormat.channelCount))")
+            throw AudioCaptureError.noInputDevice
+        }
+
+        // Verify a physical input device exists — format may report valid values
+        // even when no hardware is connected (e.g., Mac Mini without microphone)
+        if AVCaptureDevice.default(for: .audio) == nil {
+            Self.logger.error("No audio capture device found")
+            throw AudioCaptureError.noInputDevice
+        }
 
         let (file, fileURL) = try Self.createAudioFile(in: recordingsDir, inputFormat: inputFormat)
         lock.withLock { $0.audioFile = file }
@@ -169,9 +191,9 @@ nonisolated final class AudioCaptureService: @unchecked Sendable {
     /// Create an audio file for recording. Tries M4A/AAC first, falls back to WAV.
     private static func createAudioFile(
         in directory: URL,
-        inputFormat: AVAudioFormat
+        inputFormat: AVAudioFormat,
+        baseName: String = UUID().uuidString
     ) throws -> (AVAudioFile, URL) {
-        let baseName = UUID().uuidString
 
         // Try M4A/AAC first
         let m4aURL = directory.appendingPathComponent("\(baseName).m4a")

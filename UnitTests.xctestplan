@@ -16,41 +16,7 @@
         "containerPath" : "container:notetaker.xcodeproj",
         "identifier" : "B522917C2F3D4491005D1EBC",
         "name" : "notetakerTests"
-      },
-      "selectedTests" : [
-        "AudioConfigTests",
-        "ChatServiceTests",
-        "AudioExporterTests",
-        "AudioLevelMeterTests",
-        "BufferFactoryTests",
-        "FileAudioSourceTests",
-        "FoundationModelsEngineTests",
-        "LLMConfigCoverageTests",
-        "LLMHTTPHelpersTests",
-        "LLMModelProfileCoverageTests",
-        "LLMModelProfileTests",
-        "LLMProviderCoverageTests",
-        "LLMProviderTests",
-        "LLMRoleCoverageTests",
-        "NoopEngineTests",
-        "PromptBuilderExtendedTests",
-        "PromptBuilderTests",
-        "RecordingSessionExtendedTests",
-        "RecordingSessionTests",
-        "RecordingViewModelTests",
-        "RingBufferTests",
-        "SimpleVADTests",
-        "SummarizerConfigExtendedTests",
-        "SummarizerServiceExtendedTests",
-        "SummarizerServiceTests",
-        "SummaryBlockTests",
-        "ToolCallingTypeTests",
-        "ToolCallingErrorTests",
-        "SyntheticBufferInjectionTests",
-        "TimeIntervalFormattingTests",
-        "TranscriptSegmentTests",
-        "VADConfigTests"
-      ]
+      }
     }
   ],
   "version" : 1

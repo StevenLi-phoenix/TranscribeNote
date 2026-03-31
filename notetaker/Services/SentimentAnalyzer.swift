@@ -13,17 +13,6 @@ nonisolated enum SentimentAnalyzer {
         case urgent = "urgent"
         case confused = "confused"
 
-        /// Display color for the sentiment indicator.
-        var colorName: String {
-            switch self {
-            case .neutral: return "gray"
-            case .positive: return "green"
-            case .negative: return "red"
-            case .urgent: return "orange"
-            case .confused: return "blue"
-            }
-        }
-
         /// SF Symbol name for the sentiment.
         var symbolName: String {
             switch self {
@@ -60,7 +49,12 @@ nonisolated enum SentimentAnalyzer {
 
         """
         for seg in segments {
-            prompt += "\(seg.index + 1): \"\(seg.text.prefix(200))\"\n"
+            // Sanitize text: strip newlines, limit length to prevent prompt injection
+            let sanitized = seg.text
+                .replacingOccurrences(of: "\n", with: " ")
+                .replacingOccurrences(of: "\r", with: " ")
+                .prefix(200)
+            prompt += "\(seg.index + 1): \"\(sanitized)\"\n"
         }
         return prompt
     }

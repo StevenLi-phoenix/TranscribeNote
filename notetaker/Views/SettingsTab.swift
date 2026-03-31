@@ -173,6 +173,12 @@ struct SummarizationSettingsTab: View {
                 }
             }
 
+            SettingsRow("Auto-Extract Action Items") {
+                Toggle("", isOn: $config.actionItemExtractionEnabled)
+                    .labelsHidden()
+                    .help("Automatically extract action items after recording ends.")
+            }
+
             SettingsRow("Include Previous Context") {
                 Toggle("", isOn: $config.includeContext)
                     .labelsHidden()
@@ -216,10 +222,17 @@ struct SummarizationSettingsTab: View {
 
 struct RecordingSettingsTab: View {
     @AppStorage("vadConfigJSON") private var vadConfigJSON: String = ""
+    @AppStorage("soundEffectsEnabled") private var soundEffectsEnabled: Bool = true
     @State private var config: VADConfig = .default
 
     var body: some View {
         SettingsGrid {
+            SettingsRow("Sound Effects") {
+                Toggle("", isOn: $soundEffectsEnabled)
+                    .labelsHidden()
+                    .help("Play subtle sounds on recording start, pause, resume, and stop.")
+            }
+
             SettingsRow("Voice Activity Detection") {
                 Toggle("", isOn: $config.vadEnabled)
                     .labelsHidden()

@@ -1,21 +1,71 @@
 import Foundation
 import SwiftData
 
-/// SchemaV7 - Adds `ActionItem` model and `actionItems` relationship on RecordingSession.
-enum SchemaV7: VersionedSchema {
-    static var versionIdentifier = Schema.Version(7, 0, 0)
+/// SchemaV9 - Adds `sentiment` to TranscriptSegment for emotion/sentiment tagging.
+enum SchemaV9: VersionedSchema {
+    static var versionIdentifier = Schema.Version(9, 0, 0)
 
     static var models: [any PersistentModel.Type] {
         [
-            SchemaV7.RecordingSession.self,
-            SchemaV7.TranscriptSegment.self,
-            SchemaV7.SummaryBlock.self,
-            SchemaV7.ScheduledRecording.self,
-            SchemaV7.ActionItem.self,
+            SchemaV9.RecordingSession.self,
+            SchemaV9.TranscriptSegment.self,
+            SchemaV9.SummaryBlock.self,
+            SchemaV9.ScheduledRecording.self,
+            SchemaV9.ActionItem.self,
         ]
     }
 
-    // MARK: - RecordingSession (modified: added actionItems)
+    // MARK: - Unchanged from V8
+
+    @Model
+    final class SummaryBlock {
+        var id: UUID
+        var generatedAt: Date
+        var coveringFrom: TimeInterval
+        var coveringTo: TimeInterval
+        var content: String
+        var style: String
+        var model: String
+        var isPinned: Bool
+        var userEdited: Bool
+        var isOverall: Bool = false
+        var editedContent: String? = nil
+        /// JSON-encoded StructuredSummary for rich display (key points, action items, sentiment).
+        var structuredContent: String? = nil
+
+        @Relationship(inverse: \SchemaV9.RecordingSession.summaries)
+        var session: SchemaV9.RecordingSession?
+
+        init(
+            id: UUID = UUID(),
+            generatedAt: Date = Date(),
+            coveringFrom: TimeInterval,
+            coveringTo: TimeInterval,
+            content: String,
+            style: String = "bullets",
+            model: String = "",
+            isPinned: Bool = false,
+            userEdited: Bool = false,
+            isOverall: Bool = false,
+            editedContent: String? = nil,
+            structuredContent: String? = nil
+        ) {
+            self.id = id
+            self.generatedAt = generatedAt
+            self.coveringFrom = coveringFrom
+            self.coveringTo = coveringTo
+            self.content = content
+            self.style = style
+            self.model = model
+            self.isPinned = isPinned
+            self.userEdited = userEdited
+            self.isOverall = isOverall
+            self.editedContent = editedContent
+            self.structuredContent = structuredContent
+        }
+    }
+
+    // MARK: - Unchanged from V7
 
     @Model
     final class RecordingSession {
@@ -67,8 +117,6 @@ enum SchemaV7: VersionedSchema {
         }
     }
 
-    // MARK: - ActionItem (new in V7)
-
     @Model
     final class ActionItem {
         var id: UUID
@@ -79,8 +127,8 @@ enum SchemaV7: VersionedSchema {
         var category: String = "task"
         var createdAt: Date = Date()
 
-        @Relationship(inverse: \SchemaV7.RecordingSession.actionItems)
-        var session: SchemaV7.RecordingSession?
+        @Relationship(inverse: \SchemaV9.RecordingSession.actionItems)
+        var session: SchemaV9.RecordingSession?
 
         init(
             id: UUID = UUID(),
@@ -101,7 +149,7 @@ enum SchemaV7: VersionedSchema {
         }
     }
 
-    // MARK: - Unchanged from V6
+    // MARK: - TranscriptSegment (modified: added sentiment)
 
     @Model
     final class TranscriptSegment {
@@ -112,9 +160,11 @@ enum SchemaV7: VersionedSchema {
         var confidence: Double
         var language: String?
         var speakerLabel: String?
+        /// Raw sentiment value from LLM analysis (e.g. "positive", "negative").
+        var sentiment: String? = nil
 
-        @Relationship(inverse: \SchemaV7.RecordingSession.segments)
-        var session: SchemaV7.RecordingSession?
+        @Relationship(inverse: \SchemaV9.RecordingSession.segments)
+        var session: SchemaV9.RecordingSession?
 
         init(
             id: UUID = UUID(),
@@ -123,7 +173,8 @@ enum SchemaV7: VersionedSchema {
             text: String,
             confidence: Double = 1.0,
             language: String? = nil,
-            speakerLabel: String? = nil
+            speakerLabel: String? = nil,
+            sentiment: String? = nil
         ) {
             self.id = id
             self.startTime = startTime
@@ -132,50 +183,7 @@ enum SchemaV7: VersionedSchema {
             self.confidence = confidence
             self.language = language
             self.speakerLabel = speakerLabel
-        }
-    }
-
-    @Model
-    final class SummaryBlock {
-        var id: UUID
-        var generatedAt: Date
-        var coveringFrom: TimeInterval
-        var coveringTo: TimeInterval
-        var content: String
-        var style: String
-        var model: String
-        var isPinned: Bool
-        var userEdited: Bool
-        var isOverall: Bool = false
-        var editedContent: String? = nil
-
-        @Relationship(inverse: \SchemaV7.RecordingSession.summaries)
-        var session: SchemaV7.RecordingSession?
-
-        init(
-            id: UUID = UUID(),
-            generatedAt: Date = Date(),
-            coveringFrom: TimeInterval,
-            coveringTo: TimeInterval,
-            content: String,
-            style: String = "bullets",
-            model: String = "",
-            isPinned: Bool = false,
-            userEdited: Bool = false,
-            isOverall: Bool = false,
-            editedContent: String? = nil
-        ) {
-            self.id = id
-            self.generatedAt = generatedAt
-            self.coveringFrom = coveringFrom
-            self.coveringTo = coveringTo
-            self.content = content
-            self.style = style
-            self.model = model
-            self.isPinned = isPinned
-            self.userEdited = userEdited
-            self.isOverall = isOverall
-            self.editedContent = editedContent
+            self.sentiment = sentiment
         }
     }
 
