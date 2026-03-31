@@ -235,12 +235,13 @@ struct SessionDetailView: View {
                 }
 
             }
-            .frame(maxWidth: .infinity)
+            .frame(minWidth: 300, maxWidth: .infinity)
+            .layoutPriority(1)
 
             if showChatPanel {
                 VerticalResizeHandle(width: $chatPanelWidth, minWidth: 250, maxWidth: 500)
                 ChatView(segments: sortedSegments, sessionID: sessionID)
-                    .frame(width: chatPanelWidth)
+                    .frame(idealWidth: chatPanelWidth, maxWidth: chatPanelWidth)
             }
             }
             .onReceive(NotificationCenter.default.publisher(for: .togglePlayback)) { _ in
