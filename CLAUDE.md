@@ -61,6 +61,8 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
   - **V6**: Adds `calendarEventIdentifier: String? = nil` to ScheduledRecording, `scheduledRecordingID: UUID? = nil` to RecordingSession
 - **Design System tokens**: `DS` enum in `DesignSystem.swift` centralizes spacing (4pt grid), typography, colors, radii, layout constants; `ViewModifiers.swift` provides `.cardStyle()` and `.badgeStyle()`; `ControlBarMetrics` aliases DS values
 - **Session search**: `SessionListView` uses `.searchable()` filtering by title, segment text, summary content; debounced 300ms to prevent SwiftData fault storms; `DateFilter` enum for Today/This Week/This Month quick filters
+- **Command Palette**: `CommandPaletteView` (⌘K) — Raycast-style overlay with fuzzy search, category grouping, keyboard navigation (↑/↓/Enter/Escape); `CommandPaletteSearch` enum has testable `filter(commands:query:)` and `grouped(commands:)` static methods; `PaletteCommand` model + `CommandCategory` enum; commands built dynamically in `ContentView.buildPaletteCommands()` based on current ViewModel state
+- **Playback keyboard shortcuts**: `Notification.Name` extensions (`.togglePlayback`, `.seekForward`, `.seekBackward`, `.seekForwardLong`, `.seekBackwardLong`) in `notetakerApp.swift`; `CommandMenu("Playback")` provides Space (play/pause), ←/→ (±5s), Shift+←/→ (±15s); `SessionDetailView` listens via `.onReceive` and delegates to `AudioPlaybackService`
 
 ### Privacy & App Store
 - **Privacy disclosure**: `PrivacyDisclosureView` shown as sheet on first `LLMSettingsTab` `onAppear` via `@AppStorage("hasShownPrivacyDisclosure")`; reset via Help > Data Usage Information menu or `defaults delete <bundle-id> hasShownPrivacyDisclosure`
