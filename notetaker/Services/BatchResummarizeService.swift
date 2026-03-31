@@ -68,13 +68,12 @@ final class BatchResummarizeService {
                         continue
                     }
 
-                    // Delete existing summaries
-                    for summary in session.summaries {
-                        modelContext.delete(summary)
-                    }
-
-                    // Generate new chunk summaries
+                    // Generate new summaries into temporary arrays first.
+                    // Only delete old summaries after successful generation to avoid
+                    // leaving the session summary-less if cancelled or failed mid-way.
+                    var newBlocks = [SummaryBlock]()
                     var chunkSummaries: [(coveringFrom: TimeInterval, coveringTo: TimeInterval, content: String)] = []
+
                     for try await chunk in summarizer.summarizeInChunks(
                         segments: segments,
                         intervalMinutes: summarizerConfig.intervalMinutes,
@@ -90,7 +89,7 @@ final class BatchResummarizeService {
                             style: summarizerConfig.summaryStyle,
                             model: llmConfig.model
                         )
-                        session.summaries.append(block)
+                        newBlocks.append(block)
                         chunkSummaries.append((coveringFrom: chunk.coveringFrom, coveringTo: chunk.coveringTo, content: chunk.content))
                     }
 
@@ -112,10 +111,19 @@ final class BatchResummarizeService {
                                 model: llmConfig.model,
                                 isOverall: true
                             )
-                            session.summaries.append(overallBlock)
+                            newBlocks.append(overallBlock)
                         }
                     }
 
+                    if Task.isCancelled { break }
+
+                    // Atomically swap: delete old summaries, insert new ones, save
+                    for summary in session.summaries {
+                        modelContext.delete(summary)
+                    }
+                    for block in newBlocks {
+                        session.summaries.append(block)
+                    }
                     try modelContext.save()
                     completed += 1
                     Self.logger.info("Successfully re-summarized: \(title)")
