@@ -19,7 +19,7 @@ struct TimeIntervalFormattingTests {
 
     @Test
     func compactDurationExactMinute() {
-        #expect(TimeInterval(60).compactDuration == "1m 0s")
+        #expect(TimeInterval(60).compactDuration == "1m")
     }
 
     @Test
@@ -29,7 +29,7 @@ struct TimeIntervalFormattingTests {
 
     @Test
     func compactDurationOverAnHour() {
-        #expect(TimeInterval(3661).compactDuration == "61m 1s")
+        #expect(TimeInterval(3661).compactDuration == "1h 1m")
     }
 
     @Test

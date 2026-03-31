@@ -36,7 +36,7 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` — all types MainActor by default; use `nonisolated` for audio/ASR/LLM classes
 - `PBXFileSystemSynchronizedRootGroup` — no pbxproj edits needed for new source files
 - `import os` provides both `Logger` AND `OSAllocatedUnfairLock` — don't remove from files using either
-- Entitlements: sandbox + audio-input + `files.user-selected.read-write` + `network.client` (LLM API calls) + `personal-information.calendars` (calendar import)
+- Entitlements: sandbox + audio-input + `files.user-selected.read-write` + `network.client` (LLM API calls) + `personal-information.calendars` (calendar import); Screen Recording permission (TCC) required for system audio capture via ScreenCaptureKit
 
 ### SwiftData & SwiftUI
 - SwiftData persistence with `@Model` classes (`RecordingSession`, `TranscriptSegment`, `SummaryBlock`)
@@ -86,6 +86,7 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - `LLMMessage` struct: `role` (`.system`/`.user`/`.assistant`/`.tool`), `content`, `cacheHint`, `usage: TokenUsage?`, `toolCalls: [LLMToolCall]?` (assistant messages requesting tool invocations), `toolCallId: String?` (tool result messages)
 - Five implementations: `FoundationModelsEngine` (Apple Intelligence on-device), `OllamaEngine`, `OpenAIEngine`, `AnthropicEngine`, `NoopLLMEngine` — created via `LLMEngineFactory.create(from:session:)`; `.custom` provider maps to `OpenAIEngine` (OpenAI-compatible API for LM Studio etc.)
 - **Foundation Models fallback**: `LLMEngineFactory.createWithFallback()` tries primary engine, falls back to `FoundationModelsEngine` if primary unavailable and Apple Intelligence is enabled; `FoundationModelsEngine.isModelAvailable` checks `SystemLanguageModel.default.availability`
+- **Structured Summary**: `StructuredSummary` (`@Generable` + `Codable` + `Sendable`) with `summary`, `keyPoints: [String]`, `sentiment` — stored as JSON in `SummaryBlock.structuredContent`; `SummarySchemaProvider.schema` provides runtime JSON Schema for non-Apple engines; `SummarizerService.summarizeWithFallback()` tries structured output first, falls back to plain text; `SummaryCardView` renders sectioned display (key points, sentiment badge) when structured data available
 - `SummarizerService` orchestrates: guard minTranscriptLength → build prompt via `PromptBuilder` → call LLM with retry (3 attempts, 10s/30s/60s backoff, only retries network/HTTP errors)
 - `SummarizerService.summarizeInChunks()` yields `ChunkProgress` per time window; `summarizeOverall()` synthesizes chunk summaries into a single overall summary
 - `SummarizerService.splitIntoChunks()` uses zero-based windows: window 0 = `[0, interval)`, window 1 = `[interval, 2*interval)` — segments assigned by `Int(startTime / intervalSeconds)`; `splitIntoChunksWithWindowIndices()` returns window indices for boundary calculations
@@ -95,7 +96,7 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - **LLM Profile System**: `LLMModelProfile` (named config) + `LLMRole` enum (`.live`, `.overall`, `.title`, `.chat`) + `LLMProfileStore` (CRUD, role assignment, config resolution); profiles stored as JSON array in UserDefaults, API keys in Keychain per-profile (`notetaker.profile.<uuid>.apiKey`); roles can "inherit live" to reuse the live profile; `resolveConfig(for:)` resolves assigned profile → first profile → legacy fallback; auto-migrates from legacy per-role `@AppStorage` keys on first launch
 - **`LLMConfig` API key security**: `apiKey` stored in macOS Keychain via `KeychainService`, NOT in UserDefaults JSON; custom `CodingKeys` excludes `apiKey` from encoding/decoding; one-time migration via `KeychainMigration.migrateIfNeeded()` at app init
 - **`OverallSummaryMode`**: `.rawText` (full transcript), `.chunkSummaries` (synthesize existing chunks), `.auto` (chunks if available, else raw) — stored in `SummarizerConfig`
-- Default config: `.custom` provider, `qwen3-14b-mlx` model, `http://localhost:1234/v1` (LM Studio)
+- Default config: `.custom` provider, `qwen3.5-9b-mlx` model, `http://localhost:1234/v1` (LM Studio)
 - `SummaryBlock` stores `style` as `String` raw value (SwiftData can't store custom enums directly); use `summaryStyle` computed property; `isOverall: Bool` distinguishes overall summaries from chunk summaries; `editedContent: String?` for user edits — use `displayContent` computed property which returns editedContent ?? content
 - Silent summaries: No spinners during summary generation; summaries fade in with `.transition(.opacity)` + `.animation(.easeIn)` on count; errors auto-dismiss after 5s via `.task(id:)`
 - Guided regeneration: `SummarizerService.summarizeWithInstructions()` passes `additionalInstructions` through `PromptBuilder`; `retryableGenerate()` extracted as shared retry logic
@@ -103,6 +104,12 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - **`ChatService`**: `nonisolated final class: @unchecked Sendable` for conversational transcript Q&A; manages conversation history with `NSLock`; builds system prompt with transcript context (`cacheHint: true`); `formatTranscript()` truncates at 60K chars (front 40% + back 40%); trims conversation to last 10 pairs; no retry logic (fail fast for interactive chat); uses `LLMRole.chat` config
 - **`ChatMessage`**: `nonisolated struct: Identifiable, Sendable` — ephemeral in-memory model (not SwiftData); `role` reuses `LLMMessage.Role`; `isError` flag for inline error display
 - **Chat Panel**: `ChatView` + `VerticalResizeHandle` in `SessionDetailView` via `HStack`; toggled from toolbar (`bubble.left.and.bubble.right`); width persisted via `@AppStorage("chatPanelWidth")`; preset question buttons when empty; `FlowLayout` for button wrapping; resets on session change
+- **Action Items**: `ActionItem` SwiftData model with `content`, `isCompleted`, `dueDate?`, `assignee?`, `category` (String raw value of `ActionItemCategory`: task/decision/followUp); `itemCategory` computed property; cascade-deleted with `RecordingSession`
+- **Action Item Extraction**: `PromptBuilder.buildActionItemExtractionPrompt()` instructs LLM to output JSON array; `ActionItemParser` handles JSON parsing with markdown checklist fallback; `SummarizerService.extractActionItems()` reuses `retryableGenerate()`; `BackgroundSummaryService.dispatchActionItemExtraction()` runs in parallel with summary generation using separate `activeActionItemTasks` dict
+- **`ActionItemListView`**: Collapsible grouped checklist (Tasks/Decisions/Follow-ups); checkbox toggle persists to SwiftData; context menu for due dates; export Menu (Reminders/Calendar/Markdown)
+- **`RemindersExportService`**: `nonisolated final class` using EventKit; `exportToReminders()` creates `EKReminder` objects; `exportToCalendar()` creates `EKEvent` for items with due dates; uses existing `personal-information.calendars` entitlement
+- **`ActionItemMarkdownFormatter`**: Formats action items as `- [ ]`/`- [x]` checklist grouped by category with assignee/due date metadata
+- **`LLMRole.actionItems`**: Dedicated LLM profile role for action item extraction; inheritsLive fallback works out of the box
 - **`AudioExporter`**: Merges multiple audio clips into single M4A via `AVMutableComposition` + `AVAssetExportSession`; single-clip case copies directly; used when `RecordingSession.audioFilePaths` has multiple entries from pause/resume
 - **Multi-clip recording**: Pause/resume creates separate audio clips stored in `RecordingSession.audioFilePaths: [String]`; `AudioExporter.mergeAndExport()` combines them on session completion; `audioFilePath` (singular) retained for backward compatibility
 - **`SummaryMarkdownFormatter`**: Formats `SummaryBlock` content as Markdown with time-range or "Overall Summary" heading; used by copy-summary feature
@@ -132,6 +139,30 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - **Duplicate import detection**: Uses `calendarEventIdentifier` (EKEvent.eventIdentifier) first, falls back to title+time heuristic (60s tolerance)
 - **Recurrence mapping**: `CalendarService.mapRecurrenceRule()` maps `EKRecurrenceRule` to `RepeatRule`; only `interval == 1`; weekday detection via `Set<EKWeekday>` equality
 - **SchemaV6**: Adds `calendarEventIdentifier: String? = nil` to `ScheduledRecording`, `scheduledRecordingID: UUID? = nil` to `RecordingSession`
+  - **V7**: Adds `ActionItem` model and `actionItems: [ActionItem] = []` relationship on `RecordingSession`
+  - **V8**: Adds `structuredContent: String? = nil` to SummaryBlock for structured summary output (JSON-encoded `StructuredSummary`)
+
+### System Audio Capture
+- **`SystemAudioCaptureService`**: `nonisolated final class: @unchecked Sendable` using `SCStream` (ScreenCaptureKit) for capturing system audio output (Zoom/Meet/Teams)
+- `AudioSource` enum: `.microphone` (default), `.systemAudio`, `.both` — stored in `@AppStorage("audioSource")`
+- Requires Screen Recording permission (TCC); `checkPermission()` via `SCShareableContent` enumeration
+- Minimal video config (2x2px, 1fps) since only audio needed; `excludesCurrentProcessAudio = true` prevents feedback
+- `CMSampleBuffer` → `AVAudioPCMBuffer` conversion handles both Float32 and Int16 formats
+- Audio buffers forwarded to same `ASREngine.appendAudioBuffer()` as microphone
+- `OSAllocatedUnfairLock<State>` protects stream/callbacks from data races (same pattern as `AudioCaptureService`)
+
+### Spotlight & Handoff
+- **`SpotlightIndexer`**: `nonisolated final class: @unchecked Sendable` indexing sessions via CoreSpotlight (`CSSearchableIndex`); `SpotlightSessionData` Sendable struct for cross-isolation data transfer; indexed after persist + after summary/title generation; deindexed on delete
+- **`HandoffService`**: `nonisolated enum` managing `NSUserActivity` for Handoff + Spotlight search; `viewSessionActivityType` + `activeRecordingActivityType`; `SessionDetailView` uses `.userActivity()` modifier; `AppDelegate.application(_:continue:restorationHandler:)` handles incoming Handoff
+- `Info.plist` registers `NSUserActivityTypes` array for Handoff
+
+### Diagnostics & Settings
+- **`DiagnosticsCollector`**: `nonisolated enum` collecting hardware (RAM, CPU, OS), storage (DB + audio), LLM config, audio pipeline, crash log status; `exportReport()` generates clipboard-friendly text
+- **`DiagnosticsTab`**: Settings tab with card-based sections, export button, crash log viewer
+- **`ModelRecommendation`**: `nonisolated enum` with hardware-aware model recommendations; `modelsForMemory()` filters by 70% RAM headroom; Qwen 3.5 catalog (9B/27B/35B)
+- **`FocusModeService`**: `nonisolated enum` using `INFocusStatusCenter` to check Focus/DND status; `FocusReminderBanner` shown on recording start when Focus is off; `@AppStorage("focusReminderEnabled")` toggle
+- **`MeetingRecapFormatter`**: `nonisolated enum` formatting session data into structured email body; `RecapData` Sendable carrier; `mailtoURL()` for opening default mail client; `MeetingRecapSheet` with copy + email actions
+- **`WaveformExtractor`**: `nonisolated enum` extracting downsampled RMS waveform from `AVAudioFile`; `WaveformView` uses SwiftUI `Canvas` with played/unplayed coloring, playhead, drag-to-seek
 
 ## Architecture
 
@@ -140,12 +171,12 @@ Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Mo
 - **`notetaker/`** — Main app target
   - `notetakerApp.swift` — Entry point, shared `ModelContainer`, `MenuBarExtra`, `Settings` scene
   - `ContentView.swift` — `NavigationSplitView` (sidebar session list + detail routing)
-  - `Models/` — SwiftData models (`RecordingSession`, `TranscriptSegment`, `SummaryBlock`, `ScheduledRecording`), config types (`LLMConfig`, `SummarizerConfig`, `LLMModelProfile`, `VADConfig`, `OverallSummaryMode`, `RepeatRule`), ephemeral types (`ChatMessage`), schema versioning (`Schemas/` V1–V6)
-  - `Services/` — Protocol-based engines (`ASREngine`, `LLMEngine`) with multiple implementations (including `FoundationModelsEngine` for Apple Intelligence), `AudioCaptureService`, `AudioPlaybackService`, `AudioExporter`, `SummarizerService`, `BackgroundSummaryService`, `SummaryMarkdownFormatter`, `ChatService`, `PromptBuilder`, `KeychainService`, `CrashLogService`, `SchedulerService`, `CalendarService`
+  - `Models/` — SwiftData models (`RecordingSession`, `TranscriptSegment`, `SummaryBlock`, `ScheduledRecording`, `ActionItem`), config types (`LLMConfig`, `SummarizerConfig`, `LLMModelProfile`, `VADConfig`, `OverallSummaryMode`, `RepeatRule`, `ActionItemCategory`), ephemeral types (`ChatMessage`), schema versioning (`Schemas/` V1–V8)
+  - `Services/` — Protocol-based engines (`ASREngine`, `LLMEngine`) with multiple implementations (including `FoundationModelsEngine` for Apple Intelligence), `AudioCaptureService`, `AudioPlaybackService`, `AudioExporter`, `SummarizerService`, `BackgroundSummaryService`, `SummaryMarkdownFormatter`, `ChatService`, `PromptBuilder`, `KeychainService`, `CrashLogService`, `SchedulerService`, `CalendarService`, `ActionItemParser`, `ActionItemMarkdownFormatter`, `RemindersExportService`
   - `ViewModels/` — `RecordingViewModel` (`@Observable`) — central state machine for recording lifecycle; `SchedulerViewModel` — scheduled recordings + calendar integration
   - `DesignSystem.swift` — `DS` enum (spacing, typography, colors, radius, layout tokens)
-  - `Views/` — SwiftUI views including `SettingsView` (4-tab layout: `SettingsTab`, `ModelsSettingsTab`, `AboutTab`), `ScheduleView`, `ScheduleEditorView`, `PrivacyDisclosureView`, `SummaryCardView`, `TranscriptSegmentRow`, `AudioLevelBar`, `ResizeHandle`, `VerticalResizeHandle`, `ChatView`, `SettingsComponents` (reusable settings UI), `ViewModifiers`
-- **`notetakerTests/`** — Swift Testing (`@Test`, `#expect`); ~64 test files; `Mocks/` has `MockASREngine`, `MockLLMEngine`, `MockSchedulerService`, per-suite `MockURLProtocol` subclasses; `Helpers/` has `BufferFactory` and `FileAudioSource`
+  - `Views/` — SwiftUI views including `SettingsView` (4-tab layout: `SettingsTab`, `ModelsSettingsTab`, `AboutTab`), `ScheduleView`, `ScheduleEditorView`, `PrivacyDisclosureView`, `SummaryCardView`, `TranscriptSegmentRow`, `AudioLevelBar`, `ResizeHandle`, `VerticalResizeHandle`, `ChatView`, `ActionItemListView`, `SettingsComponents` (reusable settings UI), `ViewModifiers`
+- **`notetakerTests/`** — Swift Testing (`@Test`, `#expect`); ~66 test files; `Mocks/` has `MockASREngine`, `MockLLMEngine`, `MockSchedulerService`, per-suite `MockURLProtocol` subclasses; `Helpers/` has `BufferFactory` and `FileAudioSource`
 - **`notetakerUITests/`** — XCTest UI tests (light/dark mode via `runsForEachTargetApplicationUIConfiguration`)
 - **`scripts/`** — `increment_build_number.sh`
 - **`docs/`** — `PRIVACY_POLICY.md`, `APP_STORE_PRIVACY_CHECKLIST.md`, specs (SPEC-001 through SPEC-005)
@@ -164,9 +195,9 @@ Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Mo
 - `DispatchQueue.main.asyncAfter` may not fire during `Task.sleep`-based polling in Swift Testing — use `DispatchQueue.global()` or avoid dispatch
 - UI launch tests use `runsForEachTargetApplicationUIConfiguration = true` to test light/dark mode; do NOT delete
 - **Close the app before running tests** — if the app is already running, UI tests attach to the existing instance instead of launching a fresh one, causing `Failed to terminate` errors and test failures
-- **Two-tier test plans**: `UnitTests.xctestplan` (22 pure-logic suites, ~257 tests, <0.2s) is default for Cmd+U; `FullTests.xctestplan` (all suites + UI tests) for CI on PR to main; shared scheme at `xcshareddata/xcschemes/notetaker.xcscheme` associates both plans
+- **Two-tier test plans**: `UnitTests.xctestplan` (55+ pure-logic suites) is default for Cmd+U; `FullTests.xctestplan` (all suites + UI tests) for CI on PR to main; shared scheme at `xcshareddata/xcschemes/notetaker.xcscheme` associates both plans
 - **Test plan gotcha**: Xcode auto-generated schemes don't support `-testPlan`; the explicit shared scheme with `shouldAutocreateTestPlan = "NO"` is required; verify with `xcodebuild -scheme notetaker -showTestPlans`
-- 31 test suites use `.serialized` to prevent parallel UserDefaults/Keychain/URLProtocol/SwiftData/NSPasteboard contamination; ~746 tests total across ~64 test files; UnitTests plan excludes all serialized suites for fast local iteration
+- 31 test suites use `.serialized` to prevent parallel UserDefaults/Keychain/URLProtocol/SwiftData/NSPasteboard contamination; ~767 tests total across ~66 test files; UnitTests plan excludes all serialized suites for fast local iteration
 
 ## CI Workflows
 
