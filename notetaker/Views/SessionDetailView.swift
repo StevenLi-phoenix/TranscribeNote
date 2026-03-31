@@ -23,10 +23,14 @@ struct SessionDetailView: View {
     @AppStorage("overallSummaryCollapsed") private var overallCollapsed = false
     @AppStorage("overallSummaryHeight") private var overallHeight: Double = 300
     @AppStorage("chunkSummariesHidden") private var chunkSummariesHidden = false
-    @State private var showChatPanel = false
     @State private var showActionItemsPopover = false
     @State private var exportSuccessMessage: String?
+    @AppStorage("chatPanelOpen") private var isChatOpen = false
+    @AppStorage("chatPanelMode") private var chatPanelModeRaw = "inline"
     @AppStorage("chatPanelWidth") private var chatPanelWidth: Double = 320
+    @State private var chatViewModel: ChatViewModel?
+    @State private var chatWindowController: ChatWindowController?
+    @State private var detailWidth: CGFloat = 1000
 
     var body: some View {
         if isLoading {
@@ -136,10 +140,30 @@ struct SessionDetailView: View {
                             }
                         }
 
-                        Button {
-                            withAnimation { showChatPanel.toggle() }
+                        Menu {
+                            Button {
+                                switchChatMode(.inline)
+                            } label: {
+                                Label("Show in Main Window", systemImage: "sidebar.right")
+                            }
+                            .disabled(detailWidth < DS.Layout.narrowWindowThreshold && !isInlineChat)
+
+                            Button {
+                                switchChatMode(.window)
+                            } label: {
+                                Label("Open in Separate Window", systemImage: "macwindow")
+                            }
+
+                            Divider()
+
+                            Button("Close Chat Panel") {
+                                closeChat()
+                            }
+                            .disabled(!isChatOpen)
                         } label: {
-                            Label("Chat", systemImage: showChatPanel ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
+                            Label("Chat", systemImage: isChatOpen ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
+                        } primaryAction: {
+                            toggleChat()
                         }
                         .disabled(sortedSegments.isEmpty)
                         .help("Ask questions about this transcript")
@@ -235,13 +259,31 @@ struct SessionDetailView: View {
                 }
 
             }
-            .frame(maxWidth: .infinity)
-
-            if showChatPanel {
-                VerticalResizeHandle(width: $chatPanelWidth, minWidth: 250, maxWidth: 500)
-                ChatView(segments: sortedSegments, sessionID: sessionID)
-                    .frame(width: chatPanelWidth)
+            .frame(minWidth: 300, maxWidth: .infinity)
+            .layoutPriority(1)
+            .overlay(alignment: .bottomTrailing) {
+                if isInlineChat && detailWidth < DS.Layout.narrowWindowThreshold {
+                    ChatNarrowHintView {
+                        switchChatMode(.window)
+                    }
+                    .padding(DS.Spacing.md)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
+
+            if isInlineChat, let vm = chatViewModel {
+                VerticalResizeHandle(width: $chatPanelWidth, minWidth: 250, maxWidth: 500)
+                ChatViewContent(viewModel: vm)
+                    .frame(idealWidth: chatPanelWidth, maxWidth: chatPanelWidth)
+            }
+            }
+            .background(
+                GeometryReader { geo in
+                    Color.clear.preference(key: DetailWidthKey.self, value: geo.size.width)
+                }
+            )
+            .onPreferenceChange(DetailWidthKey.self) { newWidth in
+                detailWidth = newWidth
             }
             .onReceive(NotificationCenter.default.publisher(for: .togglePlayback)) { _ in
                 guard playbackService.duration > 0 else { return }
@@ -278,7 +320,6 @@ struct SessionDetailView: View {
                 summaryGenerationError = nil
                 summaryProgress = nil
                 scrollToTime = nil
-                showChatPanel = false
                 showActionItemsPopover = false
                 exportSuccessMessage = nil
                 fetchSession()
@@ -288,6 +329,7 @@ struct SessionDetailView: View {
                 summaryTask?.cancel()
                 refreshTimer?.invalidate()
                 refreshTimer = nil
+                dismissChatWindow()
             }
             .alert("Error", isPresented: Binding(
                 get: { summaryGenerationError != nil },
@@ -329,6 +371,8 @@ struct SessionDetailView: View {
             if let session {
                 sortedSegments = session.segments.sorted { $0.startTime < $1.startTime }
                 loadAudio(for: session)
+                chatViewModel?.configure(sessionID: sessionID, segments: sortedSegments)
+                chatWindowController?.updateTitle(session.title)
             }
         } catch {
             Self.logger.error("Failed to fetch session \(id): \(error.localizedDescription)")
@@ -771,4 +815,101 @@ struct SessionDetailView: View {
         }
     }
 
+    // MARK: - Chat Panel
+
+    private var chatPanelMode: ChatPanelMode {
+        ChatPanelMode(rawValue: chatPanelModeRaw) ?? .inline
+    }
+
+    private var isInlineChat: Bool {
+        isChatOpen && chatPanelMode == .inline
+    }
+
+    private func toggleChat() {
+        if isChatOpen {
+            closeChat()
+        } else {
+            openChat()
+        }
+    }
+
+    private func openChat() {
+        ensureChatViewModel()
+        // Auto-select windowed mode if window is too narrow
+        if detailWidth < DS.Layout.narrowWindowThreshold {
+            chatPanelModeRaw = ChatPanelMode.window.rawValue
+        }
+        isChatOpen = true
+        if chatPanelMode == .window {
+            presentChatWindow()
+        }
+        Self.logger.info("Chat opened in \(chatPanelMode.rawValue) mode")
+    }
+
+    private func closeChat() {
+        isChatOpen = false
+        dismissChatWindow()
+        Self.logger.info("Chat closed")
+    }
+
+    private func switchChatMode(_ mode: ChatPanelMode) {
+        guard chatPanelMode != mode else {
+            // Same mode — just toggle open
+            if !isChatOpen { openChat() }
+            return
+        }
+        dismissChatWindow()
+        chatPanelModeRaw = mode.rawValue
+        if !isChatOpen {
+            openChat()
+        } else if mode == .window {
+            presentChatWindow()
+        }
+        Self.logger.info("Chat mode switched to \(mode.rawValue)")
+    }
+
+    private func ensureChatViewModel() {
+        if chatViewModel == nil {
+            chatViewModel = ChatViewModel()
+        }
+        chatViewModel?.configure(sessionID: sessionID, segments: sortedSegments)
+    }
+
+    private func presentChatWindow() {
+        guard chatWindowController == nil else {
+            chatWindowController?.window?.makeKeyAndOrderFront(nil)
+            return
+        }
+        let container = modelContext.container
+        let title = session?.title ?? "Untitled"
+        let controller = ChatWindowController(
+            viewModel: chatViewModel!,
+            sessionTitle: title,
+            modelContainer: container
+        )
+        controller.onClose = {
+            isChatOpen = false
+            chatWindowController = nil
+        }
+        // Position relative to main window
+        if let mainWindow = NSApp.mainWindow {
+            controller.positionRelativeTo(mainWindow.frame)
+        }
+        controller.showWindow(nil)
+        chatWindowController = controller
+    }
+
+    private func dismissChatWindow() {
+        chatWindowController?.window?.close()
+        chatWindowController = nil
+    }
+}
+
+// MARK: - PreferenceKey
+
+private struct DetailWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 1000
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
 }
