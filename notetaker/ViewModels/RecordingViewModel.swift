@@ -43,6 +43,7 @@ final class RecordingViewModel {
     let clock = ElapsedTimeClock()
     let audioMeter = AudioLevelMeter()
     private(set) var errorMessage: String?
+    var criticalError: String?
     private(set) var currentSession: RecordingSession?
     private(set) var summaries: [SummaryBlock] = []
     private(set) var isSummarizing: Bool = false
@@ -187,8 +188,12 @@ final class RecordingViewModel {
                 remainingDurationSeconds = TimeInterval(minutes * 60)
                 startDurationEndTimer()
             }
+        } catch let error as AudioCaptureService.AudioCaptureError where error == .noInputDevice {
+            Self.logger.error("Critical: no audio input device")
+            criticalError = error.localizedDescription
         } catch {
-            errorMessage = "Failed to start recording: \(error.localizedDescription)"
+            Self.logger.error("Failed to start recording: \(error.localizedDescription)")
+            criticalError = "Failed to start recording: \(error.localizedDescription)"
         }
     }
 
