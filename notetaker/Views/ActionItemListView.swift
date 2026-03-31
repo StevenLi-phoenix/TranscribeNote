@@ -104,11 +104,11 @@ struct ActionItemListView: View {
         HStack(alignment: .top, spacing: DS.Spacing.sm) {
             Button {
                 item.isCompleted.toggle()
-                try? modelContext.save()
+                modelContext.saveQuietly()
             } label: {
                 Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(item.isCompleted ? .green : .secondary)
-                    .font(.body)
+                    .foregroundStyle(item.isCompleted ? DS.Colors.success : .secondary)
+                    .font(DS.Typography.body)
             }
             .buttonStyle(.plain)
 
@@ -140,22 +140,22 @@ struct ActionItemListView: View {
             if item.dueDate == nil {
                 Button("Set Due Date to Tomorrow") {
                     item.dueDate = Calendar.current.date(byAdding: .day, value: 1, to: Date())
-                    try? modelContext.save()
+                    modelContext.saveQuietly()
                 }
                 Button("Set Due Date to Next Week") {
                     item.dueDate = Calendar.current.date(byAdding: .weekOfYear, value: 1, to: Date())
-                    try? modelContext.save()
+                    modelContext.saveQuietly()
                 }
             } else {
                 Button("Clear Due Date") {
                     item.dueDate = nil
-                    try? modelContext.save()
+                    modelContext.saveQuietly()
                 }
             }
             Divider()
             Button("Delete", role: .destructive) {
                 modelContext.delete(item)
-                try? modelContext.save()
+                modelContext.saveQuietly()
             }
         }
     }
@@ -166,7 +166,8 @@ struct ActionItemListView: View {
         NSPasteboard.general.setString(markdown, forType: .string)
         Self.logger.info("Copied \(actionItems.count) action items as markdown")
         copyFeedback = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+        Task {
+            try? await Task.sleep(for: .seconds(1.5))
             copyFeedback = false
         }
     }

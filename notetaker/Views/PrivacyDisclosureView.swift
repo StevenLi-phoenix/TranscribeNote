@@ -6,16 +6,16 @@ struct PrivacyDisclosureView: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: DS.Spacing.xl) {
             Image(systemName: "lock.shield")
                 .font(.system(size: 48))
                 .foregroundStyle(.blue)
 
             Text("Privacy Notice")
-                .font(.title2)
+                .font(DS.Typography.title)
                 .bold()
 
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: DS.Spacing.md) {
                 disclosureSection(
                     title: "When you configure an external LLM provider, Notetaker will send:",
                     items: [
@@ -41,10 +41,10 @@ struct PrivacyDisclosureView: View {
                     ]
                 )
             }
-            .font(.body)
+            .font(DS.Typography.body)
             .padding()
             .background(Color.secondary.opacity(0.1))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md))
 
             Button("I Understand") {
                 onDismiss()
@@ -54,21 +54,21 @@ struct PrivacyDisclosureView: View {
 
             Link("View Full Privacy Policy",
                  destination: Self.privacyPolicyURL)
-                .font(.caption)
+                .font(DS.Typography.caption)
         }
-        .padding(32)
+        .padding(DS.Spacing.xxl)
         .frame(width: 480)
     }
 
     private func disclosureSection(title: String, items: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
             Text(title)
-                .font(.headline)
-                .padding(.top, 4)
+                .font(DS.Typography.sectionHeader)
+                .padding(.top, DS.Spacing.xs)
 
             ForEach(items, id: \.self) { item in
                 Label(item, systemImage: "circle.fill")
-                    .font(.body)
+                    .font(DS.Typography.body)
                     .labelStyle(BulletLabelStyle())
             }
         }
@@ -78,7 +78,7 @@ struct PrivacyDisclosureView: View {
 /// Compact bullet-point label style using a small circle as the icon.
 private struct BulletLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: DS.Spacing.sm) {
             configuration.icon
                 .font(.system(size: 4))
                 .foregroundStyle(.secondary)

@@ -124,7 +124,7 @@ nonisolated final class SummarizerService: @unchecked Sendable {
             additionalInstructions: instructions
         )
 
-        Self.logger.info("Starting guided regeneration (\(segments.count) segments, instructions: \(instructions.prefix(60)))")
+        Self.logger.info("Starting guided regeneration (\(segments.count) segments, instructions: \(instructions.count) chars)")
         let result = try await retryableGenerate(messages: messages, llmConfig: llmConfig, label: "guided regeneration")
         return result.content
     }

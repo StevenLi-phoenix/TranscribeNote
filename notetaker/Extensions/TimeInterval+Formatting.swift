@@ -1,13 +1,25 @@
 import Foundation
 
 extension TimeInterval {
-    /// Compact human-readable duration, e.g. "3m 12s" or "45s".
+    /// Compact human-readable duration, e.g. "3m 12s", "1h 30m", or "45s".
+    /// Handles hours and drops trailing zero components.
     var compactDuration: String {
         let totalSeconds = max(0, Int(self))
-        let minutes = totalSeconds / 60
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
         let seconds = totalSeconds % 60
+
+        if hours > 0 {
+            if minutes > 0 {
+                return "\(hours)h \(minutes)m"
+            }
+            return "\(hours)h"
+        }
         if minutes > 0 {
-            return "\(minutes)m \(seconds)s"
+            if seconds > 0 {
+                return "\(minutes)m \(seconds)s"
+            }
+            return "\(minutes)m"
         }
         return "\(seconds)s"
     }

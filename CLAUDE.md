@@ -36,7 +36,7 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` — all types MainActor by default; use `nonisolated` for audio/ASR/LLM classes
 - `PBXFileSystemSynchronizedRootGroup` — no pbxproj edits needed for new source files
 - `import os` provides both `Logger` AND `OSAllocatedUnfairLock` — don't remove from files using either
-- Entitlements: sandbox + audio-input + `files.user-selected.read-write` + `network.client` (LLM API calls) + `personal-information.calendars` (calendar import)
+- Entitlements: sandbox + audio-input + `files.user-selected.read-write` + `network.client` (LLM API calls) + `personal-information.calendars` (calendar import); Screen Recording permission (TCC) required for system audio capture via ScreenCaptureKit
 
 ### SwiftData & SwiftUI
 - SwiftData persistence with `@Model` classes (`RecordingSession`, `TranscriptSegment`, `SummaryBlock`)
@@ -94,7 +94,7 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - **LLM Profile System**: `LLMModelProfile` (named config) + `LLMRole` enum (`.live`, `.overall`, `.title`, `.chat`) + `LLMProfileStore` (CRUD, role assignment, config resolution); profiles stored as JSON array in UserDefaults, API keys in Keychain per-profile (`notetaker.profile.<uuid>.apiKey`); roles can "inherit live" to reuse the live profile; `resolveConfig(for:)` resolves assigned profile → first profile → legacy fallback; auto-migrates from legacy per-role `@AppStorage` keys on first launch
 - **`LLMConfig` API key security**: `apiKey` stored in macOS Keychain via `KeychainService`, NOT in UserDefaults JSON; custom `CodingKeys` excludes `apiKey` from encoding/decoding; one-time migration via `KeychainMigration.migrateIfNeeded()` at app init
 - **`OverallSummaryMode`**: `.rawText` (full transcript), `.chunkSummaries` (synthesize existing chunks), `.auto` (chunks if available, else raw) — stored in `SummarizerConfig`
-- Default config: `.custom` provider, `qwen3-14b-mlx` model, `http://localhost:1234/v1` (LM Studio)
+- Default config: `.custom` provider, `qwen3.5-9b-mlx` model, `http://localhost:1234/v1` (LM Studio)
 - `SummaryBlock` stores `style` as `String` raw value (SwiftData can't store custom enums directly); use `summaryStyle` computed property; `isOverall: Bool` distinguishes overall summaries from chunk summaries; `editedContent: String?` for user edits — use `displayContent` computed property which returns editedContent ?? content
 - Silent summaries: No spinners during summary generation; summaries fade in with `.transition(.opacity)` + `.animation(.easeIn)` on count; errors auto-dismiss after 5s via `.task(id:)`
 - Guided regeneration: `SummarizerService.summarizeWithInstructions()` passes `additionalInstructions` through `PromptBuilder`; `retryableGenerate()` extracted as shared retry logic
@@ -140,6 +140,28 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
   - **V7**: Adds `ActionItem` model and `actionItems: [ActionItem] = []` relationship on `RecordingSession`
   - **V8**: Adds `structuredContent: String? = nil` to SummaryBlock for structured summary output (JSON-encoded `StructuredSummary`)
 
+### System Audio Capture
+- **`SystemAudioCaptureService`**: `nonisolated final class: @unchecked Sendable` using `SCStream` (ScreenCaptureKit) for capturing system audio output (Zoom/Meet/Teams)
+- `AudioSource` enum: `.microphone` (default), `.systemAudio`, `.both` — stored in `@AppStorage("audioSource")`
+- Requires Screen Recording permission (TCC); `checkPermission()` via `SCShareableContent` enumeration
+- Minimal video config (2x2px, 1fps) since only audio needed; `excludesCurrentProcessAudio = true` prevents feedback
+- `CMSampleBuffer` → `AVAudioPCMBuffer` conversion handles both Float32 and Int16 formats
+- Audio buffers forwarded to same `ASREngine.appendAudioBuffer()` as microphone
+- `OSAllocatedUnfairLock<State>` protects stream/callbacks from data races (same pattern as `AudioCaptureService`)
+
+### Spotlight & Handoff
+- **`SpotlightIndexer`**: `nonisolated final class: @unchecked Sendable` indexing sessions via CoreSpotlight (`CSSearchableIndex`); `SpotlightSessionData` Sendable struct for cross-isolation data transfer; indexed after persist + after summary/title generation; deindexed on delete
+- **`HandoffService`**: `nonisolated enum` managing `NSUserActivity` for Handoff + Spotlight search; `viewSessionActivityType` + `activeRecordingActivityType`; `SessionDetailView` uses `.userActivity()` modifier; `AppDelegate.application(_:continue:restorationHandler:)` handles incoming Handoff
+- `Info.plist` registers `NSUserActivityTypes` array for Handoff
+
+### Diagnostics & Settings
+- **`DiagnosticsCollector`**: `nonisolated enum` collecting hardware (RAM, CPU, OS), storage (DB + audio), LLM config, audio pipeline, crash log status; `exportReport()` generates clipboard-friendly text
+- **`DiagnosticsTab`**: Settings tab with card-based sections, export button, crash log viewer
+- **`ModelRecommendation`**: `nonisolated enum` with hardware-aware model recommendations; `modelsForMemory()` filters by 70% RAM headroom; Qwen 3.5 catalog (9B/27B/35B)
+- **`FocusModeService`**: `nonisolated enum` using `INFocusStatusCenter` to check Focus/DND status; `FocusReminderBanner` shown on recording start when Focus is off; `@AppStorage("focusReminderEnabled")` toggle
+- **`MeetingRecapFormatter`**: `nonisolated enum` formatting session data into structured email body; `RecapData` Sendable carrier; `mailtoURL()` for opening default mail client; `MeetingRecapSheet` with copy + email actions
+- **`WaveformExtractor`**: `nonisolated enum` extracting downsampled RMS waveform from `AVAudioFile`; `WaveformView` uses SwiftUI `Canvas` with played/unplayed coloring, playhead, drag-to-seek
+
 ## Architecture
 
 Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Model` classes for persistence.
@@ -171,7 +193,7 @@ Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Mo
 - `DispatchQueue.main.asyncAfter` may not fire during `Task.sleep`-based polling in Swift Testing — use `DispatchQueue.global()` or avoid dispatch
 - UI launch tests use `runsForEachTargetApplicationUIConfiguration = true` to test light/dark mode; do NOT delete
 - **Close the app before running tests** — if the app is already running, UI tests attach to the existing instance instead of launching a fresh one, causing `Failed to terminate` errors and test failures
-- **Two-tier test plans**: `UnitTests.xctestplan` (22 pure-logic suites, ~257 tests, <0.2s) is default for Cmd+U; `FullTests.xctestplan` (all suites + UI tests) for CI on PR to main; shared scheme at `xcshareddata/xcschemes/notetaker.xcscheme` associates both plans
+- **Two-tier test plans**: `UnitTests.xctestplan` (55+ pure-logic suites) is default for Cmd+U; `FullTests.xctestplan` (all suites + UI tests) for CI on PR to main; shared scheme at `xcshareddata/xcschemes/notetaker.xcscheme` associates both plans
 - **Test plan gotcha**: Xcode auto-generated schemes don't support `-testPlan`; the explicit shared scheme with `shouldAutocreateTestPlan = "NO"` is required; verify with `xcodebuild -scheme notetaker -showTestPlans`
 - 31 test suites use `.serialized` to prevent parallel UserDefaults/Keychain/URLProtocol/SwiftData/NSPasteboard contamination; ~767 tests total across ~66 test files; UnitTests plan excludes all serialized suites for fast local iteration
 
