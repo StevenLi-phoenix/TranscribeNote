@@ -59,5 +59,10 @@ enum DS {
         static let summaryMaxHeight: CGFloat = 300
         static let controlBarMinHeight: CGFloat = 48
         static let timeMinWidth: CGFloat = 64
+        static let chatMinWindowWidth: CGFloat = 320
+        static let chatMinWindowHeight: CGFloat = 400
+        static let chatDefaultWidth: CGFloat = 400
+        static let chatDefaultHeight: CGFloat = 600
+        static let narrowWindowThreshold: CGFloat = 800
     }
 }

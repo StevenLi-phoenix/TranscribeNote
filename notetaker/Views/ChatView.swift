@@ -1,48 +1,25 @@
 import SwiftUI
 import os
 
-/// Chat panel for conversational Q&A against a session's transcript.
-struct ChatView: View {
-    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "notetaker", category: "ChatView")
-
-    let segments: [TranscriptSegment]
-    let sessionID: UUID
-
-    @State private var chatService: ChatService?
-    @State private var messages: [ChatMessage] = []
-    @State private var inputText = ""
-    @State private var isGenerating = false
-    @State private var scrollTarget: UUID?
-
-    private let presetQuestions = [
-        "What were the main topics discussed?",
-        "What action items were mentioned?",
-        "Summarize the key decisions",
-        "What are the next steps?",
-    ]
+/// Chat panel content — renders messages and input, driven by ChatViewModel.
+struct ChatViewContent: View {
+    @Bindable var viewModel: ChatViewModel
 
     var body: some View {
         VStack(spacing: 0) {
             chatHeader
             Divider()
 
-            if segments.isEmpty {
+            if viewModel.segments.isEmpty {
                 emptyTranscriptView
             } else {
                 messagesArea
-                if messages.isEmpty {
+                if viewModel.messages.isEmpty {
                     presetQuestionsView
                 }
                 Divider()
                 inputBar
             }
-        }
-        .onAppear { initServiceIfNeeded() }
-        .onChange(of: sessionID) {
-            messages.removeAll()
-            chatService?.clearHistory()
-            chatService = nil
-            initServiceIfNeeded()
         }
     }
 
@@ -53,10 +30,9 @@ struct ChatView: View {
             Text("Chat")
                 .font(DS.Typography.sectionHeader)
             Spacer()
-            if !messages.isEmpty {
+            if !viewModel.messages.isEmpty {
                 Button {
-                    messages.removeAll()
-                    chatService?.clearHistory()
+                    viewModel.clearHistory()
                 } label: {
                     Image(systemName: "trash")
                         .font(DS.Typography.caption)
@@ -76,26 +52,26 @@ struct ChatView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: DS.Spacing.sm) {
-                    ForEach(messages) { message in
+                    ForEach(viewModel.messages) { message in
                         ChatBubbleView(message: message)
                             .id(message.id)
                     }
-                    if isGenerating {
+                    if viewModel.isGenerating {
                         TypingIndicator()
                             .id("typing")
                     }
                 }
                 .padding(DS.Spacing.md)
             }
-            .onChange(of: scrollTarget) {
-                if let target = scrollTarget {
+            .onChange(of: viewModel.scrollTarget) {
+                if let target = viewModel.scrollTarget {
                     withAnimation(.easeOut(duration: 0.2)) {
                         proxy.scrollTo(target, anchor: .bottom)
                     }
                 }
             }
-            .onChange(of: isGenerating) {
-                if isGenerating {
+            .onChange(of: viewModel.isGenerating) {
+                if viewModel.isGenerating {
                     withAnimation(.easeOut(duration: 0.2)) {
                         proxy.scrollTo("typing", anchor: .bottom)
                     }
@@ -115,10 +91,10 @@ struct ChatView: View {
                 .padding(.horizontal, DS.Spacing.md)
 
             FlowLayout(spacing: DS.Spacing.xs) {
-                ForEach(presetQuestions, id: \.self) { question in
+                ForEach(viewModel.presetQuestions, id: \.self) { question in
                     Button {
-                        inputText = question
-                        sendMessage()
+                        viewModel.inputText = question
+                        viewModel.sendMessage()
                     } label: {
                         Text(question)
                             .font(DS.Typography.caption)
@@ -143,23 +119,23 @@ struct ChatView: View {
 
     private var inputBar: some View {
         HStack(spacing: DS.Spacing.sm) {
-            TextField("Ask about this transcript…", text: $inputText)
+            TextField("Ask about this transcript…", text: $viewModel.inputText)
                 .textFieldStyle(.plain)
-                .onSubmit { sendMessage() }
+                .onSubmit { viewModel.sendMessage() }
 
-            if isGenerating {
+            if viewModel.isGenerating {
                 ProgressView()
                     .controlSize(.small)
             } else {
                 Button {
-                    sendMessage()
+                    viewModel.sendMessage()
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.title2)
-                        .foregroundStyle(inputText.trimmingCharacters(in: .whitespaces).isEmpty ? Color.secondary : Color.accentColor)
+                        .foregroundStyle(viewModel.inputText.trimmingCharacters(in: .whitespaces).isEmpty ? Color.secondary : Color.accentColor)
                 }
                 .buttonStyle(.plain)
-                .disabled(inputText.trimmingCharacters(in: .whitespaces).isEmpty)
+                .disabled(viewModel.inputText.trimmingCharacters(in: .whitespaces).isEmpty)
                 .accessibilityLabel("Send message")
             }
         }
@@ -176,45 +152,6 @@ struct ChatView: View {
             description: Text("This session has no transcript content to chat about.")
         )
         .frame(maxHeight: .infinity)
-    }
-
-    // MARK: - Actions
-
-    private func initServiceIfNeeded() {
-        guard chatService == nil else { return }
-        let config = LLMProfileStore.resolveConfig(for: .chat)
-        let engine = LLMEngineFactory.create(from: config)
-        chatService = ChatService(engine: engine)
-    }
-
-    private func sendMessage() {
-        let text = inputText.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty, !isGenerating else { return }
-
-        inputText = ""
-        isGenerating = true
-
-        // Add user message to local state immediately for UI
-        let userMsg = ChatMessage(role: .user, content: text)
-        messages.append(userMsg)
-        scrollTarget = userMsg.id
-
-        Task {
-            defer { isGenerating = false }
-            do {
-                let config = LLMProfileStore.resolveConfig(for: .chat)
-                let response = try await chatService?.sendMessage(text, segments: segments, llmConfig: config)
-                if let response {
-                    messages.append(response)
-                    scrollTarget = response.id
-                }
-            } catch {
-                Self.logger.error("Chat error: \(error.localizedDescription)")
-                let errorMsg = ChatMessage(role: .assistant, content: "Error: \(error.localizedDescription)", isError: true)
-                messages.append(errorMsg)
-                scrollTarget = errorMsg.id
-            }
-        }
     }
 }
 
