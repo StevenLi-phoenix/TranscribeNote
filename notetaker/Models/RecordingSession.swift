@@ -21,6 +21,9 @@ final class RecordingSession {
     @Relationship(deleteRule: .cascade)
     var summaries: [SummaryBlock] = []
 
+    @Relationship(deleteRule: .cascade)
+    var actionItems: [ActionItem] = []
+
     /// All audio file URLs for this session (supports multi-clip pause/resume).
     /// Falls back to legacy single `audioFilePath` for older sessions.
     var audioFileURLs: [URL] {
@@ -54,6 +57,7 @@ final class RecordingSession {
         tags: [String] = [],
         segments: [TranscriptSegment] = [],
         summaries: [SummaryBlock] = [],
+        actionItems: [ActionItem] = [],
         isPartial: Bool = false,
         scheduledRecordingID: UUID? = nil
     ) {
@@ -66,6 +70,7 @@ final class RecordingSession {
         self.tags = tags
         self.segments = segments
         self.summaries = summaries
+        self.actionItems = actionItems
         self.isPartial = isPartial
         self.scheduledRecordingID = scheduledRecordingID
     }
