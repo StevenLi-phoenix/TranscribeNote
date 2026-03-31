@@ -24,6 +24,7 @@ nonisolated enum LLMRole: String, CaseIterable, Sendable {
     case overall
     case title
     case chat
+    case actionItems
 
     var displayName: String {
         switch self {
@@ -31,6 +32,7 @@ nonisolated enum LLMRole: String, CaseIterable, Sendable {
         case .overall: "Overall Summary"
         case .title: "Title Generation"
         case .chat: "Chat Q&A"
+        case .actionItems: "Action Items"
         }
     }
 
@@ -40,6 +42,7 @@ nonisolated enum LLMRole: String, CaseIterable, Sendable {
         case .overall: "Post-recording complete summary"
         case .title: "Auto-generate session titles after recording"
         case .chat: "Ask questions about transcripts"
+        case .actionItems: "Extract action items from transcripts"
         }
     }
 
@@ -163,6 +166,7 @@ enum LLMProfileStore {
         case .overall: keys = ["overallLLMConfigJSON", "liveLLMConfigJSON", "llmConfigJSON"]
         case .title: keys = ["titleLLMConfigJSON", "liveLLMConfigJSON", "llmConfigJSON"]
         case .chat: keys = ["liveLLMConfigJSON", "llmConfigJSON"]
+        case .actionItems: keys = ["liveLLMConfigJSON", "llmConfigJSON"]
         }
         for key in keys {
             if let json = defaults.string(forKey: key), !json.isEmpty {

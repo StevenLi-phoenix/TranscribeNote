@@ -38,6 +38,8 @@ struct notetakerApp: App {
     private let containerError: String?
 
     init() {
+        UserDefaults.standard.register(defaults: ["soundEffectsEnabled": true])
+
         CrashLogService.install()
         KeychainMigration.migrateIfNeeded()
         SchedulerService.install()
@@ -55,7 +57,7 @@ struct notetakerApp: App {
         do {
             sharedModelContainer = try ModelContainer(
                 for: RecordingSession.self, TranscriptSegment.self, SummaryBlock.self,
-                ScheduledRecording.self,
+                ScheduledRecording.self, ActionItem.self,
                 migrationPlan: NotetakerMigrationPlan.self,
                 configurations: configuration
             )
@@ -106,14 +108,14 @@ struct notetakerApp: App {
                         schedulerViewModel.load(context: sharedModelContainer.mainContext)
                     }
             } else {
-                VStack(spacing: 12) {
+                VStack(spacing: DS.Spacing.md) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.largeTitle)
                         .foregroundStyle(.yellow)
                     Text("Failed to initialize database")
-                        .font(.headline)
+                        .font(DS.Typography.sectionHeader)
                     Text(containerError ?? "The app's data store could not be created. Try relaunching the app.")
-                        .font(.body)
+                        .font(DS.Typography.body)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
@@ -161,7 +163,7 @@ struct MenuBarView: View {
         if viewModel.isRecording {
             HStack(spacing: DS.Spacing.xs) {
                 Circle()
-                    .fill(.red)
+                    .fill(DS.Colors.recording)
                     .frame(width: 7, height: 7)
                     .opacity(pulsing ? 0.35 : 1.0)
                     .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulsing)
@@ -171,7 +173,7 @@ struct MenuBarView: View {
                     .fontWeight(.medium)
                 Spacer()
                 Text(viewModel.clock.formatted)
-                    .font(.system(.body, design: .monospaced))
+                    .font(DS.Typography.timer)
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, DS.Spacing.md)
@@ -186,7 +188,7 @@ struct MenuBarView: View {
             if let summary = viewModel.latestSummary {
                 Divider()
                 Text(summary)
-                    .font(.caption)
+                    .font(DS.Typography.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(4)
                     .fixedSize(horizontal: false, vertical: true)
@@ -211,12 +213,12 @@ struct MenuBarView: View {
         } else if viewModel.state == .paused {
             HStack(spacing: DS.Spacing.xs) {
                 Image(systemName: "pause.circle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(DS.Colors.paused)
                 Text("Paused")
                     .fontWeight(.medium)
                 Spacer()
                 Text(viewModel.clock.formatted)
-                    .font(.system(.body, design: .monospaced))
+                    .font(DS.Typography.timer)
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, DS.Spacing.md)
@@ -245,10 +247,10 @@ struct MenuBarView: View {
                         .foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(next.title.isEmpty ? "Scheduled" : next.title)
-                            .font(.caption)
+                            .font(DS.Typography.caption)
                             .fontWeight(.medium)
                         Text(fireTime, style: .relative)
-                            .font(.caption2)
+                            .font(DS.Typography.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }

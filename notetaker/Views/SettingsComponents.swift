@@ -133,14 +133,14 @@ struct StatusIndicator: View {
         case .testing:
             ProgressView().controlSize(.small)
         case .available:
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(DS.Colors.success)
         case .unavailable:
             HStack(spacing: DS.Spacing.xs) {
-                Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+                Image(systemName: "xmark.circle.fill").foregroundStyle(DS.Colors.error)
                 if let error {
                     Text(error)
                         .font(DS.Typography.caption)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(DS.Colors.error)
                         .lineLimit(2)
                 }
             }
@@ -179,7 +179,7 @@ struct SettingsGrid<Content: View>: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 14) {
+            VStack(spacing: DS.Spacing.lg) {
                 content
             }
             .toggleStyle(.switch)
@@ -202,7 +202,7 @@ struct SettingsRow<Content: View>: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: DS.Spacing.md) {
             Text(label)
                 .frame(maxWidth: .infinity, alignment: .trailing)
             content

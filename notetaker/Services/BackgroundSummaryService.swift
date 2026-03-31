@@ -16,6 +16,9 @@ final class BackgroundSummaryService {
     /// Currently running background summary task, keyed by session ID.
     private(set) var activeTasks: [UUID: Task<Void, Never>] = [:]
 
+    /// Currently running action item extraction task, keyed by session ID.
+    private(set) var activeActionItemTasks: [UUID: Task<Void, Never>] = [:]
+
     private init() {}
 
     /// Whether a background summary is in progress for the given session.
@@ -23,20 +26,33 @@ final class BackgroundSummaryService {
         activeTasks[sessionID] != nil
     }
 
-    /// Wait for all active background summaries to complete (used for graceful quit).
+    /// Whether action item extraction is in progress for the given session.
+    func isExtractingActionItems(for sessionID: UUID) -> Bool {
+        activeActionItemTasks[sessionID] != nil
+    }
+
+    /// Wait for all active background tasks to complete (used for graceful quit).
     func awaitAll() async {
         for (_, task) in activeTasks {
             await task.value
         }
+        for (_, task) in activeActionItemTasks {
+            await task.value
+        }
     }
 
-    /// Cancel all active background summaries immediately (used for fast quit).
+    /// Cancel all active background tasks immediately (used for fast quit).
     func cancelAll() {
         for (id, task) in activeTasks {
             Self.logger.info("Cancelling background summary for \(id)")
             task.cancel()
         }
         activeTasks.removeAll()
+        for (id, task) in activeActionItemTasks {
+            Self.logger.info("Cancelling action item extraction for \(id)")
+            task.cancel()
+        }
+        activeActionItemTasks.removeAll()
     }
 
     /// Fire-and-forget: generate an overall summary for a just-completed recording session.
@@ -74,7 +90,8 @@ final class BackgroundSummaryService {
             let chunkSummaries = session.summaries.filter { !$0.isOverall && !$0.isPinned && !$0.userEdited }
 
             do {
-                let content: String
+                var content: String
+                var structuredResult: StructuredSummary?
                 let sortedChunks = chunkSummaries
                     .sorted { $0.coveringFrom < $1.coveringFrom }
                     .map { (coveringFrom: $0.coveringFrom, coveringTo: $0.coveringTo, content: $0.content) }
@@ -82,23 +99,27 @@ final class BackgroundSummaryService {
                 switch summarizerConfig.overallSummaryMode {
                 case .rawText:
                     Self.logger.info("Mode: rawText — generating from transcript for \(sessionID)")
-                    content = try await service.summarize(
+                    let result = try await service.summarizeWithFallback(
                         segments: segments,
                         previousSummary: nil,
                         config: summarizerConfig,
                         llmConfig: llmConfig
                     )
+                    content = result.content
+                    structuredResult = result.structured
                 case .chunkSummaries:
                     if sortedChunks.isEmpty {
                         Self.logger.warning("Mode: chunkSummaries but no chunks available, falling back to raw text for \(sessionID)")
-                        content = try await service.summarize(
+                        let result = try await service.summarizeWithFallback(
                             segments: segments,
                             previousSummary: nil,
                             config: summarizerConfig,
                             llmConfig: llmConfig
                         )
+                        content = result.content
+                        structuredResult = result.structured
                     } else {
-                        Self.logger.info("Mode: chunkSummaries — synthesizing \(sortedChunks.count) chunks for \(sessionID)")
+                        Self.logger.info("Mode: chunkSummaries — synthesizing \(sortedChunks.count) chunks for \(sessionID) (structured output not available for chunk synthesis)")
                         content = try await service.summarizeOverall(
                             chunkSummaries: sortedChunks,
                             config: summarizerConfig,
@@ -108,14 +129,16 @@ final class BackgroundSummaryService {
                 case .auto:
                     if chunkSummaries.isEmpty {
                         Self.logger.info("Mode: auto, no chunks — generating from transcript for \(sessionID)")
-                        content = try await service.summarize(
+                        let result = try await service.summarizeWithFallback(
                             segments: segments,
                             previousSummary: nil,
                             config: summarizerConfig,
                             llmConfig: llmConfig
                         )
+                        content = result.content
+                        structuredResult = result.structured
                     } else {
-                        Self.logger.info("Mode: auto — synthesizing \(sortedChunks.count) chunks for \(sessionID)")
+                        Self.logger.info("Mode: auto — synthesizing \(sortedChunks.count) chunks for \(sessionID) (structured output not available for chunk synthesis)")
                         content = try await service.summarizeOverall(
                             chunkSummaries: sortedChunks,
                             config: summarizerConfig,
@@ -144,7 +167,8 @@ final class BackgroundSummaryService {
                     content: content,
                     style: summarizerConfig.summaryStyle,
                     model: llmConfig.model,
-                    isOverall: true
+                    isOverall: true,
+                    structuredContent: structuredResult?.toJSON()
                 )
                 block.session = currentSession
                 context.insert(block)
@@ -175,6 +199,79 @@ final class BackgroundSummaryService {
         }
 
         activeTasks[sessionID] = task
+    }
+
+    /// Fire-and-forget: extract action items for a just-completed recording session.
+    func dispatchActionItemExtraction(sessionID: UUID, container: ModelContainer) {
+        guard activeActionItemTasks[sessionID] == nil else {
+            Self.logger.info("Action item extraction already running for session \(sessionID)")
+            return
+        }
+
+        Self.logger.info("Dispatching action item extraction for session \(sessionID)")
+
+        let task = Task { @MainActor [weak self] in
+            defer { self?.activeActionItemTasks.removeValue(forKey: sessionID) }
+
+            let context = container.mainContext
+            let llmConfig = LLMProfileStore.resolveConfig(for: .actionItems)
+            let summarizerConfig = SummarizerConfig.fromUserDefaults()
+            let engine = await LLMEngineFactory.createWithFallback(from: llmConfig)
+            let service = SummarizerService(engine: engine)
+
+            let predicate = #Predicate<RecordingSession> { $0.id == sessionID }
+            guard let session = try? context.fetch(FetchDescriptor(predicate: predicate)).first else {
+                Self.logger.error("Session \(sessionID) not found for action item extraction")
+                return
+            }
+
+            let segments = session.segments.sorted { $0.startTime < $1.startTime }
+            guard !segments.isEmpty else {
+                Self.logger.info("No segments for session \(sessionID), skipping action item extraction")
+                return
+            }
+
+            do {
+                let rawItems = try await service.extractActionItems(
+                    segments: segments,
+                    config: summarizerConfig,
+                    llmConfig: llmConfig
+                )
+
+                guard !Task.isCancelled, !rawItems.isEmpty else { return }
+
+                // Re-fetch session after async work
+                guard let currentSession = try? context.fetch(FetchDescriptor(predicate: predicate)).first else {
+                    Self.logger.error("Session \(sessionID) deleted during action item extraction")
+                    return
+                }
+
+                // Remove old auto-extracted action items (keep user-modified ones)
+                for existing in currentSession.actionItems {
+                    context.delete(existing)
+                }
+
+                for raw in rawItems {
+                    let item = ActionItem(
+                        content: raw.content,
+                        dueDate: ActionItemParser.parseDate(raw.dueDate),
+                        assignee: raw.assignee,
+                        category: ActionItemCategory(rawValue: raw.category) ?? .task
+                    )
+                    item.session = currentSession
+                    context.insert(item)
+                }
+
+                try context.save()
+                Self.logger.info("Extracted \(rawItems.count) action items for session \(sessionID)")
+            } catch is CancellationError {
+                Self.logger.info("Action item extraction cancelled for \(sessionID)")
+            } catch {
+                Self.logger.error("Action item extraction failed for \(sessionID): \(error.localizedDescription)")
+            }
+        }
+
+        activeActionItemTasks[sessionID] = task
     }
 
     /// Generate a descriptive title for the session using the title LLM config.

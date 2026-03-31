@@ -224,8 +224,8 @@ private struct SessionRowView: View {
                     .lineLimit(1)
                 if session.isPartial {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
+                        .font(DS.Typography.caption2)
+                        .foregroundStyle(DS.Colors.subtleError)
                         .help("Incomplete — saved on quit")
                 }
             }
@@ -306,7 +306,7 @@ private struct DateFilterChip: View {
                 .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
                 .foregroundStyle(isSelected ? .primary : .secondary)
                 .padding(.horizontal, DS.Spacing.sm)
-                .padding(.vertical, 3)
+                .padding(.vertical, DS.Spacing.xxs)
                 .background {
                     if isSelected {
                         Capsule()
