@@ -19,9 +19,6 @@ final class BackgroundSummaryService {
     /// Currently running action item extraction task, keyed by session ID.
     private(set) var activeActionItemTasks: [UUID: Task<Void, Never>] = [:]
 
-    /// Currently running sentiment analysis task, keyed by session ID.
-    private(set) var activeSentimentTasks: [UUID: Task<Void, Never>] = [:]
-
     private init() {}
 
     /// Whether a background summary is in progress for the given session.
@@ -42,9 +39,6 @@ final class BackgroundSummaryService {
         for (_, task) in activeActionItemTasks {
             await task.value
         }
-        for (_, task) in activeSentimentTasks {
-            await task.value
-        }
     }
 
     /// Cancel all active background tasks immediately (used for fast quit).
@@ -59,11 +53,6 @@ final class BackgroundSummaryService {
             task.cancel()
         }
         activeActionItemTasks.removeAll()
-        for (id, task) in activeSentimentTasks {
-            Self.logger.info("Cancelling sentiment analysis for \(id)")
-            task.cancel()
-        }
-        activeSentimentTasks.removeAll()
     }
 
     /// Fire-and-forget: generate an overall summary for a just-completed recording session.
@@ -283,81 +272,6 @@ final class BackgroundSummaryService {
         }
 
         activeActionItemTasks[sessionID] = task
-    }
-
-    /// Fire-and-forget: analyze sentiment for transcript segments of a just-completed recording session.
-    func dispatchSentimentAnalysis(sessionID: UUID, container: ModelContainer) {
-        guard activeSentimentTasks[sessionID] == nil else {
-            Self.logger.info("Sentiment analysis already running for session \(sessionID)")
-            return
-        }
-
-        Self.logger.info("Dispatching sentiment analysis for session \(sessionID)")
-
-        let task = Task { @MainActor [weak self] in
-            defer { self?.activeSentimentTasks.removeValue(forKey: sessionID) }
-
-            let context = container.mainContext
-            let llmConfig = LLMProfileStore.resolveConfig(for: .live)
-            let engine = await LLMEngineFactory.createWithFallback(from: llmConfig)
-
-            let predicate = #Predicate<RecordingSession> { $0.id == sessionID }
-            guard let session = try? context.fetch(FetchDescriptor(predicate: predicate)).first else {
-                Self.logger.error("Session \(sessionID) not found for sentiment analysis")
-                return
-            }
-
-            let segments = session.segments
-                .sorted { $0.startTime < $1.startTime }
-                .filter { $0.sentiment == nil }
-            guard !segments.isEmpty else {
-                Self.logger.info("No untagged segments for session \(sessionID), skipping sentiment analysis")
-                return
-            }
-
-            // Process in batches of 20 to avoid overly long prompts
-            let batchSize = 20
-            var taggedCount = 0
-            for batchStart in stride(from: 0, to: segments.count, by: batchSize) {
-                guard !Task.isCancelled else { break }
-
-                let batchEnd = min(batchStart + batchSize, segments.count)
-                let batch = Array(segments[batchStart..<batchEnd])
-                let segmentData = batch.enumerated().map {
-                    SentimentAnalyzer.SegmentData(index: $0.offset, text: $0.element.text)
-                }
-
-                do {
-                    let sentiments = try await SentimentAnalyzer.analyzeBatch(
-                        segments: segmentData,
-                        engine: engine,
-                        config: llmConfig
-                    )
-
-                    for (i, sentiment) in sentiments.enumerated() where i < batch.count {
-                        batch[i].sentiment = sentiment.rawValue
-                    }
-                    taggedCount += sentiments.count
-                } catch is CancellationError {
-                    Self.logger.info("Sentiment analysis cancelled for \(sessionID)")
-                    return
-                } catch {
-                    Self.logger.error("Sentiment batch failed for \(sessionID): \(error.localizedDescription)")
-                    // Continue with next batch
-                }
-            }
-
-            guard !Task.isCancelled, taggedCount > 0 else { return }
-
-            do {
-                try context.save()
-                Self.logger.info("Sentiment analysis complete for session \(sessionID) (\(taggedCount) segments tagged)")
-            } catch {
-                Self.logger.error("Failed to save sentiment results for \(sessionID): \(error.localizedDescription)")
-            }
-        }
-
-        activeSentimentTasks[sessionID] = task
     }
 
     /// Generate a descriptive title for the session using the title LLM config.
