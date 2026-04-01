@@ -42,6 +42,7 @@ nonisolated final class ChatService: @unchecked Sendable {
 
         if let usage = response.usage {
             Self.logger.info("Chat tokens — input: \(usage.inputTokens), output: \(usage.outputTokens)")
+            LLMProfileStore.recordUsageForConfig(llmConfig, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens)
         }
 
         let assistantMessage = ChatMessage(role: .assistant, content: response.content.trimmingCharacters(in: .whitespacesAndNewlines))

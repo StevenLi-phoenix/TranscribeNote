@@ -20,6 +20,8 @@ struct SummaryCardView: View {
     @State private var regenerateInstructions = ""
     @State private var isHovered = false
     @State private var showCopiedFeedback = false
+    @State private var cachedAttributed: AttributedString?
+    @State private var cachedStructuredAttributed: AttributedString?
 
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "notetaker", category: "SummaryCardView")
 
@@ -136,6 +138,21 @@ struct SummaryCardView: View {
             }
         }
         .onHover { isHovered = $0 }
+        .onAppear { cacheAttributedStrings() }
+        .onChange(of: content) { cacheAttributedStrings() }
+    }
+
+    private func cacheAttributedStrings() {
+        cachedAttributed = try? AttributedString(
+            markdown: content,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )
+        if let structured = structuredSummary {
+            cachedStructuredAttributed = try? AttributedString(
+                markdown: structured.summary,
+                options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+            )
+        }
     }
 
     // MARK: - Copy
@@ -182,10 +199,7 @@ struct SummaryCardView: View {
     private var contentView: some View {
         if !isUserEdited, let structured = structuredSummary {
             structuredContentView(structured)
-        } else if let attributed = try? AttributedString(
-            markdown: content,
-            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        ) {
+        } else if let attributed = cachedAttributed {
             Text(attributed)
                 .font(DS.Typography.callout)
                 .textSelection(.enabled)
@@ -200,10 +214,7 @@ struct SummaryCardView: View {
     private func structuredContentView(_ structured: StructuredSummary) -> some View {
         VStack(alignment: .leading, spacing: DS.Spacing.sm) {
             // Summary text
-            if let attributed = try? AttributedString(
-                markdown: structured.summary,
-                options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-            ) {
+            if let attributed = cachedStructuredAttributed {
                 Text(attributed)
                     .font(DS.Typography.callout)
                     .textSelection(.enabled)
@@ -221,13 +232,10 @@ struct SummaryCardView: View {
                         .foregroundStyle(.secondary)
                         .textCase(.uppercase)
                     ForEach(Array(structured.keyPoints.enumerated()), id: \.offset) { _, point in
-                        HStack(alignment: .top, spacing: DS.Spacing.xs) {
-                            Text("•")
-                                .foregroundStyle(.secondary)
-                            Text(point)
-                                .textSelection(.enabled)
-                        }
-                        .font(DS.Typography.callout)
+                        Text("• \(point)")
+                            .font(DS.Typography.callout)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }

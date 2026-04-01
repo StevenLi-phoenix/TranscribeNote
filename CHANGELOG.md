@@ -61,3 +61,53 @@
 
 - feat: one-click copy summary as Markdown (#38) — hover-to-reveal copy button on SummaryCardView with checkmark animation feedback; SummaryMarkdownFormatter for testable Markdown formatting; 6 unit tests
   Files: SummaryMarkdownFormatter.swift, SummaryCardView.swift, SummaryMarkdownFormatterTests.swift
+
+## [2026-04-01 13:25]
+
+- fix: disable Apple Intelligence in China App Store for legal compliance; use StoreKit SKStorefront for storefront detection; add first-time compliance disclaimer for custom API endpoint in China region
+  Files: LLMProvider.swift, notetakerApp.swift, CustomProviderDisclaimerView.swift, ModelsSettingsTab.swift, LLMProviderTests.swift
+
+## [2026-04-01 13:30]
+
+- feat: add VAD test button in Recording settings — lightweight mic capture with real-time audio level bar, threshold marker, and speech/silence indicator; auto-restarts on config change, cleans up on disappear
+  Files: SettingsTab.swift
+
+## [2026-04-01 14:30]
+
+- perf: fix session detail first-load lag — removed duplicate loadAudio call in fetchSession; async-ified multi-clip duration computation via AVURLAsset; pre-computed summary/actionItem/hasAudioFiles state to eliminate repeated linear scans and FileManager calls in body; cached SummaryBlock.structuredSummary with @Transient to avoid repeated JSON decoding; converted TranscriptView.displayItems from computed property to @State
+  Files: SessionDetailView.swift, AudioPlaybackService.swift, SummaryBlock.swift, TranscriptView.swift
+
+## [2026-04-01 14:30]
+
+- fix: China App Store compliance — disable Apple Intelligence & foreign providers in CN storefront (StoreKit detection), add custom endpoint compliance disclaimer, refactor Models settings UI from Form/.columns to Grid layout for consistent left-aligned fields across all providers
+  Files: LLMProvider.swift, notetakerApp.swift, CustomProviderDisclaimerView.swift, ModelsSettingsTab.swift, LLMProviderTests.swift
+
+## [2026-04-01 14:38]
+
+- refactor: replace stacked overall summary + transcript with segmented subtab picker (Summary/Transcript); remove hover copy button from TranscriptSegmentRow (reopened #35); fix key points text wrapping overlap in SummaryCardView; enable cross-row text selection in TranscriptView
+  Files: SessionDetailView.swift, TranscriptSegmentRow.swift, SummaryCardView.swift, TranscriptView.swift
+
+## [2026-04-01 14:54]
+
+- fix: guard handleCompletionIfNeeded() with selectedSessionID == nil check to prevent sidebar snap-back when user navigates during recording drain
+  Files: ContentView.swift
+
+## [2026-04-01 15:40]
+
+- feat: add first-time user onboarding with 4-page Welcome Guide (intro, recording, features, quick LLM setup), privacy notice with Decline option that falls back to Apple Intelligence, and Help menu entries for Welcome Guide and Data Usage Information
+  Files: WelcomeView.swift, PrivacyDisclosureView.swift, ContentView.swift, notetakerApp.swift
+
+## [2026-04-01 15:55]
+
+- feat: add VoiceOver accessibility labels/hints/values across key views, move "Manage Models" button inline in LLM settings row with available/total count, add per-profile connection test dot indicator (persisted) and token usage stats in Models window
+  Files: PlaybackControlView.swift, TranscriptView.swift, ActionItemListView.swift, SessionDetailView.swift, SettingsTab.swift, LLMModelProfile.swift, SummarizerService.swift, ChatService.swift, ModelsSettingsTab.swift
+
+## [2026-04-01 15:58]
+
+- fix: align Models sidebar/detail bottom bar height, enlarge profile list row font and spacing, increase Models window height to 600, remove "None" option from role profile pickers and default to first profile
+  Files: ModelsSettingsTab.swift, SettingsTab.swift, notetakerApp.swift
+
+## [2026-04-01 15:58]
+
+- feat: auto-scroll and highlight current transcript segment / summary chunk during audio playback; dim non-active items (opacity 0.35); scroll to position on tab switch while playing; only active during playback state
+  Files: SessionDetailView.swift, TranscriptView.swift

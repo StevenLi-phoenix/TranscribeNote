@@ -411,6 +411,33 @@ nonisolated final class AnthropicEngine: LLMEngine, @unchecked Sendable {
         !config.apiKey.isEmpty
     }
 
+    func listModels(config: LLMConfig) async throws -> [String] {
+        guard !config.apiKey.isEmpty else { throw LLMEngineError.notConfigured }
+        let baseURL = try LLMHTTPHelpers.validateBaseURL(
+            config.baseURL.isEmpty ? "https://api.anthropic.com" : config.baseURL,
+            stripV1: true
+        )
+        guard let url = URL(string: "\(baseURL)/v1/models") else {
+            throw LLMEngineError.invalidURL("\(baseURL)/v1/models")
+        }
+        var request = URLRequest(url: url)
+        request.setValue(config.apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        let (data, response) = try await LLMHTTPHelpers.performRequest(request, session: session)
+        try LLMHTTPHelpers.validateHTTPResponse(response, data: data)
+        let modelsResponse = try LLMHTTPHelpers.decodeResponse(AnthropicModelsResponse.self, from: data)
+        let models = modelsResponse.data.map(\.id).sorted()
+        Self.logger.info("Anthropic listed \(models.count) models")
+        return models
+    }
+
+}
+
+private struct AnthropicModelsResponse: Decodable {
+    struct Model: Decodable {
+        let id: String
+    }
+    let data: [Model]
 }
 
 /// Helper for decoding arbitrary JSON values from Anthropic tool_use input.

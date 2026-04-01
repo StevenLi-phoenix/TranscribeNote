@@ -2,11 +2,26 @@ import SwiftUI
 import SwiftData
 import os
 
-enum DateFilter: String, CaseIterable {
-    case all = "All"
-    case today = "Today"
-    case thisWeek = "This Week"
-    case thisMonth = "This Month"
+enum DateFilter: CaseIterable {
+    case all, today, thisWeek, thisMonth
+
+    var label: String {
+        switch self {
+        case .all: "All"
+        case .today: "Today"
+        case .thisWeek: "This Week"
+        case .thisMonth: "This Month"
+        }
+    }
+
+    var shortLabel: String {
+        switch self {
+        case .all: "A"
+        case .today: "D"
+        case .thisWeek: "W"
+        case .thisMonth: "M"
+        }
+    }
 }
 
 struct SessionListView: View {
@@ -277,20 +292,24 @@ private struct DateFilterBar: View {
     @Binding var selection: DateFilter
 
     var body: some View {
-        HStack(spacing: DS.Spacing.xs) {
-            ForEach(DateFilter.allCases, id: \.self) { filter in
-                DateFilterChip(
-                    label: filter.rawValue,
-                    isSelected: selection == filter
-                ) {
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        selection = filter
+        GeometryReader { geo in
+            let compact = geo.size.width < 280
+            HStack(spacing: DS.Spacing.xs) {
+                ForEach(DateFilter.allCases, id: \.self) { filter in
+                    DateFilterChip(
+                        label: compact ? filter.shortLabel : filter.label,
+                        isSelected: selection == filter
+                    ) {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            selection = filter
+                        }
                     }
                 }
+                Spacer()
             }
-            Spacer()
+            .padding(.horizontal, DS.Spacing.sm)
         }
-        .padding(.horizontal, DS.Spacing.sm)
+        .frame(height: 28)
         .padding(.vertical, DS.Spacing.xs)
     }
 }

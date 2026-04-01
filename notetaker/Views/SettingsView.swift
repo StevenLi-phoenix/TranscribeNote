@@ -6,9 +6,6 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
-            ModelsSettingsTab()
-                .tabItem { Label("Models", systemImage: "cpu") }
-
             LLMAssignmentTab()
                 .tabItem { Label("LLM", systemImage: "brain") }
 

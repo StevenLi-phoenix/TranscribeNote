@@ -11,12 +11,17 @@ struct ContentView: View {
     @State private var selectedSessionID: UUID?
     @State private var showScheduleSheet = false
     @State private var showCommandPalette = false
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @AppStorage("hasShownPrivacyDisclosure") private var hasShownPrivacyDisclosure = false
+    @State private var showWelcome = false
+    @State private var showPrivacyDisclosure = false
 
     /// Handle recording completion — works both on initial appear and state change.
     /// Background summary is already dispatched by the ViewModel's drainTask.
     private func handleCompletionIfNeeded() {
         guard viewModel.state == .completed else { return }
-        if let session = viewModel.currentSession {
+        // Only auto-navigate if user hasn't selected another session during drain
+        if selectedSessionID == nil, let session = viewModel.currentSession {
             selectedSessionID = session.id
         }
         viewModel.dismissCompletedRecording()
@@ -25,7 +30,7 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             SessionListView(selectedSessionID: $selectedSessionID)
-                .navigationSplitViewColumnWidth(min: DS.Layout.sidebarMinWidth, ideal: DS.Layout.sidebarIdealWidth)
+                .navigationSplitViewColumnWidth(min: DS.Layout.sidebarMinWidth, ideal: DS.Layout.sidebarIdealWidth, max: DS.Layout.sidebarMaxWidth)
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
                         Button {
@@ -81,7 +86,7 @@ struct ContentView: View {
                 )
             }
         }
-        .frame(minWidth: 800, minHeight: 400)
+        .frame(minWidth: 400, minHeight: 300)
         .alert("Recording Error", isPresented: Binding(
             get: { viewModel.criticalError != nil },
             set: { if !$0 { viewModel.criticalError = nil } }
@@ -92,11 +97,31 @@ struct ContentView: View {
         }
         .onAppear {
             handleCompletionIfNeeded()
+            if !hasCompletedOnboarding {
+                showWelcome = true
+            }
+        }
+        .sheet(isPresented: $showWelcome) {
+            WelcomeView {
+                hasCompletedOnboarding = true
+                showWelcome = false
+            }
         }
         .onChange(of: viewModel.state) { _, newState in
             if newState == .completed {
                 handleCompletionIfNeeded()
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showWelcomeGuide)) { _ in
+            showWelcome = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showPrivacyDisclosure)) { _ in
+            showPrivacyDisclosure = true
+        }
+        .sheet(isPresented: $showPrivacyDisclosure) {
+            PrivacyDisclosureView(onDismiss: {
+                showPrivacyDisclosure = false
+            })
         }
         .onReceive(NotificationCenter.default.publisher(for: .toggleCommandPalette)) { _ in
             withAnimation(.easeOut(duration: 0.15)) {

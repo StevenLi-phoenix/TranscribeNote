@@ -17,24 +17,30 @@ struct TranscriptView: View {
     let segments: [TranscriptSegment]
     let summaries: [SummaryBlock]
     let partialText: String
+    let activeSegmentID: UUID?
     @Binding var scrollToTime: TimeInterval?
+    @State private var displayItems: [TranscriptDisplayItem] = []
 
     init(
         segments: [TranscriptSegment],
         partialText: String,
         summaries: [SummaryBlock] = [],
-        scrollToTime: Binding<TimeInterval?> = .constant(nil)
+        scrollToTime: Binding<TimeInterval?> = .constant(nil),
+        activeSegmentID: UUID? = nil
     ) {
         self.segments = segments
         self.partialText = partialText
         self.summaries = summaries
         self._scrollToTime = scrollToTime
+        self.activeSegmentID = activeSegmentID
     }
 
     /// Build a mixed list: segments outside summary ranges shown normally,
     /// segments inside a summary range replaced by the summary (once, at the range start).
-    private var displayItems: [TranscriptDisplayItem] {
-        // Sort summaries by coveringFrom (non-overall only)
+    private static func buildDisplayItems(
+        segments: [TranscriptSegment],
+        summaries: [SummaryBlock]
+    ) -> [TranscriptDisplayItem] {
         let sorted = summaries
             .filter { !$0.isOverall }
             .sorted { $0.coveringFrom < $1.coveringFrom }
@@ -47,7 +53,6 @@ struct TranscriptView: View {
         var summaryIndex = 0
 
         for segment in segments {
-            // Advance past summaries that end before this segment
             while summaryIndex < sorted.count && sorted[summaryIndex].coveringTo <= segment.startTime {
                 summaryIndex += 1
             }
@@ -55,11 +60,9 @@ struct TranscriptView: View {
             if summaryIndex < sorted.count {
                 let summary = sorted[summaryIndex]
                 if segment.startTime >= summary.coveringFrom && segment.startTime < summary.coveringTo {
-                    // First segment in range → insert summary
                     if items.last.map({ if case .summary(let s) = $0 { return s.id == summary.id } else { return false } }) != true {
                         items.append(.summary(summary))
                     }
-                    // Skip this segment (covered by summary)
                     continue
                 }
             }
@@ -68,6 +71,10 @@ struct TranscriptView: View {
         }
 
         return items
+    }
+
+    private func recomputeDisplayItems() {
+        displayItems = Self.buildDisplayItems(segments: segments, summaries: summaries)
     }
 
     var body: some View {
@@ -79,6 +86,8 @@ struct TranscriptView: View {
                         case .segment(let segment):
                             TranscriptSegmentRow(segment: segment)
                                 .id(item.id)
+                                .opacity(activeSegmentID == nil || segment.id == activeSegmentID ? 1.0 : 0.35)
+                                .animation(.easeInOut(duration: 0.2), value: activeSegmentID)
                         case .summary(let summary):
                             InlineSummaryRow(
                                 coveringFrom: summary.coveringFrom,
@@ -106,15 +115,24 @@ struct TranscriptView: View {
                     .padding(.vertical, DS.Spacing.xxs)
                     .id("partial")
                     .opacity(partialText.isEmpty ? 0 : 1)
+                    .accessibilityHidden(partialText.isEmpty)
+                    .accessibilityLabel("In progress: \(partialText)")
                 }
                 .padding()
             }
+            .onAppear {
+                recomputeDisplayItems()
+            }
             .onChange(of: segments.count) {
+                recomputeDisplayItems()
                 withAnimation {
                     if let lastSegment = segments.last {
                         proxy.scrollTo(lastSegment.id.uuidString, anchor: .bottom)
                     }
                 }
+            }
+            .onChange(of: summaries.count) {
+                recomputeDisplayItems()
             }
             .onChange(of: partialText.isEmpty) {
                 if !partialText.isEmpty {
@@ -165,5 +183,7 @@ struct InlineSummaryRow: View {
             .textSelection(.enabled)
         }
         .padding(.vertical, DS.Spacing.xs)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Summary from \(coveringFrom.mmss) to \(coveringTo.mmss): \(content)")
     }
 }

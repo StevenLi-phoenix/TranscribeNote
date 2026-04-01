@@ -4,6 +4,7 @@ struct PrivacyDisclosureView: View {
     static let privacyPolicyURL = URL(string: "https://github.com/StevenLi-phoenix/notetaker/blob/main/docs/PRIVACY_POLICY.md")!
 
     let onDismiss: () -> Void
+    var onDecline: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: DS.Spacing.xl) {
@@ -46,11 +47,20 @@ struct PrivacyDisclosureView: View {
             .background(Color.secondary.opacity(0.1))
             .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md))
 
-            Button("I Understand") {
-                onDismiss()
+            HStack(spacing: DS.Spacing.md) {
+                if let onDecline {
+                    Button("Decline") {
+                        onDecline()
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                Button("I Understand") {
+                    onDismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
             }
-            .buttonStyle(.borderedProminent)
-            .keyboardShortcut(.defaultAction)
 
             Link("View Full Privacy Policy",
                  destination: Self.privacyPolicyURL)

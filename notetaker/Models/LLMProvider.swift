@@ -1,4 +1,6 @@
 import Foundation
+import StoreKit
+import os
 
 nonisolated enum LLMProvider: String, Codable, CaseIterable, Sendable {
     case foundationModels
@@ -98,9 +100,9 @@ nonisolated enum LLMProvider: String, Codable, CaseIterable, Sendable {
     /// Whether this provider is available on the China App Store (has proper 备案/filing).
     var isAvailableInChina: Bool {
         switch self {
-        case .foundationModels, .ollama, .deepSeek, .moonshot, .zhipu, .minimax, .custom:
+        case .ollama, .deepSeek, .moonshot, .zhipu, .minimax, .custom:
             true
-        case .openAI, .anthropic:
+        case .foundationModels, .openAI, .anthropic:
             false
         }
     }
@@ -137,9 +139,32 @@ nonisolated enum LLMProvider: String, Codable, CaseIterable, Sendable {
     }
 
     /// Detect if the device is configured for the Chinese storefront.
+    /// Uses cached result from async SKStorefront lookup, with locale fallback.
     static var isChineseStorefront: Bool {
-        // Check App Store storefront first (SKStorefront), fall back to locale region
+        if let cached = _cachedIsChineseStorefront {
+            return cached
+        }
+        // Fallback to locale until async storefront check completes
         let region = Locale.current.region?.identifier ?? ""
         return region == "CN" || region == "CHN"
+    }
+
+    /// Cached storefront detection result, populated by `refreshStorefrontStatus()`.
+    private(set) nonisolated(unsafe) static var _cachedIsChineseStorefront: Bool?
+
+    /// Call once at app launch to asynchronously detect the App Store storefront.
+    static func refreshStorefrontStatus() async {
+        let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "notetaker", category: "LLMProvider")
+        do {
+            if let storefront = try await Storefront.current {
+                let isCN = storefront.countryCode == "CHN"
+                _cachedIsChineseStorefront = isCN
+                logger.info("Storefront detected: \(storefront.countryCode, privacy: .public), isChina=\(isCN)")
+            } else {
+                logger.info("No storefront available, falling back to locale")
+            }
+        } catch {
+            logger.warning("Failed to fetch storefront: \(error.localizedDescription, privacy: .public)")
+        }
     }
 }

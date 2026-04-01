@@ -129,6 +129,7 @@ nonisolated enum LLMToolResponse: Sendable {
 nonisolated protocol LLMEngine: AnyObject, Sendable {
     func generate(messages: [LLMMessage], config: LLMConfig) async throws -> LLMMessage
     func isAvailable(config: LLMConfig) async -> Bool
+    func listModels(config: LLMConfig) async throws -> [String]
     var supportsStructuredOutput: Bool { get }
     func generateStructured(messages: [LLMMessage], schema: JSONSchema, config: LLMConfig) async throws -> StructuredOutput
     var supportsToolCalling: Bool { get }
@@ -136,6 +137,9 @@ nonisolated protocol LLMEngine: AnyObject, Sendable {
 }
 
 extension LLMEngine {
+    func listModels(config: LLMConfig) async throws -> [String] {
+        throw LLMEngineError.notSupported
+    }
     var supportsStructuredOutput: Bool { false }
     func generateStructured(messages: [LLMMessage], schema: JSONSchema, config: LLMConfig) async throws -> StructuredOutput {
         throw LLMEngineError.notSupported

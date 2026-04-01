@@ -269,6 +269,28 @@ nonisolated final class OllamaEngine: LLMEngine, @unchecked Sendable {
         }
     }
 
+    func listModels(config: LLMConfig) async throws -> [String] {
+        let baseURL = try LLMHTTPHelpers.validateBaseURL(
+            config.baseURL.isEmpty ? "http://localhost:11434" : config.baseURL
+        )
+        guard let url = URL(string: "\(baseURL)/api/tags") else {
+            throw LLMEngineError.invalidURL("\(baseURL)/api/tags")
+        }
+        let (data, response) = try await LLMHTTPHelpers.performRequest(URLRequest(url: url), session: session)
+        try LLMHTTPHelpers.validateHTTPResponse(response, data: data)
+        let tagsResponse = try LLMHTTPHelpers.decodeResponse(OllamaTagsResponse.self, from: data)
+        let models = tagsResponse.models.map(\.name).sorted()
+        Self.logger.info("Ollama listed \(models.count) models")
+        return models
+    }
+
+}
+
+private struct OllamaTagsResponse: Decodable {
+    struct Model: Decodable {
+        let name: String
+    }
+    let models: [Model]
 }
 
 /// Helper for decoding arbitrary JSON values from Ollama tool call arguments.

@@ -33,6 +33,8 @@ final class AudioPlaybackService: NSObject, AVAudioPlayerDelegate {
     }
 
     /// Load multiple audio clips for sequential playback.
+    /// First clip is loaded synchronously for immediate playback readiness.
+    /// Remaining clip durations are computed asynchronously to avoid blocking the main thread.
     func loadMultiple(urls: [URL]) {
         stop()
         errorMessage = nil
@@ -40,28 +42,53 @@ final class AudioPlaybackService: NSObject, AVAudioPlayerDelegate {
         clipDurations = []
         clipStartOffsets = []
 
-        // Pre-compute clip durations and cumulative offsets
-        var totalDuration: TimeInterval = 0
-        for url in urls {
-            do {
-                let tempPlayer = try AVAudioPlayer(contentsOf: url)
-                clipStartOffsets.append(totalDuration)
-                clipDurations.append(tempPlayer.duration)
-                totalDuration += tempPlayer.duration
-            } catch {
-                Self.logger.error("Failed to read clip \(url.lastPathComponent): \(error.localizedDescription)")
-                clipStartOffsets.append(totalDuration)
-                clipDurations.append(0)
-            }
-        }
-
-        self.duration = totalDuration
         self.currentTime = 0
         self.currentClipIndex = 0
 
-        // Load first clip
-        if !clips.isEmpty {
-            loadClip(at: 0)
+        guard !urls.isEmpty else { return }
+
+        // Load first clip synchronously — get its duration from the player
+        loadClip(at: 0)
+        let firstDuration = player?.duration ?? 0
+        clipDurations = [firstDuration]
+        clipStartOffsets = [0]
+        duration = firstDuration
+
+        // For single-clip case (most common), we're done synchronously
+        guard urls.count > 1 else { return }
+
+        // Compute remaining clip durations asynchronously
+        let capturedURLs = urls
+        Task.detached(priority: .userInitiated) {
+            var durations: [TimeInterval] = [firstDuration]
+            for i in 1..<capturedURLs.count {
+                let asset = AVURLAsset(url: capturedURLs[i])
+                let assetDuration: TimeInterval
+                do {
+                    let cmDuration = try await asset.load(.duration)
+                    assetDuration = cmDuration.seconds.isFinite ? cmDuration.seconds : 0
+                } catch {
+                    Self.logger.error("Failed to read clip duration \(capturedURLs[i].lastPathComponent): \(error.localizedDescription)")
+                    assetDuration = 0
+                }
+                durations.append(assetDuration)
+            }
+            // Build cumulative offsets
+            let finalDurations = durations
+            var offsets: [TimeInterval] = []
+            var total: TimeInterval = 0
+            for d in finalDurations {
+                offsets.append(total)
+                total += d
+            }
+            let finalOffsets = offsets
+            let finalTotal = total
+            await MainActor.run {
+                guard self.clips == capturedURLs else { return }
+                self.clipDurations = finalDurations
+                self.clipStartOffsets = finalOffsets
+                self.duration = finalTotal
+            }
         }
     }
 

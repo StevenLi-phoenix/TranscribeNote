@@ -55,7 +55,7 @@ struct LLMProviderTests {
     }
 
     @Test func chinaAvailability() {
-        #expect(LLMProvider.foundationModels.isAvailableInChina)
+        #expect(!LLMProvider.foundationModels.isAvailableInChina)
         #expect(LLMProvider.ollama.isAvailableInChina)
         #expect(!LLMProvider.openAI.isAvailableInChina)
         #expect(!LLMProvider.anthropic.isAvailableInChina)

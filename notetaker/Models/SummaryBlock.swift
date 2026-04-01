@@ -20,10 +20,22 @@ final class SummaryBlock {
     /// Returns edited content if available, otherwise the original generated content.
     var displayContent: String { editedContent ?? content }
 
-    /// Decoded structured summary, if available.
+    /// Cached decoded structured summary, if available.
+    @Transient private var _cachedStructuredSummary: StructuredSummary?
+    @Transient private var _structuredSummaryCacheKey: String?
+
     var structuredSummary: StructuredSummary? {
-        guard let json = structuredContent else { return nil }
-        return StructuredSummary.fromJSON(json)
+        if _structuredSummaryCacheKey == structuredContent, _cachedStructuredSummary != nil || structuredContent == nil {
+            return _cachedStructuredSummary
+        }
+        _structuredSummaryCacheKey = structuredContent
+        guard let json = structuredContent else {
+            _cachedStructuredSummary = nil
+            return nil
+        }
+        let decoded = StructuredSummary.fromJSON(json)
+        _cachedStructuredSummary = decoded
+        return decoded
     }
 
     @Relationship(inverse: \RecordingSession.summaries)

@@ -73,6 +73,7 @@ final class RecordingViewModel {
     private var nextPeriodicCoveringFrom: TimeInterval = 0
     private var periodicWindowCount: Int = 0
     private var llmConfigObserver: NSObjectProtocol?
+    private var summarizerConfigObserver: NSObjectProtocol?
     private let vadConfig: VADConfig
 
     // Duration-end timer state (2c)
@@ -104,6 +105,11 @@ final class RecordingViewModel {
             forName: .llmConfigDidSave, object: nil, queue: .main
         ) { [weak self] _ in
             self?.reloadLLMConfig()
+        }
+        summarizerConfigObserver = NotificationCenter.default.addObserver(
+            forName: .summarizerConfigDidSave, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.reloadSummarizerConfig()
         }
     }
 
@@ -142,6 +148,26 @@ final class RecordingViewModel {
         if let observer = llmConfigObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+        if let observer = summarizerConfigObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    private func reloadSummarizerConfig() {
+        let newConfig = SummarizerConfig.fromUserDefaults()
+        let intervalChanged = newConfig.intervalMinutes != summarizerConfig.intervalMinutes
+        let enabledChanged = newConfig.liveSummarizationEnabled != summarizerConfig.liveSummarizationEnabled
+        summarizerConfig = newConfig
+
+        // Restart summary timer if interval or enabled state changed during recording
+        if (intervalChanged || enabledChanged) && state == .recording {
+            summaryTimer?.invalidate()
+            summaryTimer = nil
+            if newConfig.liveSummarizationEnabled {
+                startSummaryTimer()
+            }
+        }
+        Self.logger.info("Reloaded summarizer config: interval=\(newConfig.intervalMinutes)min, live=\(newConfig.liveSummarizationEnabled)")
     }
 
     private func reloadLLMConfig() {
