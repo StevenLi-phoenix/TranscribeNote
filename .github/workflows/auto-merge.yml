@@ -78,6 +78,10 @@ jobs:
             3. Security concerns (secrets in code, injection, unsafe operations)
             4. Test coverage — are tests updated if behavior changed?
             5. PR description matches actual changes
+            6. Duplicate implementation — check if the PR's core feature already exists on main
+               (use `gh pr diff` to see what files/symbols are added, then `gh search code` or
+               `Grep` to check if those symbols already exist on main). If the feature is already
+               implemented, REJECT and explain that the PR is obsolete.
 
             After your review, you MUST post a comment using `gh pr comment` with this exact format:
 
@@ -91,7 +95,8 @@ jobs:
 
             APPROVE if changes are reasonable, safe, and follow project conventions.
             REJECT if you find bugs, security issues, missing tests for behavior changes,
-            or suspicious mismatches between description and actual changes.
+            suspicious mismatches between description and actual changes, or if the feature
+            is already implemented on main (PR is obsolete).
 
           claude_args: '--allowed-tools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search:*),Read,Glob,Grep"'
 
