@@ -9,6 +9,7 @@ struct ModelsSettingsTab: View {
     @State private var profiles: [LLMModelProfile] = []
     @State private var selectedProfileID: UUID?
     @State private var hasUnsavedChanges = false
+    @State private var lastDeletedProfile: (profile: LLMModelProfile, index: Int)?
     @State private var connectionStatus: StatusIndicator.Status = .unknown
     @State private var connectionError: String?
     @State private var connectionTask: Task<Void, Never>?
@@ -36,6 +37,7 @@ struct ModelsSettingsTab: View {
                     }
                 }
                 .listStyle(.sidebar)
+                .frame(maxHeight: .infinity)
 
                 Divider()
 
@@ -56,6 +58,15 @@ struct ModelsSettingsTab: View {
                     }
                     .buttonStyle(.borderless)
                     .disabled(selectedProfileID == nil || profiles.count <= 1)
+
+                    Button {
+                        undoDelete()
+                    } label: {
+                        Image(systemName: "arrow.uturn.backward")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(lastDeletedProfile == nil)
+                    .help("Undo last deletion")
 
                     Spacer()
                 }
@@ -126,8 +137,19 @@ struct ModelsSettingsTab: View {
     }
 
     private func deleteProfile(id: UUID) {
+        if let index = profiles.firstIndex(where: { $0.id == id }) {
+            lastDeletedProfile = (profiles[index], index)
+        }
         LLMProfileStore.deleteProfile(id: id, from: &profiles)
         selectedProfileID = profiles.first?.id
+    }
+
+    private func undoDelete() {
+        guard let deleted = lastDeletedProfile else { return }
+        let insertIndex = min(deleted.index, profiles.count)
+        profiles.insert(deleted.profile, at: insertIndex)
+        selectedProfileID = deleted.profile.id
+        lastDeletedProfile = nil
     }
 
     // MARK: - Connection Testing
