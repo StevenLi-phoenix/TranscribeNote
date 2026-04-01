@@ -105,6 +105,15 @@ struct SummarizationSettingsTab: View {
     @State private var pickerSelection: String = "auto"
     @State private var customLanguage: String = ""
 
+    private static let intervalOptions = [1, 2, 3, 5, 10, 15, 30]
+    private static let minLengthOptions = [50, 100, 150, 200, 300, 500]
+    private static let contextSizeOptions: [(label: String, value: Int)] = [
+        ("Small (2K)", 2000),
+        ("Medium (4K)", 4000),
+        ("Large (8K)", 8000),
+        ("Extra Large (16K)", 16000),
+    ]
+
     var body: some View {
         SettingsGrid {
             SettingsRow("Live Summarization") {
@@ -114,18 +123,22 @@ struct SummarizationSettingsTab: View {
             }
 
             SettingsRow("Summary Interval") {
-                Stepper(value: $config.intervalMinutes, in: 1...30) {
-                    Text("\(config.intervalMinutes) min")
-                        .monospacedDigit()
+                Picker("", selection: $config.intervalMinutes) {
+                    ForEach(Self.intervalOptions, id: \.self) { mins in
+                        Text("\(mins) min").tag(mins)
+                    }
                 }
+                .labelsHidden()
                 .disabled(!config.liveSummarizationEnabled)
             }
 
             SettingsRow("Min Transcript Length") {
-                Stepper(value: $config.minTranscriptLength, in: 50...500, step: 50) {
-                    Text("\(config.minTranscriptLength)")
-                        .monospacedDigit()
+                Picker("", selection: $config.minTranscriptLength) {
+                    ForEach(Self.minLengthOptions, id: \.self) { len in
+                        Text("\(len) chars").tag(len)
+                    }
                 }
+                .labelsHidden()
             }
 
             SettingsRow("Summary Style") {
@@ -185,11 +198,13 @@ struct SummarizationSettingsTab: View {
             }
 
             if config.includeContext {
-                SettingsRow("Max Context Tokens") {
-                    Stepper(value: $config.maxContextTokens, in: 500...20000, step: 500) {
-                        Text("\(config.maxContextTokens)")
-                            .monospacedDigit()
+                SettingsRow("Context Size") {
+                    Picker("", selection: $config.maxContextTokens) {
+                        ForEach(Self.contextSizeOptions, id: \.value) { option in
+                            Text(option.label).tag(option.value)
+                        }
                     }
+                    .labelsHidden()
                 }
             }
         }
@@ -225,6 +240,10 @@ struct RecordingSettingsTab: View {
     @AppStorage("soundEffectsEnabled") private var soundEffectsEnabled: Bool = true
     @State private var config: VADConfig = .default
 
+    private static let timeoutOptions: [(label: String, value: Int)] = [
+        ("30s", 30), ("1 min", 60), ("2 min", 120), ("5 min", 300), ("10 min", 600),
+    ]
+
     var body: some View {
         SettingsGrid {
             SettingsRow("Sound Effects") {
@@ -240,12 +259,18 @@ struct RecordingSettingsTab: View {
             }
 
             SettingsRow("Silence Threshold") {
-                Stepper(value: Binding(
-                    get: { Double(config.silenceThreshold) },
-                    set: { config.silenceThreshold = Float($0) }
-                ), in: 0.01...0.30, step: 0.01) {
+                HStack {
+                    Slider(
+                        value: Binding(
+                            get: { Double(config.silenceThreshold) },
+                            set: { config.silenceThreshold = Float($0) }
+                        ),
+                        in: 0.01...0.30,
+                        step: 0.01
+                    )
                     Text(String(format: "%.2f", config.silenceThreshold))
                         .monospacedDigit()
+                        .frame(width: 36, alignment: .trailing)
                 }
                 .disabled(!config.vadEnabled)
             }
@@ -260,15 +285,17 @@ struct RecordingSettingsTab: View {
                 .help("Automatically stop recording after sustained silence.")
             }
 
-            if let timeout = config.silenceTimeoutSeconds {
+            if config.silenceTimeoutSeconds != nil {
                 SettingsRow("Silence Timeout") {
-                    Stepper(value: Binding(
-                        get: { timeout },
+                    Picker("", selection: Binding(
+                        get: { config.silenceTimeoutSeconds ?? 300 },
                         set: { config.silenceTimeoutSeconds = $0 }
-                    ), in: 30...600, step: 30) {
-                        Text("\(timeout)s")
-                            .monospacedDigit()
+                    )) {
+                        ForEach(Self.timeoutOptions, id: \.value) { option in
+                            Text(option.label).tag(option.value)
+                        }
                     }
+                    .labelsHidden()
                     .disabled(!config.vadEnabled)
                 }
             }

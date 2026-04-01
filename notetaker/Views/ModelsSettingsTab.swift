@@ -185,9 +185,16 @@ struct LLMConfigSection: View {
             SettingsInfoLabel("Uses Apple's on-device model. No API key or network needed.", icon: "apple.intelligence")
         }
 
-        if let filingURL = config.provider.filingURL {
-            Link("Provider Filing Info (备案信息)", destination: filingURL)
-                .font(DS.Typography.caption)
+        if let filingNumber = config.provider.filingNumber {
+            HStack(spacing: DS.Spacing.xs) {
+                Text(filingNumber)
+                    .font(DS.Typography.caption)
+                    .foregroundStyle(.secondary)
+                if let filingURL = config.provider.filingURL {
+                    Link("Verify", destination: filingURL)
+                        .font(DS.Typography.caption)
+                }
+            }
         }
 
         if config.provider != .foundationModels {

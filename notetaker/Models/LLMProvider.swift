@@ -105,19 +105,25 @@ nonisolated enum LLMProvider: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    /// Filing/registration number (备案号) for Chinese providers.
+    var filingNumber: String? {
+        switch self {
+        case .deepSeek: "浙ICP备2023025841号"
+        case .moonshot: "网信算备110108896786101240015号"
+        case .zhipu: "网信算备110108105858001230019号"
+        case .minimax: "沪ICP备2023003282号"
+        default: nil
+        }
+    }
+
     /// URL to the provider's official filing/registration page (备案信息), if applicable.
     var filingURL: URL? {
         switch self {
-        case .deepSeek:
-            URL(string: "https://www.deepseek.com/")  // 浙ICP备2023025841号
-        case .moonshot:
-            URL(string: "https://platform.moonshot.cn/")  // 网信算备110108896786101240015号
-        case .zhipu:
-            URL(string: "https://open.bigmodel.cn/")  // Beijing-ChatGLM-20230821
-        case .minimax:
-            URL(string: "https://platform.minimax.io/")  // 沪ICP备2023003282号
-        default:
-            nil
+        case .deepSeek: URL(string: "https://www.deepseek.com/")
+        case .moonshot: URL(string: "https://platform.moonshot.cn/")
+        case .zhipu: URL(string: "https://open.bigmodel.cn/")
+        case .minimax: URL(string: "https://platform.minimax.io/")
+        default: nil
         }
     }
 
