@@ -59,8 +59,8 @@ struct ModelsSettingsTab: View {
 
                     Spacer()
                 }
-                .padding(.leading, DS.Spacing.sm)
-                .padding(.top, -2)
+                .padding(.horizontal, DS.Spacing.sm)
+                .padding(.vertical, DS.Spacing.xs)
             }
             .frame(minWidth: 140, maxWidth: 180)
 
