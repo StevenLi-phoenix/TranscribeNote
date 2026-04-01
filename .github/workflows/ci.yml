@@ -8,13 +8,6 @@ on:
       - 'docs/**'
       - '.claude/**'
       - 'CLAUDE.md'
-  push:
-    branches: [main, release]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.claude/**'
-      - 'CLAUDE.md'
 
 permissions:
   contents: read
