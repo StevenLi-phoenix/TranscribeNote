@@ -318,13 +318,13 @@ private struct WelcomePage: Identifiable {
     let id = UUID()
     let icon: String
     let iconColor: Color
-    let title: String
-    let subtitle: String
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
     let features: [WelcomeFeature]
 }
 
 private struct WelcomeFeature: Identifiable {
     let id = UUID()
     let icon: String
-    let text: String
+    let text: LocalizedStringKey
 }

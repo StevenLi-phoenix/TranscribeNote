@@ -4,9 +4,9 @@ import SwiftUI
 
 /// Caption text for describing a setting. Replaces repeated `.font(DS.Typography.caption).foregroundStyle(.secondary)`.
 struct SettingsDescription: View {
-    let text: String
+    let text: LocalizedStringKey
 
-    init(_ text: String) {
+    init(_ text: LocalizedStringKey) {
         self.text = text
     }
 
@@ -21,7 +21,7 @@ struct SettingsDescription: View {
 
 /// Slider with label and formatted value display. Replaces repeated `HStack { Text; Slider; Text.monospacedDigit() }`.
 struct SettingsSlider: View {
-    let label: String
+    let label: LocalizedStringKey
     @Binding var value: Double
     let range: ClosedRange<Double>
     let step: Double
@@ -29,7 +29,7 @@ struct SettingsSlider: View {
     let valueWidth: CGFloat
 
     init(
-        _ label: String,
+        _ label: LocalizedStringKey,
         value: Binding<Double>,
         in range: ClosedRange<Double>,
         step: Double = 0.1,
@@ -45,7 +45,7 @@ struct SettingsSlider: View {
     }
 
     init(
-        _ label: String,
+        _ label: LocalizedStringKey,
         value: Binding<Float>,
         in range: ClosedRange<Double>,
         step: Double = 0.1,
@@ -79,12 +79,12 @@ struct SettingsSlider: View {
 
 /// Integer slider with logarithmic (base-2) scale. Used for values like Max Tokens where exponential steps make sense.
 struct SettingsIntSlider: View {
-    let label: String
+    let label: LocalizedStringKey
     @Binding var value: Int
     let logRange: ClosedRange<Double>
     let valueWidth: CGFloat
 
-    init(_ label: String, value: Binding<Int>, logRange: ClosedRange<Double>, valueWidth: CGFloat = 60) {
+    init(_ label: LocalizedStringKey, value: Binding<Int>, logRange: ClosedRange<Double>, valueWidth: CGFloat = 60) {
         self.label = label
         self._value = value
         self.logRange = logRange
@@ -152,7 +152,7 @@ struct StatusIndicator: View {
 
 /// Bottom info bar for settings forms. Replaces repeated `.safeAreaInset { Label(...).font.foregroundStyle }`.
 private struct SettingsFooterModifier: ViewModifier {
-    let text: String
+    let text: LocalizedStringKey
     let icon: String
 
     func body(content: Content) -> some View {
@@ -166,7 +166,7 @@ private struct SettingsFooterModifier: ViewModifier {
 }
 
 extension View {
-    func settingsFooter(_ text: String, icon: String) -> some View {
+    func settingsFooter(_ text: LocalizedStringKey, icon: String) -> some View {
         modifier(SettingsFooterModifier(text: text, icon: icon))
     }
 }
@@ -193,10 +193,10 @@ struct SettingsGrid<Content: View>: View {
 /// Two-column settings row: label (trailing, 50%) | control (leading, 50%).
 /// All rows share the same 50/50 split — column divider is always at the center regardless of label length.
 struct SettingsRow<Content: View>: View {
-    let label: String
+    let label: LocalizedStringKey
     @ViewBuilder let content: Content
 
-    init(_ label: String, @ViewBuilder content: () -> Content) {
+    init(_ label: LocalizedStringKey, @ViewBuilder content: () -> Content) {
         self.label = label
         self.content = content()
     }
@@ -215,10 +215,10 @@ struct SettingsRow<Content: View>: View {
 
 /// Label with icon for informational notes in settings. Uses caption styling with secondary color.
 struct SettingsInfoLabel: View {
-    let text: String
+    let text: LocalizedStringKey
     let icon: String
 
-    init(_ text: String, icon: String) {
+    init(_ text: LocalizedStringKey, icon: String) {
         self.text = text
         self.icon = icon
     }

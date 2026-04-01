@@ -38,7 +38,7 @@ struct ChatViewContent: View {
                         .font(DS.Typography.caption)
                 }
                 .buttonStyle(.plain)
-                .help("Clear conversation")
+                .help(String(localized: "Clear conversation"))
                 .accessibilityLabel("Clear conversation")
             }
         }

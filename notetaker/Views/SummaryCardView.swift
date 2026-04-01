@@ -93,7 +93,7 @@ struct SummaryCardView: View {
                         Image(systemName: "pencil")
                             .font(DS.Typography.caption2)
                             .foregroundStyle(.tertiary)
-                            .help("Edited by user")
+                            .help(String(localized: "Edited by user"))
                     }
 
                     // Summary content
@@ -118,7 +118,7 @@ struct SummaryCardView: View {
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.tertiary)
-                        .help("Edit summary")
+                        .help(String(localized: "Edit summary"))
                         .accessibilityLabel("Edit summary")
                     }
                     if onRegenerate != nil {
@@ -131,7 +131,7 @@ struct SummaryCardView: View {
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.tertiary)
-                        .help("Regenerate with instructions")
+                        .help(String(localized: "Regenerate with instructions"))
                         .accessibilityLabel("Regenerate summary")
                     }
                 }
@@ -166,7 +166,7 @@ struct SummaryCardView: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(showCopiedFeedback ? AnyShapeStyle(.green) : AnyShapeStyle(.tertiary))
-        .help("Copy summary (Markdown)")
+        .help(String(localized: "Copy summary (Markdown)"))
         .accessibilityLabel("Copy summary to clipboard")
     }
 
@@ -331,7 +331,7 @@ struct SummaryCardView: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("Jump to transcript")
+            .help(String(localized: "Jump to transcript"))
         } else {
             timeLabelContent(title, systemImage: systemImage)
                 .foregroundStyle(.secondary)

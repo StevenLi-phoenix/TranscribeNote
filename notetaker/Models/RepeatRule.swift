@@ -11,10 +11,10 @@ enum RepeatRule: String, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .once: "Once"
-        case .daily: "Every day"
-        case .weekly: "Every week"
-        case .weekdays: "Weekdays (Mon–Fri)"
+        case .once: String(localized: "Once")
+        case .daily: String(localized: "Every day")
+        case .weekly: String(localized: "Every week")
+        case .weekdays: String(localized: "Weekdays (Mon–Fri)")
         }
     }
 }

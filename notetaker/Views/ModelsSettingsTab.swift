@@ -81,7 +81,7 @@ struct ModelsSettingsTab: View {
                     }
                     .buttonStyle(.borderless)
                     .disabled(lastDeletedProfile == nil)
-                    .help("Undo last deletion")
+                    .help(String(localized: "Undo last deletion"))
 
                     Spacer()
                 }
@@ -384,7 +384,7 @@ struct LLMConfigSection: View {
                 }
                 .labelsHidden()
                 .fixedSize()
-                .help("LLM service provider. Use Custom for OpenAI-compatible APIs like LM Studio.")
+                .help(String(localized: "LLM service provider. Use Custom for OpenAI-compatible APIs like LM Studio."))
                 .onChange(of: config.provider) { _, newProvider in
                     config.baseURL = newProvider.defaultBaseURL
                     config.model = newProvider.defaultModel
@@ -428,7 +428,7 @@ struct LLMConfigSection: View {
                 GridRow {
                     formLabel("Base URL")
                     TextField("", text: $config.baseURL)
-                        .help("API endpoint URL for your OpenAI-compatible service.")
+                        .help(String(localized: "API endpoint URL for your OpenAI-compatible service."))
                         .onSubmit { fetchModels() }
                 }
             }
@@ -437,7 +437,7 @@ struct LLMConfigSection: View {
                 GridRow {
                     formLabel("API Key")
                     SecureField("", text: $config.apiKey)
-                        .help("Stored securely in macOS Keychain. Never saved to disk in plaintext.")
+                        .help(String(localized: "Stored securely in macOS Keychain. Never saved to disk in plaintext."))
                         .onSubmit { fetchModels() }
                 }
             }
@@ -448,7 +448,7 @@ struct LLMConfigSection: View {
                     HStack {
                         if useCustomModel || availableModels.isEmpty {
                             TextField("", text: $config.model)
-                                .help("Model identifier, e.g. gpt-4o, claude-sonnet-4-20250514, qwen3.5-9b-mlx.")
+                                .help(String(localized: "Model identifier, e.g. gpt-4o, claude-sonnet-4-20250514, qwen3.5-9b-mlx."))
                         } else {
                             Picker("", selection: $config.model) {
                                 ForEach(availableModels, id: \.self) { model in
@@ -456,7 +456,7 @@ struct LLMConfigSection: View {
                                 }
                             }
                             .labelsHidden()
-                            .help("Select a model from the server.")
+                            .help(String(localized: "Select a model from the server."))
                         }
 
                         if !availableModels.isEmpty {
@@ -466,7 +466,7 @@ struct LLMConfigSection: View {
                                 Image(systemName: useCustomModel ? "list.bullet" : "pencil")
                             }
                             .buttonStyle(.borderless)
-                            .help(useCustomModel ? "Choose from available models" : "Enter custom model name")
+                            .help(useCustomModel ? String(localized: "Choose from available models") : String(localized: "Enter custom model name"))
                         }
 
                         Button {
@@ -481,7 +481,7 @@ struct LLMConfigSection: View {
                         }
                         .buttonStyle(.borderless)
                         .disabled(isFetchingModels)
-                        .help("Fetch available models from the server")
+                        .help(String(localized: "Fetch available models from the server"))
                     }
                     .onChange(of: config.model) { _, _ in
                         name = autoName()
@@ -534,15 +534,15 @@ struct LLMConfigAdvancedSection: View {
                         GridRow {
                             formLabel("Name")
                             TextField("", text: $name)
-                                .help("Custom display name. Auto-generated from provider and model by default.")
+                                .help(String(localized: "Custom display name. Auto-generated from provider and model by default."))
                         }
 
                         SettingsSlider("Temperature", value: $config.temperature, in: 0...2, step: 0.1, format: "%.1f", valueWidth: 30)
-                            .help("Controls randomness. Lower = more focused, higher = more creative.")
+                            .help(String(localized: "Controls randomness. Lower = more focused, higher = more creative."))
                             .gridCellColumns(2)
 
                         SettingsIntSlider("Max Tokens", value: $config.maxTokens, logRange: 8...14)
-                            .help("Maximum number of tokens in the generated response.")
+                            .help(String(localized: "Maximum number of tokens in the generated response."))
                             .gridCellColumns(2)
 
                         GridRow {
@@ -550,14 +550,14 @@ struct LLMConfigAdvancedSection: View {
                             Toggle("", isOn: $config.thinkingEnabled)
                                 .labelsHidden()
                                 .toggleStyle(.switch)
-                                .help("Allow model to use extended thinking.")
+                                .help(String(localized: "Allow model to use extended thinking."))
                         }
 
                         if config.provider != .custom {
                             GridRow {
                                 formLabel("Base URL")
                                 TextField("", text: $config.baseURL)
-                                    .help("API endpoint URL. Change for self-hosted or proxy setups.")
+                                    .help(String(localized: "API endpoint URL. Change for self-hosted or proxy setups."))
                             }
                         }
                     }

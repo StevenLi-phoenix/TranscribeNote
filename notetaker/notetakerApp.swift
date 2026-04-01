@@ -51,6 +51,13 @@ struct notetakerApp: App {
     private let containerError: String?
 
     init() {
+        // Language override — apply before any UI loads
+        if let override = UserDefaults.standard.string(forKey: "appLanguageOverride"), !override.isEmpty {
+            UserDefaults.standard.set([override], forKey: "AppleLanguages")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+        }
+
         UserDefaults.standard.register(defaults: ["soundEffectsEnabled": true])
 
         CrashLogService.install()
@@ -89,6 +96,14 @@ struct notetakerApp: App {
 
         // 3c: Auto-start is now handled directly by SchedulerViewModel.handleFire()
         // via direct callback to RecordingViewModel (no notification relay needed).
+    }
+
+    static func relaunch() {
+        let url = URL(fileURLWithPath: Bundle.main.bundlePath)
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: url, configuration: config) { _, _ in }
+        NSApp.terminate(nil)
     }
 
     @ViewBuilder
