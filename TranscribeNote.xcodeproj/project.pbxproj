@@ -1,0 +1,636 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXContainerItemProxy section */
+		B522917E2F3D4491005D1EBC /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B52291682F3D448F005D1EBC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B522916F2F3D448F005D1EBC;
+			remoteInfo = TranscribeNote;
+		};
+		B52291882F3D4491005D1EBC /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B52291682F3D448F005D1EBC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B522916F2F3D448F005D1EBC;
+			remoteInfo = TranscribeNote;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		B52291702F3D448F005D1EBC /* TranscribeNote.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TranscribeNote.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B522917D2F3D4491005D1EBC /* TranscribeNoteTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TranscribeNoteTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B52291872F3D4491005D1EBC /* TranscribeNoteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TranscribeNoteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		B52291722F3D448F005D1EBC /* TranscribeNote */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = TranscribeNote;
+			sourceTree = "<group>";
+		};
+		B52291802F3D4491005D1EBC /* TranscribeNoteTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = TranscribeNoteTests;
+			sourceTree = "<group>";
+		};
+		B522918A2F3D4491005D1EBC /* TranscribeNoteUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = TranscribeNoteUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		B522916D2F3D448F005D1EBC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B522917A2F3D4491005D1EBC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B52291842F3D4491005D1EBC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		B52291672F3D448F005D1EBC = {
+			isa = PBXGroup;
+			children = (
+				B52291722F3D448F005D1EBC /* TranscribeNote */,
+				B52291802F3D4491005D1EBC /* TranscribeNoteTests */,
+				B522918A2F3D4491005D1EBC /* TranscribeNoteUITests */,
+				B52291712F3D448F005D1EBC /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B52291712F3D448F005D1EBC /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B52291702F3D448F005D1EBC /* TranscribeNote.app */,
+				B522917D2F3D4491005D1EBC /* TranscribeNoteTests.xctest */,
+				B52291872F3D4491005D1EBC /* TranscribeNoteUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		B522916F2F3D448F005D1EBC /* TranscribeNote */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B52291912F3D4491005D1EBC /* Build configuration list for PBXNativeTarget "TranscribeNote" */;
+			buildPhases = (
+				B522916C2F3D448F005D1EBC /* Sources */,
+				B522916D2F3D448F005D1EBC /* Frameworks */,
+				B522916E2F3D448F005D1EBC /* Resources */,
+				B5AUTO0012F3D448F005D1EBC /* Increment Build Number */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B52291722F3D448F005D1EBC /* TranscribeNote */,
+			);
+			name = TranscribeNote;
+			packageProductDependencies = (
+			);
+			productName = TranscribeNote;
+			productReference = B52291702F3D448F005D1EBC /* TranscribeNote.app */;
+			productType = "com.apple.product-type.application";
+		};
+		B522917C2F3D4491005D1EBC /* TranscribeNoteTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B52291942F3D4491005D1EBC /* Build configuration list for PBXNativeTarget "TranscribeNoteTests" */;
+			buildPhases = (
+				B52291792F3D4491005D1EBC /* Sources */,
+				B522917A2F3D4491005D1EBC /* Frameworks */,
+				B522917B2F3D4491005D1EBC /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B522917F2F3D4491005D1EBC /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				B52291802F3D4491005D1EBC /* TranscribeNoteTests */,
+			);
+			name = TranscribeNoteTests;
+			packageProductDependencies = (
+			);
+			productName = TranscribeNoteTests;
+			productReference = B522917D2F3D4491005D1EBC /* TranscribeNoteTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		B52291862F3D4491005D1EBC /* TranscribeNoteUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B52291972F3D4491005D1EBC /* Build configuration list for PBXNativeTarget "TranscribeNoteUITests" */;
+			buildPhases = (
+				B52291832F3D4491005D1EBC /* Sources */,
+				B52291842F3D4491005D1EBC /* Frameworks */,
+				B52291852F3D4491005D1EBC /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B52291892F3D4491005D1EBC /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				B522918A2F3D4491005D1EBC /* TranscribeNoteUITests */,
+			);
+			name = TranscribeNoteUITests;
+			packageProductDependencies = (
+			);
+			productName = TranscribeNoteUITests;
+			productReference = B52291872F3D4491005D1EBC /* TranscribeNoteUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		B52291682F3D448F005D1EBC /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2620;
+				LastUpgradeCheck = 2620;
+				TargetAttributes = {
+					B522916F2F3D448F005D1EBC = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					B522917C2F3D4491005D1EBC = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = B522916F2F3D448F005D1EBC;
+					};
+					B52291862F3D4491005D1EBC = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = B522916F2F3D448F005D1EBC;
+					};
+				};
+			};
+			buildConfigurationList = B522916B2F3D448F005D1EBC /* Build configuration list for PBXProject "TranscribeNote" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+				"zh-Hans",
+				"zh-Hant",
+				ja,
+				ko,
+				es,
+				fr,
+				de,
+				pt,
+				ru,
+				it,
+				ar,
+				hi,
+				tr,
+				vi,
+				th,
+				id,
+				pl,
+				nl,
+				sv,
+			);
+			mainGroup = B52291672F3D448F005D1EBC;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = B52291712F3D448F005D1EBC /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B522916F2F3D448F005D1EBC /* TranscribeNote */,
+				B522917C2F3D4491005D1EBC /* TranscribeNoteTests */,
+				B52291862F3D4491005D1EBC /* TranscribeNoteUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		B522916E2F3D448F005D1EBC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B522917B2F3D4491005D1EBC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B52291852F3D4491005D1EBC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		B5AUTO0012F3D448F005D1EBC /* Increment Build Number */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Increment Build Number";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "if [ \"${ACTION}\" != \"install\" ]; then\n    exit 0\nfi\n\nPLIST=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\nBUILD_NUMBER=$(/usr/libexec/PlistBuddy -c \"Print CFBundleVersion\" \"$PLIST\")\nNEW_BUILD_NUMBER=$((BUILD_NUMBER + 1))\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $NEW_BUILD_NUMBER\" \"$PLIST\"\n\ncd \"${SRCROOT}\"\nxcrun agvtool new-version -all \"$NEW_BUILD_NUMBER\" > /dev/null 2>&1 || true\n\necho \"Build number incremented: $BUILD_NUMBER -> $NEW_BUILD_NUMBER\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		B522916C2F3D448F005D1EBC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B52291792F3D4491005D1EBC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B52291832F3D4491005D1EBC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B522917F2F3D4491005D1EBC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B522916F2F3D448F005D1EBC /* TranscribeNote */;
+			targetProxy = B522917E2F3D4491005D1EBC /* PBXContainerItemProxy */;
+		};
+		B52291892F3D4491005D1EBC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B522916F2F3D448F005D1EBC /* TranscribeNote */;
+			targetProxy = B52291882F3D4491005D1EBC /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		B522918F2F3D4491005D1EBC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 88U7V98QAC;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		B52291902F3D4491005D1EBC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 88U7V98QAC;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		B52291922F3D4491005D1EBC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = TranscribeNote/TranscribeNote.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 88U7V98QAC;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = TranscribeNote;
+				INFOPLIST_KEY_CFBundleName = TranscribeNote;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "TranscribeNote reads your calendar to auto-schedule recordings for meetings.";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "TranscribeNote needs microphone access to record and transcribe audio.";
+				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "TranscribeNote exports action items to Reminders so you can track follow-ups.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "TranscribeNote uses speech recognition to transcribe audio in real time.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stevenli.notetaker;
+				PRODUCT_MODULE_NAME = TranscribeNote;
+				PRODUCT_NAME = TranscribeNote;
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		B52291932F3D4491005D1EBC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = TranscribeNote/TranscribeNote.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 88U7V98QAC;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = TranscribeNote;
+				INFOPLIST_KEY_CFBundleName = TranscribeNote;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "TranscribeNote reads your calendar to auto-schedule recordings for meetings.";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "TranscribeNote needs microphone access to record and transcribe audio.";
+				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "TranscribeNote exports action items to Reminders so you can track follow-ups.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "TranscribeNote uses speech recognition to transcribe audio in real time.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stevenli.notetaker;
+				PRODUCT_MODULE_NAME = TranscribeNote;
+				PRODUCT_NAME = TranscribeNote;
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		B52291952F3D4491005D1EBC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 88U7V98QAC;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stevenli.notetakerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TranscribeNote.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TranscribeNote";
+			};
+			name = Debug;
+		};
+		B52291962F3D4491005D1EBC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 88U7V98QAC;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stevenli.notetakerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TranscribeNote.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TranscribeNote";
+			};
+			name = Release;
+		};
+		B52291982F3D4491005D1EBC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 88U7V98QAC;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stevenli.notetakerUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = TranscribeNote;
+			};
+			name = Debug;
+		};
+		B52291992F3D4491005D1EBC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 88U7V98QAC;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stevenli.notetakerUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = TranscribeNote;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		B522916B2F3D448F005D1EBC /* Build configuration list for PBXProject "TranscribeNote" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B522918F2F3D4491005D1EBC /* Debug */,
+				B52291902F3D4491005D1EBC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B52291912F3D4491005D1EBC /* Build configuration list for PBXNativeTarget "TranscribeNote" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B52291922F3D4491005D1EBC /* Debug */,
+				B52291932F3D4491005D1EBC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B52291942F3D4491005D1EBC /* Build configuration list for PBXNativeTarget "TranscribeNoteTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B52291952F3D4491005D1EBC /* Debug */,
+				B52291962F3D4491005D1EBC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B52291972F3D4491005D1EBC /* Build configuration list for PBXNativeTarget "TranscribeNoteUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B52291982F3D4491005D1EBC /* Debug */,
+				B52291992F3D4491005D1EBC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = B52291682F3D448F005D1EBC /* Project object */;
+}

@@ -1,42 +1,77 @@
 # Changelog
 
-## [2026-03-24]
+All notable changes to this project will be documented in this file.
 
-- Security review and fixes: resolved VAD data race (CRITICAL), multi-clip audio deletion, prompt injection mitigation, resultTask timeout cancellation, NoopASREngine thread safety, Keychain empty-key guard, migration failure cleanup, URL scheme validation, HTTP error truncation, smart retry logic, API key leak warning, and sensitive data logging cleanup
-  Files: AudioCaptureService.swift, SessionListView.swift, PromptBuilder.swift, SpeechAnalyzerEngine.swift, NoopASREngine.swift, LLMConfig.swift, LLMModelProfile.swift, KeychainMigration.swift, LLMEngine.swift, OpenAIEngine.swift, OllamaEngine.swift, AnthropicEngine.swift, SummarizerService.swift, BackgroundSummaryService.swift, SettingsView.swift, CrashLogService.swift, PromptBuilderTests.swift
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-- Improved test coverage from 21% to 23% by adding 13 new test files covering LLMConfig, LLMModelProfile, LLMProvider, LLMEngineFactory, LLMHTTPHelpers, NoopASR/LLMEngine, AudioExportError, LLMEngineError, TokenUsage, KeychainMigration, RecordingViewModel, SummarizerConfig, SummaryBlock, RecordingSession, ScheduledRecording, RepeatRule, CalendarService, and CrashLogService; brought 15+ source files to 100% coverage
-  Files: LLMConfigTests.swift, LLMModelProfileTests.swift, LLMProviderTests.swift, LLMEngineFactoryTests.swift, LLMHTTPHelpersTests.swift, NoopEngineTests.swift, KeychainMigrationExtendedTests.swift, RecordingViewModelExtendedTests.swift, SummarizerConfigExtendedTests.swift, RecordingSessionExtendedTests.swift, ScheduledRecordingExtendedTests.swift, CalendarServiceExtendedTests.swift, CrashLogServiceExtendedTests.swift
+## [1.0.1] - 2026-04-01 — App Store Review Fixes
 
-- Added 315 new tests across 10 files (5,188 lines) via parallel agent swarm covering AudioExporter, BackgroundSummaryService, RecordingViewModel state machine/dedup/forceQuit, AudioCaptureService+SimpleVAD edge cases, SummarizerService full API, PromptBuilder full API, CrashLogService file lifecycle, LLMConfig/Provider/Profile/Store, TranscriptExporter formatting+clipboard, and SchedulerViewModel scheduling/calendar/repeat; added .serialized to 19 test suites to fix parallel UserDefaults/Keychain contamination; 737/737 tests pass (2 cross-suite race condition tests documented and disabled)
-  Files: AudioExporterTests.swift, BackgroundSummaryServiceTests.swift, RecordingViewModelCoverageTests.swift, AudioCaptureServiceExtendedTests.swift, SummarizerServiceExtendedTests.swift, PromptBuilderExtendedTests.swift, CrashLogServiceCoverageTests.swift, LLMConfigCoverageTests.swift, TranscriptExporterExtendedTests.swift, SchedulerViewModelExtendedTests.swift, KeychainServiceTests.swift, KeychainMigrationTests.swift, LLMConfigTests.swift, LLMProviderTests.swift, LLMEngineFactoryTests.swift, LLMHTTPHelpersTests.swift, LLMModelProfileTests.swift, NoopEngineTests.swift, TranscriptExporterTests.swift, SchedulerViewModelTests.swift, VADConfigTests.swift, SummarizerConfigExtendedTests.swift, CalendarServiceTests.swift, CalendarServiceExtendedTests.swift, ScheduledRecordingTests.swift, ScheduledRecordingExtendedTests.swift, KeychainMigrationExtendedTests.swift
+### Added
 
-## [2026-03-24 22:46]
+- First-time onboarding: 4-page Welcome Guide (intro, recording tips, features, quick LLM setup) with privacy notice that falls back to Apple Intelligence on decline; Help menu entries for Welcome Guide and Data Usage Information
+  Files: WelcomeView.swift, PrivacyDisclosureView.swift, ContentView.swift, notetakerApp.swift
+- VoiceOver accessibility: labels, hints, and values across PlaybackControlView, TranscriptView, ActionItemListView, SessionDetailView, and SettingsTab
+  Files: PlaybackControlView.swift, TranscriptView.swift, ActionItemListView.swift, SessionDetailView.swift, SettingsTab.swift
+- Playback auto-scroll & highlight: auto-scroll and highlight current transcript segment / summary chunk during audio playback; dim non-active items (opacity 0.35); scroll to position on tab switch while playing; only active during playback state
+  Files: SessionDetailView.swift, TranscriptView.swift
+- `listModels()` API on all LLM engines (Ollama/OpenAI/Anthropic) for remote model listing
+  Files: LLMEngine.swift, OllamaEngine.swift, OpenAIEngine.swift, AnthropicEngine.swift
+- Per-profile connection test dot indicator (persisted via `lastTestedAt`/`lastTestPassed`); token usage stats (`totalInputTokens`/`totalOutputTokens`/`totalRequests`) tracked per profile via `LLMProfileStore.recordUsageForConfig()`
+  Files: LLMModelProfile.swift, SummarizerService.swift, ChatService.swift, ModelsSettingsTab.swift
+- VAD test in Recording settings: lightweight mic capture with real-time audio level bar, threshold marker, and speech/silence indicator; auto-restarts on config change
+  Files: SettingsTab.swift
+- `CustomProviderDisclaimerView` — first-time compliance disclaimer for custom API endpoints in China region
+  Files: CustomProviderDisclaimerView.swift
 
-- Evaluated PROPOSAL.md (106 improvement points across 7 rounds) and generated Chinese translation plan_zh.md; diagnosed and resolved ralph-loop plugin infinite Stop hook loop
-  Files: plan_zh.md, .claude/ralph-loop.local.md
+### Changed
 
-## [2026-03-24 23:19]
+- App name unified to "TranscribeNote": PRODUCT_NAME = TranscribeNote with PRODUCT_MODULE_NAME = notetaker; updated CFBundleName, CFBundleDisplayName, TEST_HOST, usage descriptions; scheme BuildableName to TranscribeNote.app; calendar/reminders usage keys upgraded to FullAccess variants (Guideline 2.3.8)
+  Files: project.pbxproj, notetaker.xcscheme
+- China App Store compliance (Guideline 5): disabled Apple Intelligence & foreign providers (OpenAI/Anthropic) in CN storefront via async `SKStorefront` detection with locale fallback; refactored Models settings UI from Form/.columns to Grid layout
+  Files: LLMProvider.swift, LLMEngineFactory.swift, ModelsSettingsTab.swift, PrivacyDisclosureView.swift, notetakerApp.swift, LLMProviderTests.swift, LLMEngineFactoryTests.swift, LLMConfigCoverageTests.swift
+- Session detail UI: replaced stacked overall summary + transcript with segmented subtab picker (Summary/Transcript); removed hover copy button from TranscriptSegmentRow (reopened #35); enabled cross-row text selection in TranscriptView
+  Files: SessionDetailView.swift, TranscriptSegmentRow.swift, SummaryCardView.swift, TranscriptView.swift
+- Models management: "Manage Models" button inline with available/total count; aligned sidebar/detail bottom bar height; enlarged profile list row font and spacing; removed "None" from role profile pickers
+  Files: ModelsSettingsTab.swift, SettingsTab.swift, notetakerApp.swift
 
-- Brainstormed 213 app improvement proposals across 12 rounds (AI intelligence, UX polish, frontend craft, new features, interaction & intelligence, fresh angles, deep integration, emotional craft, content alchemy, final polish, app identity); renamed PLAN.md to PROPOSAL.md to better reflect its purpose
+### Fixed
+
+- Session detail first-load lag: removed duplicate loadAudio call; async multi-clip duration via AVURLAsset; pre-computed summary/actionItem/hasAudioFiles state; cached `SummaryBlock.structuredSummary` with `@Transient`; converted `TranscriptView.displayItems` to `@State`
+  Files: SessionDetailView.swift, AudioPlaybackService.swift, SummaryBlock.swift, TranscriptView.swift
+- Sidebar snap-back during recording drain: guard `handleCompletionIfNeeded()` with `selectedSessionID == nil` check; reduced minimum window size to 400×300
+  Files: ContentView.swift
+- Key points text wrapping overlap in SummaryCardView
+  Files: SummaryCardView.swift
+
+## [1.0.0] - 2026-03-25
+
+### Added
+
+- Apple Foundation Models as zero-config default LLM engine (#17): `FoundationModelsEngine` with safe availability check, `.foundationModels` provider as default, async `createWithFallback()`, BackgroundSummaryService auto-fallback, Settings UI with "Apple Intelligence (On-Device)" option; created #44 for future @Generable structured output
+  Files: FoundationModelsEngine.swift, LLMProvider.swift, LLMConfig.swift, LLMEngineFactory.swift, BackgroundSummaryService.swift, SettingsView.swift, FoundationModelsEngineTests.swift, LLMEngineFactoryFallbackTests.swift
+- Two-tier test plan strategy: UnitTests (pure-logic suites, <0.2s) for local dev and FullTests (all suites + UI tests) for CI; shared Xcode scheme with test plan associations
+  Files: UnitTests.xctestplan, FullTests.xctestplan, notetaker.xcscheme
+- Reusable settings components library (SettingsComponents.swift): SettingsDescription, SettingsSlider, SettingsIntSlider, StatusIndicator, .settingsFooter(), SettingsInfoLabel; restored 4-tab settings layout
+  Files: SettingsComponents.swift, ModelsSettingsTab.swift, SettingsTab.swift, AboutTab.swift, SettingsView.swift
+- One-click copy summary as Markdown (#38): hover-to-reveal copy button on SummaryCardView with checkmark animation; SummaryMarkdownFormatter; 6 unit tests
+  Files: SummaryMarkdownFormatter.swift, SummaryCardView.swift, SummaryMarkdownFormatterTests.swift
+- 34 detailed GitHub feature issues (#10–#43) from enhancement plan with priority labels, implementation plans, and acceptance criteria
+- 213 app improvement proposals across 12 rounds; renamed PLAN.md to PROPOSAL.md
   Files: PROPOSAL.md
 
-## [2026-03-24 23:47]
+### Changed
 
-- Created 34 detailed GitHub feature issues from plan_zh.md enhancement plan with priority labels, competitive analysis (WebSearch), implementation plans, file impact lists, and acceptance criteria; covers AI features, UX polish, export/integration, local-first, accessibility, platform-native (macOS 26), and automation
-  Files: (GitHub issues #10-#43, no local file changes)
+- UserDefaults DI (`defaults: UserDefaults = .standard`) into 5 production files for test isolation; moved 6 suites into UnitTests plan (330 tests in 28 suites)
+  Files: LLMConfig.swift, LLMModelProfile.swift, SummarizerConfig.swift, VADConfig.swift, KeychainMigration.swift
+- CI: test and claude-review run sequentially; PR approval uses PAT instead of GITHUB_TOKEN
+  Files: .github/workflows/auto-merge.yml
 
-## [2026-03-25 00:25]
+### Fixed
 
-- Added two-tier test plan strategy: UnitTests (22 pure-logic suites, 257 tests, <0.2s) for local dev and FullTests (all suites + UI tests) for CI on PR to main; created shared Xcode scheme with test plan associations; UnitTests set as default for Cmd+U
-  Files: UnitTests.xctestplan, FullTests.xctestplan, notetaker.xcodeproj/xcshareddata/xcschemes/notetaker.xcscheme
+- 315 new tests across 10 files; `.serialized` on 19 test suites to fix parallel UserDefaults/Keychain contamination; 737/737 tests pass
+- Test coverage improved from 21% to 23% with 13 new test files; 15+ source files at 100% coverage
 
-## [2026-03-25 00:30]
+### Security
 
-- Integrated Apple Foundation Models as zero-config default LLM engine (#17): added FoundationModelsEngine with safe availability check (never crashes if Apple Intelligence not enabled), .foundationModels provider as new default, async createWithFallback() in LLMEngineFactory, BackgroundSummaryService auto-fallback, and Settings UI with "Apple Intelligence (On-Device)" option hiding irrelevant fields; created #44 for future @Generable structured output
-  Files: FoundationModelsEngine.swift, LLMProvider.swift, LLMConfig.swift, LLMEngineFactory.swift, BackgroundSummaryService.swift, SettingsView.swift, FoundationModelsEngineTests.swift, LLMEngineFactoryFallbackTests.swift, LLMEngineFactoryTests.swift, LLMConfigTests.swift, LLMProviderTests.swift, LLMConfigCoverageTests.swift, LLMModelProfileTests.swift
-
-## [2026-03-25 00:44]
-
-- Injected UserDefaults DI (`defaults: UserDefaults = .standard`) into 5 production files to enable test isolation via `UserDefaults(suiteName:)`; eliminated cross-suite UserDefaults conflicts; moved 6 newly-parallel suites (+73 tests) into UnitTests plan (now 330 tests in 28 suites, 0.22s); fixed `saveAndLoadProfiles` crash with `try #require`; re-enabled 2 previously disabled tests
-  Files: LLMConfig.swift, LLMModelProfile.swift, SummarizerConfig.swift, VADConfig.swift, KeychainMigration.swift, LLMConfigTests.swift, LLMConfigCoverageTests.swift, LLMModelProfileTests.swift, LLMProviderTests.swift, SummarizerConfigExtendedTests.swift, VADConfigTests.swift, KeychainMigrationTests.swift, KeychainMigrationExtendedTests.swift, UnitTests.xctestplan
+- Resolved VAD data race (CRITICAL), multi-clip audio deletion, prompt injection mitigation, resultTask timeout cancellation, NoopASREngine thread safety, Keychain empty-key guard, migration failure cleanup, URL scheme validation, HTTP error truncation, smart retry logic, API key leak warning, sensitive data logging cleanup
+  Files: AudioCaptureService.swift, SessionListView.swift, PromptBuilder.swift, SpeechAnalyzerEngine.swift, NoopASREngine.swift, LLMConfig.swift, LLMModelProfile.swift, KeychainMigration.swift, LLMEngine.swift, OpenAIEngine.swift, OllamaEngine.swift, AnthropicEngine.swift, SummarizerService.swift, BackgroundSummaryService.swift

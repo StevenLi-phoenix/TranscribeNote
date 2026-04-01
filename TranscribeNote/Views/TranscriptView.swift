@@ -1,0 +1,189 @@
+import SwiftUI
+
+/// A display item in the transcript: either a single segment or an inline summary replacing a range.
+enum TranscriptDisplayItem: Identifiable {
+    case segment(TranscriptSegment)
+    case summary(SummaryBlock)
+
+    var id: String {
+        switch self {
+        case .segment(let s): return s.id.uuidString
+        case .summary(let s): return "summary-\(s.id)"
+        }
+    }
+}
+
+struct TranscriptView: View {
+    let segments: [TranscriptSegment]
+    let summaries: [SummaryBlock]
+    let partialText: String
+    let activeSegmentID: UUID?
+    @Binding var scrollToTime: TimeInterval?
+    @State private var displayItems: [TranscriptDisplayItem] = []
+
+    init(
+        segments: [TranscriptSegment],
+        partialText: String,
+        summaries: [SummaryBlock] = [],
+        scrollToTime: Binding<TimeInterval?> = .constant(nil),
+        activeSegmentID: UUID? = nil
+    ) {
+        self.segments = segments
+        self.partialText = partialText
+        self.summaries = summaries
+        self._scrollToTime = scrollToTime
+        self.activeSegmentID = activeSegmentID
+    }
+
+    /// Build a mixed list: segments outside summary ranges shown normally,
+    /// segments inside a summary range replaced by the summary (once, at the range start).
+    private static func buildDisplayItems(
+        segments: [TranscriptSegment],
+        summaries: [SummaryBlock]
+    ) -> [TranscriptDisplayItem] {
+        let sorted = summaries
+            .filter { !$0.isOverall }
+            .sorted { $0.coveringFrom < $1.coveringFrom }
+
+        guard !sorted.isEmpty else {
+            return segments.map { .segment($0) }
+        }
+
+        var items: [TranscriptDisplayItem] = []
+        var summaryIndex = 0
+
+        for segment in segments {
+            while summaryIndex < sorted.count && sorted[summaryIndex].coveringTo <= segment.startTime {
+                summaryIndex += 1
+            }
+
+            if summaryIndex < sorted.count {
+                let summary = sorted[summaryIndex]
+                if segment.startTime >= summary.coveringFrom && segment.startTime < summary.coveringTo {
+                    if items.last.map({ if case .summary(let s) = $0 { return s.id == summary.id } else { return false } }) != true {
+                        items.append(.summary(summary))
+                    }
+                    continue
+                }
+            }
+
+            items.append(.segment(segment))
+        }
+
+        return items
+    }
+
+    private func recomputeDisplayItems() {
+        displayItems = Self.buildDisplayItems(segments: segments, summaries: summaries)
+    }
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                    ForEach(displayItems) { item in
+                        switch item {
+                        case .segment(let segment):
+                            TranscriptSegmentRow(segment: segment)
+                                .id(item.id)
+                                .opacity(activeSegmentID == nil || segment.id == activeSegmentID ? 1.0 : 0.35)
+                                .animation(.easeInOut(duration: 0.2), value: activeSegmentID)
+                        case .summary(let summary):
+                            InlineSummaryRow(
+                                coveringFrom: summary.coveringFrom,
+                                coveringTo: summary.coveringTo,
+                                content: summary.displayContent
+                            )
+                            .id(item.id)
+                            .transition(.opacity)
+                        }
+                    }
+
+                    // Partial text (current recognition in progress)
+                    // Always rendered to avoid layout thrashing from conditional insertion/removal
+                    HStack(alignment: .top, spacing: DS.Spacing.md) {
+                        Text("...")
+                            .font(DS.Typography.timestamp)
+                            .foregroundStyle(.secondary)
+                            .frame(width: DS.Layout.timestampWidth, alignment: .leading)
+
+                        Text(partialText.isEmpty ? " " : partialText)
+                            .font(DS.Typography.body)
+                            .foregroundStyle(.secondary)
+                            .underline(pattern: .dash)
+                    }
+                    .padding(.vertical, DS.Spacing.xxs)
+                    .id("partial")
+                    .opacity(partialText.isEmpty ? 0 : 1)
+                    .accessibilityHidden(partialText.isEmpty)
+                    .accessibilityLabel("In progress: \(partialText)")
+                }
+                .padding()
+            }
+            .onAppear {
+                recomputeDisplayItems()
+            }
+            .onChange(of: segments.count) {
+                recomputeDisplayItems()
+                withAnimation {
+                    if let lastSegment = segments.last {
+                        proxy.scrollTo(lastSegment.id.uuidString, anchor: .bottom)
+                    }
+                }
+            }
+            .onChange(of: summaries.count) {
+                recomputeDisplayItems()
+            }
+            .onChange(of: partialText.isEmpty) {
+                if !partialText.isEmpty {
+                    withAnimation {
+                        proxy.scrollTo("partial", anchor: .bottom)
+                    }
+                }
+            }
+            .onChange(of: scrollToTime) { _, time in
+                guard let time else { return }
+                let target = segments.first { $0.startTime >= time } ?? segments.last
+                if let target {
+                    withAnimation {
+                        proxy.scrollTo(target.id.uuidString, anchor: .top)
+                    }
+                }
+                scrollToTime = nil
+            }
+        }
+    }
+}
+
+/// Inline summary row that replaces transcript segments in the flow.
+struct InlineSummaryRow: View {
+    let coveringFrom: TimeInterval
+    let coveringTo: TimeInterval
+    let content: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: DS.Spacing.md) {
+            Text("\(coveringFrom.mmss)–\(coveringTo.mmss)")
+                .font(DS.Typography.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: DS.Layout.timestampWidth, alignment: .leading)
+
+            Group {
+                if let attributed = try? AttributedString(
+                    markdown: content,
+                    options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+                ) {
+                    Text(attributed)
+                } else {
+                    Text(content)
+                }
+            }
+            .font(DS.Typography.callout)
+            .foregroundStyle(.primary)
+            .textSelection(.enabled)
+        }
+        .padding(.vertical, DS.Spacing.xs)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Summary from \(coveringFrom.mmss) to \(coveringTo.mmss): \(content)")
+    }
+}
