@@ -9,25 +9,28 @@ A macOS note-taking/transcription app with live ASR, audio recording/playback, L
 - **Platform:** macOS 26.2+
 - **Language:** Swift 5
 - **UI Framework:** SwiftUI
-- **Xcode scheme:** `notetaker`
+- **Xcode project:** `TranscribeNote.xcodeproj`
+- **Xcode scheme:** `TranscribeNote`
+- **Module name:** `TranscribeNote` (tests import `@testable import TranscribeNote`)
+- **Bundle ID:** `com.stevenli.notetaker` (legacy name retained)
 
 ## Build & Test Commands
 
 ```bash
 # Build
-xcodebuild -scheme notetaker -configuration Debug build
+xcodebuild -scheme TranscribeNote -configuration Debug build
 
 # Run fast unit tests only (pure logic, no shared state — default for local dev)
-xcodebuild -scheme notetaker -testPlan UnitTests -configuration Debug test
+xcodebuild -scheme TranscribeNote -testPlan UnitTests -configuration Debug test
 
 # Run full test suite (all unit + UI tests — for CI / PR to main)
-xcodebuild -scheme notetaker -testPlan FullTests -configuration Debug test
+xcodebuild -scheme TranscribeNote -testPlan FullTests -configuration Debug test
 
 # Run a specific test suite (e.g., RingBufferTests)
-xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerTests/RingBufferTests test
+xcodebuild -scheme TranscribeNote -configuration Debug -only-testing:TranscribeNoteTests/RingBufferTests test
 
 # Run UI tests
-xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests test
+xcodebuild -scheme TranscribeNote -configuration Debug -only-testing:TranscribeNoteUITests test
 ```
 
 ## Key Patterns & Gotchas
@@ -37,6 +40,7 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - `PBXFileSystemSynchronizedRootGroup` — no pbxproj edits needed for new source files
 - `import os` provides both `Logger` AND `OSAllocatedUnfairLock` — don't remove from files using either
 - Entitlements: sandbox + audio-input + `files.user-selected.read-write` + `network.client` (LLM API calls) + `personal-information.calendars` (calendar import)
+- **Naming legacy**: Source file `notetakerApp.swift`, bundle ID `com.stevenli.notetaker`, migration plan `NotetakerMigrationPlan` — all retained from original project name; the Xcode scheme, module name, and directory are `TranscribeNote`
 
 ### SwiftData & SwiftUI
 - SwiftData persistence with `@Model` classes (`RecordingSession`, `TranscriptSegment`, `SummaryBlock`)
@@ -52,17 +56,26 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - Re-fetch SwiftData `@Model` objects after `await` in async Tasks — captured references may be stale; re-fetch by ID with `#Predicate`
 - Reset transient view state (`isGeneratingSummary`, `hasAutoTriggered`, errors) in `onChange(of: sessionID)` — prevents stale flags blocking behavior on navigation
 - **SwiftData property defaults for migration**: New non-optional stored properties on `@Model` classes MUST have inline default values on the property declaration (e.g., `var isOverall: Bool = false`), NOT just in `init()` — SwiftData uses the property-level default to fill existing rows during lightweight migration; `init` defaults are ignored
-- **Schema versioning**: `NotetakerMigrationPlan` in `Models/Schemas/` — ModelContainer initialized with `migrationPlan: NotetakerMigrationPlan.self`; all 6 versions use lightweight migrations:
+- **Schema versioning**: `NotetakerMigrationPlan` in `Models/Schemas/` — ModelContainer initialized with `migrationPlan: NotetakerMigrationPlan.self`; 8 versions, all lightweight migrations:
   - **V1**: Initial schema (RecordingSession, TranscriptSegment, SummaryBlock)
   - **V2**: Adds `editedContent: String? = nil` to SummaryBlock; `displayContent` computed property returns editedContent ?? content
   - **V3**: Adds `ScheduledRecording` model for timed recording scheduling
   - **V4**: Adds `audioFilePaths: [String] = []` to RecordingSession for multi-clip pause/resume
   - **V5**: Adds `isPartial: Bool = false` to RecordingSession for force-quit detection
   - **V6**: Adds `calendarEventIdentifier: String? = nil` to ScheduledRecording, `scheduledRecordingID: UUID? = nil` to RecordingSession
+  - **V7**: Adds `ActionItem` model and `actionItems: [ActionItem] = []` relationship on `RecordingSession`
+  - **V8**: Adds `structuredContent: String? = nil` to SummaryBlock for structured summary output (JSON-encoded `StructuredSummary`)
 - **Design System tokens**: `DS` enum in `DesignSystem.swift` centralizes spacing (4pt grid), typography, colors, radii, layout constants; `ViewModifiers.swift` provides `.cardStyle()` and `.badgeStyle()`; `ControlBarMetrics` aliases DS values
 - **Session search**: `SessionListView` uses `.searchable()` filtering by title, segment text, summary content; debounced 300ms to prevent SwiftData fault storms; `DateFilter` enum for Today/This Week/This Month quick filters
 - **Command Palette**: `CommandPaletteView` (⌘K) — Raycast-style overlay with fuzzy search, category grouping, keyboard navigation (↑/↓/Enter/Escape); `CommandPaletteSearch` enum has testable `filter(commands:query:)` and `grouped(commands:)` static methods; `PaletteCommand` model + `CommandCategory` enum; commands built dynamically in `ContentView.buildPaletteCommands()` based on current ViewModel state
 - **Playback keyboard shortcuts**: `Notification.Name` extensions (`.togglePlayback`, `.seekForward`, `.seekBackward`, `.seekForwardLong`, `.seekBackwardLong`) in `notetakerApp.swift`; `CommandMenu("Playback")` provides Space (play/pause), ←/→ (±5s), Shift+←/→ (±15s); `SessionDetailView` listens via `.onReceive` and delegates to `AudioPlaybackService`
+
+### Localization (i18n)
+- `Localizable.xcstrings` in `TranscribeNote/` — Xcode String Catalog format (JSON-based), source language `en`
+- All user-facing strings in SwiftUI views use `LocalizedStringKey` (SwiftUI's default `Text("string")` behavior) — no manual `NSLocalizedString` calls needed
+- Language picker in `GeneralSettingsTab` allows user to override app language
+- `LLMProvider`, `LLMModelProfile`, `RepeatRule` display names use localized strings
+- `TimeInterval+Formatting.swift` in `Extensions/` provides localized time formatting
 
 ### Privacy & App Store
 - **Privacy disclosure**: `PrivacyDisclosureView` shown as sheet on first `LLMSettingsTab` `onAppear` via `@AppStorage("hasShownPrivacyDisclosure")`; reset via Help > Data Usage Information menu or `defaults delete <bundle-id> hasShownPrivacyDisclosure`
@@ -127,7 +140,7 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - Periodic summarization: `summaryTimer` fires at configurable interval; `triggerPeriodicSummary()` uses `periodicWindowCount` for window-aligned `coveringFrom`/`coveringTo` (don't use `ceil(elapsedTime)` — timer drift causes off-by-one window); `nextPeriodicCoveringFrom` tracks accumulated windows when previous ones are skipped
 - Use `1 << Int(x)` not `Int(pow(2, x))` for power-of-2 values — avoids floating-point precision issues at large exponents
 - **`KeychainService`**: `nonisolated enum` for secure string storage in macOS Keychain; `save(key:value:) -> Bool` (delete-then-add pattern), `load(key:) -> String?`, `delete(key:) -> Bool`; uses `kSecClassGenericPassword`, `kSecAttrService` = bundle ID, `kSecAttrAccount` = key name, `kSecAttrAccessibleWhenUnlocked`; no special entitlement needed for sandboxed apps
-- **`CrashLogService`**: Uses MetricKit (`MXMetricManagerSubscriber`) to receive crash diagnostics from PREVIOUS session on NEXT launch; `nonisolated final class` inheriting from `NSObject` with singleton `shared` instance; `install()` registers with `MXMetricManager.shared`; `didReceive(_: [MXDiagnosticPayload])` extracts `MXCrashDiagnostic` (termination reason, exception type/code, signal, VM region info, call stack tree JSON); same crash log directory/file (`~/Library/Application Support/notetaker/CrashLogs/last_crash.log`), same `checkPreviousCrash()` behavior
+- **`CrashLogService`**: Uses MetricKit (`MXMetricManagerSubscriber`) to receive crash diagnostics from PREVIOUS session on NEXT launch; `nonisolated final class` inheriting from `NSObject` with singleton `shared` instance; `install()` registers with `MXMetricManager.shared`; `didReceive(_: [MXDiagnosticPayload])` extracts `MXCrashDiagnostic` (termination reason, exception type/code, signal, VM region info, call stack tree JSON); crash log at `~/Library/Application Support/notetaker/CrashLogs/last_crash.log`
 - `TranscriptExporter` formats segments as timestamped text and copies to `NSPasteboard`; `formatAsText(title:segments:)` supports optional title header
 - Graceful quit: `applicationShouldTerminate` returns `.terminateLater` if recording, waits for `awaitDrainCompletion()`, then replies `true`
 - **Force-quit detection**: `RecordingSession.isPartial: Bool` marks sessions saved during force-quit (transcript may be incomplete)
@@ -138,25 +151,23 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - **`ScheduledRecordingInfo`**: Lightweight `Sendable` struct decoupling `RecordingViewModel` from SwiftData; carries `id`, `title`, `durationMinutes`
 - **Duplicate import detection**: Uses `calendarEventIdentifier` (EKEvent.eventIdentifier) first, falls back to title+time heuristic (60s tolerance)
 - **Recurrence mapping**: `CalendarService.mapRecurrenceRule()` maps `EKRecurrenceRule` to `RepeatRule`; only `interval == 1`; weekday detection via `Set<EKWeekday>` equality
-- **SchemaV6**: Adds `calendarEventIdentifier: String? = nil` to `ScheduledRecording`, `scheduledRecordingID: UUID? = nil` to `RecordingSession`
-  - **V7**: Adds `ActionItem` model and `actionItems: [ActionItem] = []` relationship on `RecordingSession`
-  - **V8**: Adds `structuredContent: String? = nil` to SummaryBlock for structured summary output (JSON-encoded `StructuredSummary`)
-
 
 ## Architecture
 
 Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Model` classes for persistence.
 
-- **`notetaker/`** — Main app target
+- **`TranscribeNote/`** — Main app target
   - `notetakerApp.swift` — Entry point, shared `ModelContainer`, `MenuBarExtra`, `Settings` scene
   - `ContentView.swift` — `NavigationSplitView` (sidebar session list + detail routing)
   - `Models/` — SwiftData models (`RecordingSession`, `TranscriptSegment`, `SummaryBlock`, `ScheduledRecording`, `ActionItem`), config types (`LLMConfig`, `SummarizerConfig`, `LLMModelProfile`, `VADConfig`, `OverallSummaryMode`, `RepeatRule`, `ActionItemCategory`), ephemeral types (`ChatMessage`), schema versioning (`Schemas/` V1–V8)
   - `Services/` — Protocol-based engines (`ASREngine`, `LLMEngine`) with multiple implementations (including `FoundationModelsEngine` for Apple Intelligence), `AudioCaptureService`, `AudioPlaybackService`, `AudioExporter`, `SummarizerService`, `BackgroundSummaryService`, `SummaryMarkdownFormatter`, `ChatService`, `PromptBuilder`, `KeychainService`, `CrashLogService`, `SchedulerService`, `CalendarService`, `ActionItemParser`, `ActionItemMarkdownFormatter`, `RemindersExportService`
-  - `ViewModels/` — `RecordingViewModel` (`@Observable`) — central state machine for recording lifecycle; `SchedulerViewModel` — scheduled recordings + calendar integration
+  - `ViewModels/` — `RecordingViewModel` (`@Observable`) — central state machine for recording lifecycle; `SchedulerViewModel` — scheduled recordings + calendar integration; `ChatViewModel` — chat panel state
+  - `Extensions/` — `ModelContext+SaveLogging.swift` (debug save logging), `TimeInterval+Formatting.swift` (localized time display)
   - `DesignSystem.swift` — `DS` enum (spacing, typography, colors, radius, layout tokens)
-  - `Views/` — SwiftUI views including `SettingsView` (4-tab layout: `SettingsTab`, `ModelsSettingsTab`, `AboutTab`), `ScheduleView`, `ScheduleEditorView`, `PrivacyDisclosureView`, `SummaryCardView`, `TranscriptSegmentRow`, `AudioLevelBar`, `ResizeHandle`, `VerticalResizeHandle`, `ChatView`, `ActionItemListView`, `SettingsComponents` (reusable settings UI), `ViewModifiers`
-- **`notetakerTests/`** — Swift Testing (`@Test`, `#expect`); ~66 test files; `Mocks/` has `MockASREngine`, `MockLLMEngine`, `MockSchedulerService`, per-suite `MockURLProtocol` subclasses; `Helpers/` has `BufferFactory` and `FileAudioSource`
-- **`notetakerUITests/`** — XCTest UI tests (light/dark mode via `runsForEachTargetApplicationUIConfiguration`)
+  - `Localizable.xcstrings` — Xcode String Catalog for i18n (source language: English)
+  - `Views/` — SwiftUI views including `SettingsView` (tabbed: General, Settings, Models, About), `ScheduleView`, `ScheduleEditorView`, `PrivacyDisclosureView`, `SummaryCardView`, `TranscriptSegmentRow`, `AudioLevelBar`, `ResizeHandle`, `VerticalResizeHandle`, `ChatView`, `ActionItemListView`, `WelcomeView`, `SettingsComponents` (reusable settings UI), `ViewModifiers`
+- **`TranscribeNoteTests/`** — Swift Testing (`@Test`, `#expect`); ~66 test files; `Mocks/` has `MockASREngine`, `MockLLMEngine`, `MockSchedulerService`, per-suite `MockURLProtocol` subclasses; `Helpers/` has `BufferFactory` and `FileAudioSource`
+- **`TranscribeNoteUITests/`** — XCTest UI tests (light/dark mode via `runsForEachTargetApplicationUIConfiguration`)
 - **`scripts/`** — `increment_build_number.sh`
 - **`docs/`** — `PRIVACY_POLICY.md`, `APP_STORE_PRIVACY_CHECKLIST.md`, specs (SPEC-001 through SPEC-005)
 
@@ -174,23 +185,17 @@ Three-layer architecture: Views → ViewModels → Services, with SwiftData `@Mo
 - `DispatchQueue.main.asyncAfter` may not fire during `Task.sleep`-based polling in Swift Testing — use `DispatchQueue.global()` or avoid dispatch
 - UI launch tests use `runsForEachTargetApplicationUIConfiguration = true` to test light/dark mode; do NOT delete
 - **Close the app before running tests** — if the app is already running, UI tests attach to the existing instance instead of launching a fresh one, causing `Failed to terminate` errors and test failures
-- **Two-tier test plans**: `UnitTests.xctestplan` (55+ pure-logic suites) is default for Cmd+U; `FullTests.xctestplan` (all suites + UI tests) for CI on PR to main; shared scheme at `xcshareddata/xcschemes/notetaker.xcscheme` associates both plans
-- **Test plan gotcha**: Xcode auto-generated schemes don't support `-testPlan`; the explicit shared scheme with `shouldAutocreateTestPlan = "NO"` is required; verify with `xcodebuild -scheme notetaker -showTestPlans`
+- **Two-tier test plans**: `UnitTests.xctestplan` (55+ pure-logic suites) is default for Cmd+U; `FullTests.xctestplan` (all suites + UI tests) for CI on PR to main
+- **Test plan gotcha**: Xcode auto-generated schemes don't support `-testPlan`; the explicit shared scheme with `shouldAutocreateTestPlan = "NO"` is required; verify with `xcodebuild -scheme TranscribeNote -showTestPlans`
 - 31 test suites use `.serialized` to prevent parallel UserDefaults/Keychain/URLProtocol/SwiftData/NSPasteboard contamination; ~767 tests total across ~66 test files; UnitTests plan excludes all serialized suites for fast local iteration
 
-## CI Workflows
+## CI/CD
 
 - **`ci.yml`**: Runs on PR/push to `main`/`release` on `macos-26` runner; builds with `CODE_SIGNING_ALLOWED=NO`; runs FullTests plan (unit + UI tests); caches DerivedData; filtered test output with last-50-lines on failure
 - **`auto-merge.yml`**: Waits for `ci.yml` build-and-test to pass, runs Claude Code review, then merges; closes linked issues after merge
-- **`codeql.yml`**: CodeQL analysis for release branch protection
-
-## CI/CD & Branch Protection
-
-- **Release branch** protected via GitHub ruleset (ID 14307671): requires PR, 1 approval, signed commits, status checks (`build-and-test`), CodeQL, no force push/deletion
-- **GitHub-hosted runners** (`macos-26`) run macOS 26 natively — both build and tests execute successfully with `CODE_SIGNING_ALLOWED=NO`
-- **Three CI workflows**: `ci.yml` (build + full test), `codeql.yml` (Swift security scanning), `auto-merge.yml` (Claude review + auto-merge)
+- **`codeql.yml`**: CodeQL Swift security scanning for release branch protection
+- **Release branch** protected via GitHub ruleset: requires PR, 1 approval, signed commits, status checks (`build-and-test`), CodeQL, no force push/deletion
 - **GitHub rulesets API**: use `code_scanning` not `required_code_scanning`; `pull_request` rule requires all 5 boolean params; use `--input` with JSON not `-f` flags for nested objects
-- `gh label create` must precede `gh issue edit --add-label` — labels must exist first
 
 ## Known Limitations
 
