@@ -41,6 +41,21 @@ nonisolated enum LLMProvider: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    /// Sensible default max output tokens for each provider.
+    var defaultMaxTokens: Int {
+        switch self {
+        case .foundationModels: 4096
+        case .ollama: 4096
+        case .openAI: 4096
+        case .anthropic: 8192
+        case .deepSeek: 8192
+        case .moonshot: 4096
+        case .zhipu: 4096
+        case .minimax: 4096
+        case .custom: 4096
+        }
+    }
+
     /// Human-readable display name for the settings UI.
     var displayName: String {
         switch self {

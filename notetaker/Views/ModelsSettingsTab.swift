@@ -178,6 +178,7 @@ struct LLMConfigSection: View {
         .onChange(of: config.provider) { _, newProvider in
             config.baseURL = newProvider.defaultBaseURL
             config.model = newProvider.defaultModel
+            config.maxTokens = newProvider.defaultMaxTokens
         }
 
         if config.provider == .foundationModels {
@@ -200,7 +201,7 @@ struct LLMConfigSection: View {
         if config.provider != .foundationModels {
             SettingsSlider("Temperature", value: $config.temperature, in: 0...2, step: 0.1, format: "%.1f", valueWidth: 30)
 
-            SettingsIntSlider("Max Tokens", value: $config.maxTokens, logRange: 8...17)
+            SettingsIntSlider("Max Tokens", value: $config.maxTokens, logRange: 8...14)
 
             Toggle("Enable Thinking", isOn: $config.thinkingEnabled)
                 .help("Allow model to use extended thinking (e.g. Qwen3 <think> blocks). Disable to save tokens on simple tasks.")
