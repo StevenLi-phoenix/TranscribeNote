@@ -159,7 +159,7 @@ private struct ScheduledRecordingRow: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("Delete")
+            .help(String(localized: "Delete"))
         }
         .contextMenu {
             Button("Edit") { onEdit() }

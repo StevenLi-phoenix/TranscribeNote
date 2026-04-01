@@ -77,7 +77,7 @@ nonisolated enum LLMProvider: String, Codable, CaseIterable, Sendable {
     /// Human-readable display name for the settings UI.
     var displayName: String {
         switch self {
-        case .foundationModels: "Apple Intelligence (On-Device)"
+        case .foundationModels: String(localized: "Apple Intelligence (On-Device)")
         case .ollama: "Ollama"
         case .openAI: "OpenAI"
         case .anthropic: "Anthropic"
@@ -85,7 +85,7 @@ nonisolated enum LLMProvider: String, Codable, CaseIterable, Sendable {
         case .moonshot: "Moonshot AI (月之暗面)"
         case .zhipu: "Zhipu AI (智谱)"
         case .minimax: "MiniMax (稀宇科技)"
-        case .custom: "Custom (OpenAI-compatible)"
+        case .custom: String(localized: "Custom (OpenAI-compatible)")
         }
     }
 

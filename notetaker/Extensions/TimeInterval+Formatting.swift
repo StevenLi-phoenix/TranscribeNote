@@ -5,23 +5,11 @@ extension TimeInterval {
     /// Handles hours and drops trailing zero components.
     var compactDuration: String {
         let totalSeconds = max(0, Int(self))
-        let hours = totalSeconds / 3600
-        let minutes = (totalSeconds % 3600) / 60
-        let seconds = totalSeconds % 60
-
-        if hours > 0 {
-            if minutes > 0 {
-                return "\(hours)h \(minutes)m"
-            }
-            return "\(hours)h"
-        }
-        if minutes > 0 {
-            if seconds > 0 {
-                return "\(minutes)m \(seconds)s"
-            }
-            return "\(minutes)m"
-        }
-        return "\(seconds)s"
+        let formatter = DateComponentsFormatter()
+        formatter.unitsStyle = .abbreviated
+        formatter.allowedUnits = totalSeconds >= 3600 ? [.hour, .minute] : [.minute, .second]
+        formatter.zeroFormattingBehavior = .dropAll
+        return formatter.string(from: self) ?? "\(totalSeconds)s"
     }
 
     /// Zero-padded mm:ss timestamp, e.g. "02:35".

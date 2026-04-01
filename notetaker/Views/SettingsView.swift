@@ -6,6 +6,9 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
+            GeneralSettingsTab()
+                .tabItem { Label("General", systemImage: "gear") }
+
             LLMAssignmentTab()
                 .tabItem { Label("LLM", systemImage: "brain") }
 
@@ -18,7 +21,7 @@ struct SettingsView: View {
             AboutTab()
                 .tabItem { Label("About", systemImage: "info.circle") }
         }
-        .frame(width: 600, height: 520)
+        .frame(width: 600, height: 560)
         .onAppear {
             if !hasShownDisclosure {
                 showPrivacySheet = true

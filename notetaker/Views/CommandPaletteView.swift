@@ -19,6 +19,16 @@ enum CommandCategory: String, CaseIterable {
     case session = "Session"
     case export = "Export"
     case navigation = "Navigation"
+
+    var displayName: String {
+        switch self {
+        case .recording: String(localized: "Recording")
+        case .playback: String(localized: "Playback")
+        case .session: String(localized: "Session")
+        case .export: String(localized: "Export")
+        case .navigation: String(localized: "Navigation")
+        }
+    }
 }
 
 // MARK: - Search Logic (testable)
@@ -109,7 +119,7 @@ struct CommandPaletteView: View {
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 0) {
                                 ForEach(grouped, id: \.category) { group in
-                                    Text(group.category.rawValue)
+                                    Text(group.category.displayName)
                                         .font(DS.Typography.caption)
                                         .foregroundStyle(.secondary)
                                         .padding(.horizontal, DS.Spacing.md)
