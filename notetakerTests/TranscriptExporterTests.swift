@@ -51,13 +51,20 @@ struct TranscriptExporterTests {
     }
 
     @Test func copyToClipboardSetsContent() {
+        let saved = NSPasteboard.general.string(forType: .string)
+        defer { restorePasteboard(saved) }
+
         let segments = [
             TranscriptSegment(startTime: 0.0, endTime: 5.0, text: "Test clipboard"),
         ]
         TranscriptExporter.copyToClipboard(segments: segments, title: "Test")
 
-        let pasteboard = NSPasteboard.general
-        let content = pasteboard.string(forType: .string)
+        let content = NSPasteboard.general.string(forType: .string)
         #expect(content == "Test\n\n[00:00] Test clipboard")
+    }
+
+    private func restorePasteboard(_ saved: String?) {
+        NSPasteboard.general.clearContents()
+        if let saved { NSPasteboard.general.setString(saved, forType: .string) }
     }
 }
