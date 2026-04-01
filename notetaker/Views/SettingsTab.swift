@@ -186,7 +186,7 @@ struct SummarizationSettingsTab: View {
 
             if config.includeContext {
                 SettingsRow("Max Context Tokens") {
-                    Stepper(value: $config.maxContextTokens, in: 500...5000, step: 500) {
+                    Stepper(value: $config.maxContextTokens, in: 500...20000, step: 500) {
                         Text("\(config.maxContextTokens)")
                             .monospacedDigit()
                     }
