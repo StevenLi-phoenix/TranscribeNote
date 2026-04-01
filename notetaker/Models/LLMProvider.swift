@@ -41,6 +41,22 @@ nonisolated enum LLMProvider: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    /// Approximate max input characters for transcript context (~4 chars per token).
+    /// Used by ChatService and PromptBuilder to truncate long transcripts before sending.
+    var maxInputCharacters: Int {
+        switch self {
+        case .foundationModels: 12_000   // ~3K tokens, small on-device model
+        case .ollama: 24_000             // ~6K tokens, depends on local model
+        case .openAI: 400_000            // ~100K tokens, GPT-4o has 128K context
+        case .anthropic: 400_000         // ~100K tokens, Claude has 200K context
+        case .deepSeek: 400_000          // ~100K tokens, DeepSeek-V3 has 128K context
+        case .moonshot: 400_000          // ~100K tokens, moonshot-v1-128k
+        case .zhipu: 400_000             // ~100K tokens, GLM-4 has 128K context
+        case .minimax: 400_000           // ~100K tokens, MiniMax-Text-01 has 1M context
+        case .custom: 60_000             // ~15K tokens, conservative default
+        }
+    }
+
     /// Sensible default max output tokens for each provider.
     var defaultMaxTokens: Int {
         switch self {
