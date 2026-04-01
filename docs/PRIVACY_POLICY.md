@@ -1,8 +1,8 @@
-# Notetaker Privacy Policy
+# TranscribeNote Privacy Policy
 
 **Last Updated:** February 2026
 
-Notetaker is a macOS note-taking and transcription application. This policy explains how your data is handled.
+TranscribeNote is a macOS note-taking and transcription application. This policy explains how your data is handled.
 
 ---
 
@@ -16,13 +16,13 @@ All core functionality runs locally on your Mac:
 - **API keys** are stored in the macOS Keychain, never transmitted to us.
 - **App settings** are stored in local UserDefaults.
 
-Notetaker does **not** operate any cloud servers. We do not collect, store, or have access to any of your data.
+TranscribeNote does **not** operate any cloud servers. We do not collect, store, or have access to any of your data.
 
 ---
 
 ## When Data Leaves Your Device
 
-If you enable the **LLM summarization** feature, Notetaker sends data to a third-party API endpoint that **you** configure:
+If you enable the **LLM summarization** feature, TranscribeNote sends data to a third-party API endpoint that **you** configure:
 
 ### What is sent
 
@@ -74,21 +74,21 @@ You have full control over data transmission:
 
 ## Data We Collect
 
-**None.** Notetaker does not collect analytics, telemetry, crash reports, or any usage data. We have no servers and no way to receive your data.
+**None.** TranscribeNote does not collect analytics, telemetry, crash reports, or any usage data. We have no servers and no way to receive your data.
 
-The only network requests Notetaker makes are to the LLM API endpoint you configure, and only when summarization is actively triggered.
+The only network requests TranscribeNote makes are to the LLM API endpoint you configure, and only when summarization is actively triggered.
 
 ---
 
 ## Crash Diagnostics
 
-Notetaker uses Apple's MetricKit framework to receive crash diagnostic information from the operating system. This data is processed locally on your device to display crash information in the app's logs. It is never transmitted externally.
+TranscribeNote uses Apple's MetricKit framework to receive crash diagnostic information from the operating system. This data is processed locally on your device to display crash information in the app's logs. It is never transmitted externally.
 
 ---
 
 ## Children's Privacy
 
-Notetaker does not knowingly collect data from children under 13. Since we collect no data at all, this concern does not apply.
+TranscribeNote does not knowingly collect data from children under 13. Since we collect no data at all, this concern does not apply.
 
 ---
 
@@ -102,4 +102,4 @@ We may update this policy when new features are added. Significant changes will 
 
 For questions about this privacy policy:
 
-- GitHub Issues: [github.com/StevenLi-phoenix/notetaker/issues](https://github.com/StevenLi-phoenix/notetaker/issues)
+- GitHub Issues: [github.com/StevenLi-phoenix/TranscribeNote/issues](https://github.com/StevenLi-phoenix/TranscribeNote/issues)
