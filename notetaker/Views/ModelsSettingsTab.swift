@@ -39,13 +39,13 @@ struct ModelsSettingsTab: View {
 
                 Divider()
 
-                HStack(spacing: DS.Spacing.sm) {
+                HStack(spacing: 1) {
                     Button {
                         addProfile()
                     } label: {
                         Image(systemName: "plus")
+                            .frame(width: 20, height: 16)
                     }
-                    .buttonStyle(.borderless)
 
                     Button {
                         if let id = selectedProfileID {
@@ -53,12 +53,13 @@ struct ModelsSettingsTab: View {
                         }
                     } label: {
                         Image(systemName: "minus")
+                            .frame(width: 20, height: 16)
                     }
-                    .buttonStyle(.borderless)
                     .disabled(selectedProfileID == nil || profiles.count <= 1)
 
                     Spacer()
                 }
+                .controlSize(.small)
                 .padding(DS.Spacing.xs)
             }
             .frame(minWidth: 140, maxWidth: 180)
@@ -208,14 +209,14 @@ struct LLMConfigSection: View {
         }
 
         if config.provider != .foundationModels {
-            SettingsSlider("Temperature", value: $config.temperature, in: 0...2, step: 0.1, format: "%.1f", valueWidth: 30)
-
-            SettingsIntSlider("Max Tokens", value: $config.maxTokens, logRange: 8...14)
-
-            Toggle("Enable Thinking", isOn: $config.thinkingEnabled)
-                .help("Allow model to use extended thinking (e.g. Qwen3 <think> blocks). Disable to save tokens on simple tasks.")
-
             DisclosureGroup("Advanced") {
+                SettingsSlider("Temperature", value: $config.temperature, in: 0...2, step: 0.1, format: "%.1f", valueWidth: 30)
+
+                SettingsIntSlider("Max Tokens", value: $config.maxTokens, logRange: 8...14)
+
+                Toggle("Enable Thinking", isOn: $config.thinkingEnabled)
+                    .help("Allow model to use extended thinking (e.g. Qwen3 <think> blocks). Disable to save tokens on simple tasks.")
+
                 TextField("Base URL", text: $config.baseURL)
                     .textFieldStyle(.roundedBorder)
                     .font(DS.Typography.caption)
