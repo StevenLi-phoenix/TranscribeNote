@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026-04-01] App Store Review Fixes (v1.0.1)
+
+- **App name unified to "TranscribeNote"**: Set PRODUCT_NAME = TranscribeNote with PRODUCT_MODULE_NAME = notetaker to preserve Swift module; updated CFBundleName, CFBundleDisplayName, TEST_HOST, and all usage description strings (microphone, speech, calendar, reminders) to use "TranscribeNote" consistently (Guideline 2.3.8)
+  Files: project.pbxproj
+
+- **China App Store compliance (Guideline 5)**: Added 4 new LLM providers with proper 备案 filing — DeepSeek (浙ICP备2023025841号), Moonshot AI (网信算备110108896786101240015号), Zhipu AI (Beijing-ChatGLM-20230821), MiniMax (沪ICP备2023003282号); each with defaultBaseURL, defaultModel, filingURL; OpenAI/Anthropic hidden in CN region via `LLMProvider.isChineseStorefront` locale detection; "Custom (OpenAI-compatible)" remains available everywhere; removed hardcoded "OpenAI, Anthropic" brand references from PrivacyDisclosureView; added `requiresAPIKey`, `isAvailableInChina`, `availableProviders` properties; all new providers route through OpenAIEngine (OpenAI-compatible APIs)
+  Files: LLMProvider.swift, LLMEngineFactory.swift, ModelsSettingsTab.swift, PrivacyDisclosureView.swift, LLMProviderTests.swift, LLMEngineFactoryTests.swift, LLMConfigCoverageTests.swift
+
 ## [2026-03-24]
 
 - Security review and fixes: resolved VAD data race (CRITICAL), multi-clip audio deletion, prompt injection mitigation, resultTask timeout cancellation, NoopASREngine thread safety, Keychain empty-key guard, migration failure cleanup, URL scheme validation, HTTP error truncation, smart retry logic, API key leak warning, and sensitive data logging cleanup

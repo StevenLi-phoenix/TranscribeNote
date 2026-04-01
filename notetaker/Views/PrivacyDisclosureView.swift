@@ -17,7 +17,7 @@ struct PrivacyDisclosureView: View {
 
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
                 disclosureSection(
-                    title: "When you configure an external LLM provider, Notetaker will send:",
+                    title: "When you configure an external LLM provider, TranscribeNote will send:",
                     items: [
                         "Transcript text from your recordings",
                         "Optional context from previous summaries"
@@ -27,8 +27,8 @@ struct PrivacyDisclosureView: View {
                 disclosureSection(
                     title: "Data is sent to:",
                     items: [
-                        "The API endpoint you configure (OpenAI, Anthropic, or custom)",
-                        "Notetaker does not collect or store your data on any server"
+                        "The API endpoint you configure (your chosen provider)",
+                        "TranscribeNote does not collect or store your data on any server"
                     ]
                 )
 

@@ -18,7 +18,7 @@ enum LLMEngineFactory {
         case .ollama: OllamaEngine(session: session)
         case .openAI: OpenAIEngine(session: session)
         case .anthropic: AnthropicEngine(session: session)
-        case .custom: OpenAIEngine(session: session)
+        case .deepSeek, .moonshot, .zhipu, .minimax, .custom: OpenAIEngine(session: session)
         }
     }
 

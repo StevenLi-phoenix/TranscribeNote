@@ -237,7 +237,7 @@ struct LLMProviderCoverageTests {
     }
 
     @Test func caseIterableCount() {
-        #expect(LLMProvider.allCases.count == 5)
+        #expect(LLMProvider.allCases.count == 9)
     }
 
     @Test func caseIterableContainsAll() {
@@ -246,6 +246,10 @@ struct LLMProviderCoverageTests {
         #expect(cases.contains(.ollama))
         #expect(cases.contains(.openAI))
         #expect(cases.contains(.anthropic))
+        #expect(cases.contains(.deepSeek))
+        #expect(cases.contains(.moonshot))
+        #expect(cases.contains(.zhipu))
+        #expect(cases.contains(.minimax))
         #expect(cases.contains(.custom))
     }
 

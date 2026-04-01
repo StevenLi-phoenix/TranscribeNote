@@ -171,23 +171,29 @@ struct LLMConfigSection: View {
 
     var body: some View {
         Picker("Provider", selection: $config.provider) {
-            ForEach(LLMProvider.allCases, id: \.self) { provider in
+            ForEach(LLMProvider.availableProviders, id: \.self) { provider in
                 Text(provider.displayName).tag(provider)
             }
         }
         .onChange(of: config.provider) { _, newProvider in
             config.baseURL = newProvider.defaultBaseURL
+            config.model = newProvider.defaultModel
         }
 
         if config.provider == .foundationModels {
             SettingsInfoLabel("Uses Apple's on-device model. No API key or network needed.", icon: "apple.intelligence")
         }
 
+        if let filingURL = config.provider.filingURL {
+            Link("Provider Filing Info (备案信息)", destination: filingURL)
+                .font(DS.Typography.caption)
+        }
+
         if config.provider != .foundationModels {
             TextField("Model", text: $config.model)
         }
 
-        if config.provider == .openAI || config.provider == .anthropic {
+        if config.provider.requiresAPIKey {
             SecureField("API Key", text: $config.apiKey)
         }
 
