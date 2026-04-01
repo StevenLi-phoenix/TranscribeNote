@@ -1,5 +1,91 @@
+import AVFoundation
 import SwiftUI
 import os
+
+// MARK: - VAD Test Runner
+
+/// Lightweight mic capture for testing VAD settings — no file I/O, no ASR forwarding.
+@Observable
+final class VADTestRunner {
+    private static let logger = Logger(subsystem: "com.notetaker", category: "VADTest")
+
+    var isRunning = false
+    var audioLevel: Float = 0
+    var vadDecision: VADDecision = .forward
+
+    private var audioEngine: AVAudioEngine?
+    private var vad: SimpleVAD?
+    private let writeQueue = DispatchQueue(label: "com.notetaker.vad-test", qos: .userInitiated)
+
+    func start(config: VADConfig) {
+        guard !isRunning else { return }
+
+        let engine = AVAudioEngine()
+        let inputNode = engine.inputNode
+        let inputFormat = inputNode.outputFormat(forBus: 0)
+
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            Self.logger.error("No audio input device for VAD test")
+            return
+        }
+
+        // Create VAD with buffer-count thresholds matching AudioCaptureService pattern
+        // ~43 buffers/sec at 1024 samples / 44.1kHz
+        let buffersPerSecond = max(1, Int(inputFormat.sampleRate / 1024))
+        vad = SimpleVAD(
+            silenceThreshold: config.silenceThreshold,
+            silenceBuffersForSuppress: buffersPerSecond * 2,
+            silenceBuffersForTimeout: nil
+        )
+
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
+            guard let self else { return }
+            self.writeQueue.async {
+                guard let channelData = buffer.floatChannelData else { return }
+                let frameCount = Int(buffer.frameLength)
+                guard frameCount > 0 else { return }
+
+                var sumOfSquares: Float = 0
+                let samples = channelData[0]
+                for i in 0..<frameCount {
+                    let sample = samples[i]
+                    sumOfSquares += sample * sample
+                }
+                let rms = sqrtf(sumOfSquares / Float(frameCount))
+                let db = 20 * log10f(max(rms, 1e-10))
+                let level = max(0, min(1, (db + 50) / 50))
+
+                let decision = self.vad?.processLevel(level) ?? .forward
+
+                Task { @MainActor in
+                    self.audioLevel = level
+                    self.vadDecision = decision
+                }
+            }
+        }
+
+        do {
+            try engine.start()
+            audioEngine = engine
+            isRunning = true
+            Self.logger.info("VAD test started")
+        } catch {
+            Self.logger.error("VAD test start failed: \(error.localizedDescription)")
+        }
+    }
+
+    func stop() {
+        guard isRunning else { return }
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine?.stop()
+        audioEngine = nil
+        vad = nil
+        isRunning = false
+        audioLevel = 0
+        vadDecision = .forward
+        Self.logger.info("VAD test stopped")
+    }
+}
 
 // MARK: - LLM Assignment Tab (assign models to roles)
 
@@ -11,11 +97,13 @@ struct LLMAssignmentTab: View {
     @State private var overallInheritsLive = false
     @State private var titleInheritsLive = true
 
+    @Environment(\.openWindow) private var openWindow
+
     var body: some View {
         SettingsGrid {
             SettingsRow("Live Model") {
                 profilePicker(selection: $liveProfileID)
-                    .help("Model for periodic summarization during recording")
+                    .help("Model used for periodic summarization during recording")
             }
 
             SettingsRow("Overall: Use Live") {
@@ -27,6 +115,7 @@ struct LLMAssignmentTab: View {
             if !overallInheritsLive {
                 SettingsRow("Overall Model") {
                     profilePicker(selection: $overallProfileID)
+                        .help("Model used for post-recording overall summary")
                 }
             }
 
@@ -39,10 +128,27 @@ struct LLMAssignmentTab: View {
             if !titleInheritsLive {
                 SettingsRow("Title Model") {
                     profilePicker(selection: $titleProfileID)
+                        .help("Model used for automatic title generation")
+                }
+            }
+
+            SettingsRow("Model Configs") {
+                HStack(spacing: DS.Spacing.sm) {
+                    let available = profiles.filter {
+                        !$0.config.provider.requiresAPIKey || !$0.config.apiKey.isEmpty
+                    }.count
+                    Text("\(available) / \(profiles.count)")
+                        .foregroundStyle(.secondary)
+                    Button("Config") {
+                        openWindow(id: "models")
+                    }
                 }
             }
         }
         .onAppear { loadAssignments() }
+        .onReceive(NotificationCenter.default.publisher(for: .llmConfigDidSave)) { _ in
+            profiles = LLMProfileStore.loadProfiles()
+        }
         .onChange(of: liveProfileID) { _, newValue in
             if let id = newValue { LLMProfileStore.setAssignedProfileID(id, for: .live) }
         }
@@ -62,7 +168,6 @@ struct LLMAssignmentTab: View {
 
     private func profilePicker(selection: Binding<UUID?>) -> some View {
         Picker("", selection: selection) {
-            Text("None").tag(nil as UUID?)
             ForEach(profiles) { profile in
                 Text("\(profile.name) (\(profile.config.model))")
                     .tag(profile.id as UUID?)
@@ -73,9 +178,9 @@ struct LLMAssignmentTab: View {
 
     private func loadAssignments() {
         profiles = LLMProfileStore.loadProfiles()
-        liveProfileID = LLMProfileStore.assignedProfileID(for: .live)
-        overallProfileID = LLMProfileStore.assignedProfileID(for: .overall)
-        titleProfileID = LLMProfileStore.assignedProfileID(for: .title)
+        liveProfileID = LLMProfileStore.assignedProfileID(for: .live) ?? profiles.first?.id
+        overallProfileID = LLMProfileStore.assignedProfileID(for: .overall) ?? profiles.first?.id
+        titleProfileID = LLMProfileStore.assignedProfileID(for: .title) ?? profiles.first?.id
         overallInheritsLive = LLMProfileStore.inheritsLive(for: .overall)
         titleInheritsLive = LLMProfileStore.inheritsLive(for: .title)
     }
@@ -105,6 +210,15 @@ struct SummarizationSettingsTab: View {
     @State private var pickerSelection: String = "auto"
     @State private var customLanguage: String = ""
 
+    private static let intervalOptions = [1, 2, 3, 5, 10, 15, 30]
+    private static let minLengthOptions = [50, 100, 150, 200, 300, 500]
+    private static let contextSizeOptions: [(label: String, value: Int)] = [
+        ("Small (2K)", 2000),
+        ("Medium (4K)", 4000),
+        ("Large (8K)", 8000),
+        ("Extra Large (16K)", 16000),
+    ]
+
     var body: some View {
         SettingsGrid {
             SettingsRow("Live Summarization") {
@@ -114,18 +228,24 @@ struct SummarizationSettingsTab: View {
             }
 
             SettingsRow("Summary Interval") {
-                Stepper(value: $config.intervalMinutes, in: 1...30) {
-                    Text("\(config.intervalMinutes) min")
-                        .monospacedDigit()
+                Picker("", selection: $config.intervalMinutes) {
+                    ForEach(Self.intervalOptions, id: \.self) { mins in
+                        Text("\(mins) min").tag(mins)
+                    }
                 }
+                .labelsHidden()
                 .disabled(!config.liveSummarizationEnabled)
+                .help("How often to generate a summary chunk during recording.")
             }
 
             SettingsRow("Min Transcript Length") {
-                Stepper(value: $config.minTranscriptLength, in: 50...500, step: 50) {
-                    Text("\(config.minTranscriptLength)")
-                        .monospacedDigit()
+                Picker("", selection: $config.minTranscriptLength) {
+                    ForEach(Self.minLengthOptions, id: \.self) { len in
+                        Text("\(len) chars").tag(len)
+                    }
                 }
+                .labelsHidden()
+                .help("Minimum transcript characters required before triggering a summary.")
             }
 
             SettingsRow("Summary Style") {
@@ -136,6 +256,7 @@ struct SummarizationSettingsTab: View {
                     Text("Lecture Notes").tag(SummaryStyle.lectureNotes)
                 }
                 .labelsHidden()
+                .help("Output format for generated summaries.")
             }
 
             SettingsRow("Overall Summary Mode") {
@@ -145,6 +266,7 @@ struct SummarizationSettingsTab: View {
                     Text("Chunk Summaries Only").tag(OverallSummaryMode.chunkSummaries)
                 }
                 .labelsHidden()
+                .help("How the overall summary is built: from raw transcript, existing chunks, or auto-detect.")
             }
 
             SettingsRow("Language") {
@@ -154,6 +276,7 @@ struct SummarizationSettingsTab: View {
                     }
                 }
                 .labelsHidden()
+                .help("Language for summary output. Auto matches the transcript language.")
                 .onChange(of: pickerSelection) { _, newValue in
                     if newValue == "custom" {
                         config.summaryLanguage = customLanguage.isEmpty ? "auto" : customLanguage
@@ -167,6 +290,7 @@ struct SummarizationSettingsTab: View {
                 SettingsRow("Custom Language") {
                     TextField("", text: $customLanguage)
                         .textFieldStyle(.roundedBorder)
+                        .help("Enter a language name, e.g. \"Portuguese\" or \"العربية\".")
                         .onChange(of: customLanguage) { _, newValue in
                             config.summaryLanguage = newValue.isEmpty ? "auto" : newValue
                         }
@@ -182,20 +306,23 @@ struct SummarizationSettingsTab: View {
             SettingsRow("Include Previous Context") {
                 Toggle("", isOn: $config.includeContext)
                     .labelsHidden()
+                    .help("Include previous chunk summaries as context for the next summary.")
             }
 
             if config.includeContext {
-                SettingsRow("Max Context Tokens") {
-                    Stepper(value: $config.maxContextTokens, in: 500...5000, step: 500) {
-                        Text("\(config.maxContextTokens)")
-                            .monospacedDigit()
+                SettingsRow("Context Size") {
+                    Picker("", selection: $config.maxContextTokens) {
+                        ForEach(Self.contextSizeOptions, id: \.value) { option in
+                            Text(option.label).tag(option.value)
+                        }
                     }
+                    .labelsHidden()
+                    .help("Max tokens of previous context to include in the prompt.")
                 }
             }
         }
         .onAppear { loadConfig() }
         .onChange(of: config) { _, newValue in saveConfig(newValue) }
-        .settingsFooter("Changes take effect after restarting the app.", icon: "arrow.clockwise")
     }
 
     private func loadConfig() {
@@ -215,6 +342,7 @@ struct SummarizationSettingsTab: View {
         guard let data = try? JSONEncoder().encode(config),
               let json = String(data: data, encoding: .utf8) else { return }
         summarizerConfigJSON = json
+        NotificationCenter.default.post(name: .summarizerConfigDidSave, object: nil)
     }
 }
 
@@ -224,6 +352,11 @@ struct RecordingSettingsTab: View {
     @AppStorage("vadConfigJSON") private var vadConfigJSON: String = ""
     @AppStorage("soundEffectsEnabled") private var soundEffectsEnabled: Bool = true
     @State private var config: VADConfig = .default
+    @State private var vadTest = VADTestRunner()
+
+    private static let timeoutOptions: [(label: String, value: Int)] = [
+        ("30s", 30), ("1 min", 60), ("2 min", 120), ("5 min", 300), ("10 min", 600),
+    ]
 
     var body: some View {
         SettingsGrid {
@@ -240,14 +373,49 @@ struct RecordingSettingsTab: View {
             }
 
             SettingsRow("Silence Threshold") {
-                Stepper(value: Binding(
-                    get: { Double(config.silenceThreshold) },
-                    set: { config.silenceThreshold = Float($0) }
-                ), in: 0.01...0.30, step: 0.01) {
+                HStack {
+                    Slider(
+                        value: Binding(
+                            get: { Double(config.silenceThreshold) },
+                            set: { config.silenceThreshold = Float($0) }
+                        ),
+                        in: 0.01...0.30,
+                        step: 0.01
+                    )
                     Text(String(format: "%.2f", config.silenceThreshold))
                         .monospacedDigit()
+                        .frame(width: 36, alignment: .trailing)
                 }
                 .disabled(!config.vadEnabled)
+                .help("Audio level below this value is treated as silence. Lower = more sensitive.")
+            }
+
+            // VAD Test
+            SettingsRow("Test VAD") {
+                VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+                    Button {
+                        if vadTest.isRunning {
+                            vadTest.stop()
+                        } else {
+                            vadTest.start(config: config)
+                        }
+                    } label: {
+                        Label(
+                            vadTest.isRunning ? "Stop Test" : "Test Microphone",
+                            systemImage: vadTest.isRunning ? "stop.fill" : "mic.fill"
+                        )
+                    }
+                    .disabled(!config.vadEnabled)
+                    .help("Test VAD with your microphone to verify threshold settings.")
+
+                    if vadTest.isRunning {
+                        VADTestView(
+                            level: vadTest.audioLevel,
+                            threshold: config.silenceThreshold,
+                            decision: vadTest.vadDecision
+                        )
+                    }
+                }
             }
 
             SettingsRow("Auto-stop on Silence") {
@@ -260,21 +428,32 @@ struct RecordingSettingsTab: View {
                 .help("Automatically stop recording after sustained silence.")
             }
 
-            if let timeout = config.silenceTimeoutSeconds {
+            if config.silenceTimeoutSeconds != nil {
                 SettingsRow("Silence Timeout") {
-                    Stepper(value: Binding(
-                        get: { timeout },
+                    Picker("", selection: Binding(
+                        get: { config.silenceTimeoutSeconds ?? 300 },
                         set: { config.silenceTimeoutSeconds = $0 }
-                    ), in: 30...600, step: 30) {
-                        Text("\(timeout)s")
-                            .monospacedDigit()
+                    )) {
+                        ForEach(Self.timeoutOptions, id: \.value) { option in
+                            Text(option.label).tag(option.value)
+                        }
                     }
+                    .labelsHidden()
                     .disabled(!config.vadEnabled)
+                    .help("How long silence must last before auto-stopping the recording.")
                 }
             }
         }
         .onAppear { loadConfig() }
-        .onChange(of: config) { _, newValue in saveConfig(newValue) }
+        .onChange(of: config) { _, newValue in
+            saveConfig(newValue)
+            // Restart test with new config if running
+            if vadTest.isRunning {
+                vadTest.stop()
+                vadTest.start(config: newValue)
+            }
+        }
+        .onDisappear { vadTest.stop() }
         .settingsFooter("Changes take effect on next recording.", icon: "arrow.clockwise")
     }
 
@@ -289,5 +468,60 @@ struct RecordingSettingsTab: View {
         guard let data = try? JSONEncoder().encode(config),
               let json = String(data: data, encoding: .utf8) else { return }
         vadConfigJSON = json
+    }
+}
+
+// MARK: - VAD Test Visualization
+
+struct VADTestView: View {
+    let level: Float
+    let threshold: Float
+    let decision: VADDecision
+
+    private var isSpeech: Bool { decision == .forward && level > 0 }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            // Audio level bar with threshold marker
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    // Background
+                    RoundedRectangle(cornerRadius: DS.Radius.xs)
+                        .fill(.quaternary)
+
+                    // Level fill — green for speech, gray for silence
+                    RoundedRectangle(cornerRadius: DS.Radius.xs)
+                        .fill(isSpeech ? DS.Colors.audioLevel : Color.secondary.opacity(0.4))
+                        .frame(width: geometry.size.width * CGFloat(max(0, min(1, level))))
+
+                    // Threshold marker line
+                    Rectangle()
+                        .fill(DS.Colors.error.opacity(0.8))
+                        .frame(width: 2)
+                        .offset(x: geometry.size.width * CGFloat(min(1, threshold)) - 1)
+                }
+            }
+            .frame(height: DS.Spacing.sm)
+            .animation(.linear(duration: 0.05), value: level)
+            .accessibilityLabel("Microphone level")
+            .accessibilityValue("\(Int(level * 100)) percent, \(isSpeech ? "speech detected" : "silence")")
+
+            // Status label
+            HStack(spacing: DS.Spacing.xs) {
+                Circle()
+                    .fill(isSpeech ? DS.Colors.success : Color.secondary)
+                    .frame(width: 8, height: 8)
+                    .accessibilityHidden(true)
+                Text(isSpeech ? "Speech" : "Silence")
+                    .font(DS.Typography.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("|\u{200B} threshold")
+                    .font(DS.Typography.caption)
+                    .foregroundStyle(DS.Colors.error.opacity(0.8))
+                    .accessibilityHidden(true)
+            }
+        }
+        .frame(maxWidth: 200)
     }
 }

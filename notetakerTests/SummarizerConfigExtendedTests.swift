@@ -23,7 +23,7 @@ struct SummarizerConfigExtendedTests {
         #expect(config.summaryLanguage == "auto")
         #expect(config.summaryStyle == .bullets)
         #expect(config.includeContext == true)
-        #expect(config.maxContextTokens == 2000)
+        #expect(config.maxContextTokens == 4000)
         #expect(config.overallSummaryMode == .auto)
     }
 

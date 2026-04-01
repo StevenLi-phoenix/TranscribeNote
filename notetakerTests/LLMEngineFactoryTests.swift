@@ -35,6 +35,30 @@ struct LLMEngineFactoryTests {
         #expect(engine is OpenAIEngine)
     }
 
+    @Test func deepSeekUsesOpenAIEngine() {
+        let config = LLMConfig(provider: .deepSeek)
+        let engine = LLMEngineFactory.create(from: config)
+        #expect(engine is OpenAIEngine)
+    }
+
+    @Test func moonshotUsesOpenAIEngine() {
+        let config = LLMConfig(provider: .moonshot)
+        let engine = LLMEngineFactory.create(from: config)
+        #expect(engine is OpenAIEngine)
+    }
+
+    @Test func zhipuUsesOpenAIEngine() {
+        let config = LLMConfig(provider: .zhipu)
+        let engine = LLMEngineFactory.create(from: config)
+        #expect(engine is OpenAIEngine)
+    }
+
+    @Test func minimaxUsesOpenAIEngine() {
+        let config = LLMConfig(provider: .minimax)
+        let engine = LLMEngineFactory.create(from: config)
+        #expect(engine is OpenAIEngine)
+    }
+
     @Test func acceptsCustomSession() {
         let sessionConfig = URLSessionConfiguration.ephemeral
         let session = URLSession(configuration: sessionConfig)

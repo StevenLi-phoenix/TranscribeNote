@@ -36,7 +36,7 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
 - `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` — all types MainActor by default; use `nonisolated` for audio/ASR/LLM classes
 - `PBXFileSystemSynchronizedRootGroup` — no pbxproj edits needed for new source files
 - `import os` provides both `Logger` AND `OSAllocatedUnfairLock` — don't remove from files using either
-- Entitlements: sandbox + audio-input + `files.user-selected.read-write` + `network.client` (LLM API calls) + `personal-information.calendars` (calendar import); Screen Recording permission (TCC) required for system audio capture via ScreenCaptureKit
+- Entitlements: sandbox + audio-input + `files.user-selected.read-write` + `network.client` (LLM API calls) + `personal-information.calendars` (calendar import)
 
 ### SwiftData & SwiftUI
 - SwiftData persistence with `@Model` classes (`RecordingSession`, `TranscriptSegment`, `SummaryBlock`)
@@ -142,27 +142,6 @@ xcodebuild -scheme notetaker -configuration Debug -only-testing:notetakerUITests
   - **V7**: Adds `ActionItem` model and `actionItems: [ActionItem] = []` relationship on `RecordingSession`
   - **V8**: Adds `structuredContent: String? = nil` to SummaryBlock for structured summary output (JSON-encoded `StructuredSummary`)
 
-### System Audio Capture
-- **`SystemAudioCaptureService`**: `nonisolated final class: @unchecked Sendable` using `SCStream` (ScreenCaptureKit) for capturing system audio output (Zoom/Meet/Teams)
-- `AudioSource` enum: `.microphone` (default), `.systemAudio`, `.both` — stored in `@AppStorage("audioSource")`
-- Requires Screen Recording permission (TCC); `checkPermission()` via `SCShareableContent` enumeration
-- Minimal video config (2x2px, 1fps) since only audio needed; `excludesCurrentProcessAudio = true` prevents feedback
-- `CMSampleBuffer` → `AVAudioPCMBuffer` conversion handles both Float32 and Int16 formats
-- Audio buffers forwarded to same `ASREngine.appendAudioBuffer()` as microphone
-- `OSAllocatedUnfairLock<State>` protects stream/callbacks from data races (same pattern as `AudioCaptureService`)
-
-### Spotlight & Handoff
-- **`SpotlightIndexer`**: `nonisolated final class: @unchecked Sendable` indexing sessions via CoreSpotlight (`CSSearchableIndex`); `SpotlightSessionData` Sendable struct for cross-isolation data transfer; indexed after persist + after summary/title generation; deindexed on delete
-- **`HandoffService`**: `nonisolated enum` managing `NSUserActivity` for Handoff + Spotlight search; `viewSessionActivityType` + `activeRecordingActivityType`; `SessionDetailView` uses `.userActivity()` modifier; `AppDelegate.application(_:continue:restorationHandler:)` handles incoming Handoff
-- `Info.plist` registers `NSUserActivityTypes` array for Handoff
-
-### Diagnostics & Settings
-- **`DiagnosticsCollector`**: `nonisolated enum` collecting hardware (RAM, CPU, OS), storage (DB + audio), LLM config, audio pipeline, crash log status; `exportReport()` generates clipboard-friendly text
-- **`DiagnosticsTab`**: Settings tab with card-based sections, export button, crash log viewer
-- **`ModelRecommendation`**: `nonisolated enum` with hardware-aware model recommendations; `modelsForMemory()` filters by 70% RAM headroom; Qwen 3.5 catalog (9B/27B/35B)
-- **`FocusModeService`**: `nonisolated enum` using `INFocusStatusCenter` to check Focus/DND status; `FocusReminderBanner` shown on recording start when Focus is off; `@AppStorage("focusReminderEnabled")` toggle
-- **`MeetingRecapFormatter`**: `nonisolated enum` formatting session data into structured email body; `RecapData` Sendable carrier; `mailtoURL()` for opening default mail client; `MeetingRecapSheet` with copy + email actions
-- **`WaveformExtractor`**: `nonisolated enum` extracting downsampled RMS waveform from `AVAudioFile`; `WaveformView` uses SwiftUI `Canvas` with played/unplayed coloring, playhead, drag-to-seek
 
 ## Architecture
 

@@ -23,6 +23,7 @@ nonisolated final class SummarizerService: @unchecked Sendable {
                 Self.logger.info("\(label) succeeded on attempt \(attempt + 1) (\(trimmedContent.count) chars)")
                 if let usage = result.usage {
                     Self.logger.info("\(label) tokens: input=\(usage.inputTokens) output=\(usage.outputTokens) cache_create=\(usage.cacheCreationTokens) cache_read=\(usage.cacheReadTokens)")
+                    LLMProfileStore.recordUsageForConfig(llmConfig, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens)
                 }
                 return LLMMessage(role: .assistant, content: trimmedContent, usage: result.usage)
             } catch is CancellationError {
@@ -60,6 +61,7 @@ nonisolated final class SummarizerService: @unchecked Sendable {
                 Self.logger.info("\(label) succeeded on attempt \(attempt + 1) (\(result.data.count) bytes)")
                 if let usage = result.usage {
                     Self.logger.info("\(label) tokens: input=\(usage.inputTokens) output=\(usage.outputTokens) cache_create=\(usage.cacheCreationTokens) cache_read=\(usage.cacheReadTokens)")
+                    LLMProfileStore.recordUsageForConfig(llmConfig, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens)
                 }
                 return result
             } catch is CancellationError {

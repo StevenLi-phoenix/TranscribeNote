@@ -18,13 +18,19 @@ struct SessionDetailView: View {
     @State private var summaryTask: Task<Void, Never>?
     @State private var summaryProgress: String?
     @State private var scrollToTime: TimeInterval?
+    @State private var lastScrolledSegmentID: UUID?
+    @State private var activeChunkID: PersistentIdentifier?
+    @State private var scrollToChunkID: PersistentIdentifier?
+    @AppStorage("autoScrollDuringPlayback") private var autoScrollDuringPlayback = true
     @State private var refreshTimer: Timer?
     @State private var isExportingAudio = false
-    @AppStorage("overallSummaryCollapsed") private var overallCollapsed = false
-    @AppStorage("overallSummaryHeight") private var overallHeight: Double = 300
-    @AppStorage("chunkSummariesHidden") private var chunkSummariesHidden = false
+    @AppStorage("sessionDetailTab") private var selectedTab = 0
     @State private var showActionItemsPopover = false
     @State private var exportSuccessMessage: String?
+    @State private var overallSummary: SummaryBlock?
+    @State private var chunkSummaries: [SummaryBlock] = []
+    @State private var sortedActionItems: [ActionItem] = []
+    @State private var hasAudioFiles = false
     @AppStorage("chatPanelOpen") private var isChatOpen = false
     @AppStorage("chatPanelMode") private var chatPanelModeRaw = "inline"
     @AppStorage("chatPanelWidth") private var chatPanelWidth: Double = 320
@@ -35,6 +41,7 @@ struct SessionDetailView: View {
     var body: some View {
         if isLoading {
             ProgressView()
+                .accessibilityLabel("Loading session")
                 .onAppear { fetchSession() }
         } else if let session {
             HStack(spacing: 0) {
@@ -60,6 +67,7 @@ struct SessionDetailView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
+                .accessibilityElement(children: .combine)
                 .toolbar {
                     ToolbarItemGroup {
                         Button {
@@ -108,7 +116,7 @@ struct SessionDetailView: View {
                             .disabled(sortedSegments.isEmpty)
                         }
 
-                        if session.audioFileURLs.contains(where: { FileManager.default.fileExists(atPath: $0.path) }) {
+                        if hasAudioFiles {
                             if isExportingAudio {
                                 ProgressView()
                                     .controlSize(.small)
@@ -122,16 +130,16 @@ struct SessionDetailView: View {
                             }
                         }
 
-                        if !session.actionItems.isEmpty {
+                        if !sortedActionItems.isEmpty {
                             Button {
                                 showActionItemsPopover.toggle()
                             } label: {
-                                Label("Action Items (\(session.actionItems.count))", systemImage: "checklist.checked")
+                                Label("Action Items (\(sortedActionItems.count))", systemImage: "checklist.checked")
                             }
                             .help("View extracted action items")
                             .popover(isPresented: $showActionItemsPopover, arrowEdge: .bottom) {
                                 ActionItemListView(
-                                    actionItems: session.actionItems.sorted { $0.createdAt < $1.createdAt },
+                                    actionItems: sortedActionItems,
                                     sessionTitle: session.title,
                                     onExportReminders: { exportActionItemsToReminders() },
                                     onExportCalendar: { exportActionItemsToCalendar() }
@@ -176,90 +184,33 @@ struct SessionDetailView: View {
                     PlaybackControlView(service: playbackService)
                 }
 
-                // Overall summary (collapsible + resizable)
-                if let overall = session.summaries.first(where: { $0.isOverall }) {
-                    Divider()
-                    VStack(spacing: 0) {
-                        Button {
-                            withAnimation { overallCollapsed.toggle() }
-                        } label: {
-                            HStack(spacing: DS.Spacing.xs) {
-                                Image(systemName: overallCollapsed ? "chevron.right" : "chevron.down")
-                                    .font(DS.Typography.caption)
-                                    .frame(width: 12)
-                                Text("Overall Summary")
-                                    .font(DS.Typography.sectionHeader)
-                                Spacer()
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.horizontal)
-                        .padding(.vertical, DS.Spacing.xs)
-
-                        if !overallCollapsed {
-                            ScrollView {
-                                SummaryCardView(
-                                    block: overall,
-                                    onSave: { newContent in
-                                        saveEditedSummary(block: overall, content: newContent)
-                                    },
-                                    onRegenerate: { instructions in
-                                        regenerateSummary(block: overall, instructions: instructions)
-                                    }
-                                )
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal)
-                                .padding(.vertical, DS.Spacing.xs)
-                            }
-                            .frame(maxHeight: overallHeight)
-
-                            ResizeHandle(height: $overallHeight, minHeight: 80, maxHeight: 600)
-                        }
-                    }
-                }
-
+                // Subtab picker: Summary / Transcript
                 Divider()
-
-                // Transcript with optional inline chunk summaries
-                if sortedSegments.isEmpty {
-                    ContentUnavailableView(
-                        "No Transcript",
-                        systemImage: "text.bubble",
-                        description: Text("This session has no transcript segments")
-                    )
-                    .frame(maxHeight: .infinity)
-                } else {
-                    // Chunk summaries toggle (only shown when chunk summaries exist)
-                    if session.summaries.contains(where: { !$0.isOverall }) {
-                        HStack {
-                            Spacer()
-                            Button {
-                                withAnimation { chunkSummariesHidden.toggle() }
-                            } label: {
-                                Label(
-                                    chunkSummariesHidden ? "Show Summaries" : "Hide Summaries",
-                                    systemImage: chunkSummariesHidden ? "eye.slash" : "eye"
-                                )
-                                .font(DS.Typography.caption)
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal)
-                            .padding(.vertical, DS.Spacing.xxs)
-                        }
-                    }
-
-                    TranscriptView(
-                        segments: sortedSegments,
-                        partialText: "",
-                        summaries: chunkSummariesHidden ? [] : session.summaries.filter { !$0.isOverall },
-                        scrollToTime: $scrollToTime
-                    )
+                Picker(selection: $selectedTab) {
+                    Text("Summary").tag(0)
+                    Text("Transcript").tag(1)
+                } label: {
+                    EmptyView()
                 }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+                .padding(.vertical, DS.Spacing.xs)
+                .accessibilityLabel("Session view")
+                .animation(.easeInOut(duration: 0.25), value: selectedTab)
+
+                ZStack {
+                    if selectedTab == 0 {
+                        summaryTabContent
+                            .transition(.move(edge: .leading))
+                    } else {
+                        transcriptTabContent
+                            .transition(.move(edge: .trailing))
+                    }
+                }
+                .animation(.easeInOut(duration: 0.25), value: selectedTab)
 
             }
-            .frame(minWidth: 300, maxWidth: .infinity)
+            .frame(minWidth: 50, maxWidth: .infinity)
             .layoutPriority(1)
             .overlay(alignment: .bottomTrailing) {
                 if isInlineChat && detailWidth < DS.Layout.narrowWindowThreshold {
@@ -305,6 +256,36 @@ struct SessionDetailView: View {
                 guard playbackService.duration > 0 else { return }
                 playbackService.seek(to: playbackService.currentTime - 15)
             }
+            .onChange(of: selectedTab) { _, newTab in
+                guard autoScrollDuringPlayback, playbackService.isPlaying else { return }
+                let time = playbackService.currentTime
+                if newTab == 1 {
+                    let seg = sortedSegments.last { $0.startTime <= time }
+                    lastScrolledSegmentID = seg?.id
+                    if let seg { scrollToTime = seg.startTime }
+                } else if newTab == 0 {
+                    let chunk = chunkSummaries.last { $0.coveringFrom <= time }
+                    activeChunkID = chunk?.persistentModelID
+                    scrollToChunkID = chunk?.persistentModelID
+                }
+            }
+            .onChange(of: playbackService.currentTime) { _, newTime in
+                guard autoScrollDuringPlayback, playbackService.isPlaying else { return }
+                if selectedTab == 1 {
+                    let currentSegment = sortedSegments.last { $0.startTime <= newTime }
+                    guard let currentSegment, currentSegment.id != lastScrolledSegmentID else { return }
+                    lastScrolledSegmentID = currentSegment.id
+                    scrollToTime = currentSegment.startTime
+                } else if selectedTab == 0 {
+                    let currentChunk = chunkSummaries.last { $0.coveringFrom <= newTime }
+                    let chunkPID = currentChunk?.persistentModelID
+                    guard chunkPID != activeChunkID else { return }
+                    activeChunkID = chunkPID
+                    if let chunkPID {
+                        scrollToChunkID = chunkPID
+                    }
+                }
+            }
             .onAppear {
                 loadAudio(for: session)
                 startRefreshTimerIfNeeded()
@@ -315,11 +296,18 @@ struct SessionDetailView: View {
                 refreshTimer?.invalidate()
                 refreshTimer = nil
                 sortedSegments = []
+                overallSummary = nil
+                chunkSummaries = []
+                sortedActionItems = []
+                hasAudioFiles = false
                 isLoading = true
                 isGeneratingSummary = false
                 summaryGenerationError = nil
                 summaryProgress = nil
                 scrollToTime = nil
+                lastScrolledSegmentID = nil
+                activeChunkID = nil
+                scrollToChunkID = nil
                 showActionItemsPopover = false
                 exportSuccessMessage = nil
                 fetchSession()
@@ -361,6 +349,92 @@ struct SessionDetailView: View {
         }
     }
 
+    // MARK: - Tab Content
+
+    @ViewBuilder
+    private var summaryTabContent: some View {
+        if overallSummary == nil && chunkSummaries.isEmpty {
+            ContentUnavailableView(
+                "No Summaries",
+                systemImage: "text.badge.star",
+                description: Text("Generate a summary from the toolbar")
+            )
+            .frame(maxHeight: .infinity)
+        } else {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: DS.Spacing.md) {
+                        if let overall = overallSummary {
+                            Text("Overall Summary")
+                                .font(DS.Typography.sectionHeader)
+                                .padding(.horizontal)
+                            SummaryCardView(
+                                block: overall,
+                                onSave: { newContent in
+                                    saveEditedSummary(block: overall, content: newContent)
+                                },
+                                onRegenerate: { instructions in
+                                    regenerateSummary(block: overall, instructions: instructions)
+                                }
+                            )
+                            .padding(.horizontal)
+                        }
+
+                        if !chunkSummaries.isEmpty {
+                            Text("Chunk Summaries")
+                                .font(DS.Typography.sectionHeader)
+                                .padding(.horizontal)
+                            ForEach(chunkSummaries.sorted(by: { $0.coveringFrom < $1.coveringFrom })) { chunk in
+                                SummaryCardView(
+                                    block: chunk,
+                                    onSave: { newContent in
+                                        saveEditedSummary(block: chunk, content: newContent)
+                                    },
+                                    onRegenerate: { instructions in
+                                        regenerateSummary(block: chunk, instructions: instructions)
+                                    }
+                                )
+                                .id(chunk.persistentModelID)
+                                .opacity(!playbackService.isPlaying || activeChunkID == nil || chunk.persistentModelID == activeChunkID ? 1.0 : 0.35)
+                                .animation(.easeInOut(duration: 0.2), value: activeChunkID)
+                                .animation(.easeInOut(duration: 0.2), value: playbackService.isPlaying)
+                                .padding(.horizontal)
+                            }
+                        }
+                    }
+                    .padding(.vertical, DS.Spacing.sm)
+                }
+                .onChange(of: scrollToChunkID) { _, chunkID in
+                    guard let chunkID else { return }
+                    withAnimation {
+                        proxy.scrollTo(chunkID, anchor: .top)
+                    }
+                    scrollToChunkID = nil
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var transcriptTabContent: some View {
+        if sortedSegments.isEmpty {
+            ContentUnavailableView(
+                "No Transcript",
+                systemImage: "text.bubble",
+                description: Text("This session has no transcript segments")
+            )
+            .frame(maxHeight: .infinity)
+        } else {
+            TranscriptView(
+                segments: sortedSegments,
+                partialText: "",
+                summaries: [],
+                scrollToTime: $scrollToTime,
+                activeSegmentID: playbackService.isPlaying ? lastScrolledSegmentID : nil
+            )
+        }
+    }
+
     private func fetchSession() {
         let id = sessionID
         let predicate = #Predicate<RecordingSession> { $0.id == id }
@@ -370,7 +444,20 @@ struct SessionDetailView: View {
             fetchError = nil
             if let session {
                 sortedSegments = session.segments.sorted { $0.startTime < $1.startTime }
-                loadAudio(for: session)
+                // Pre-compute summary classifications in one pass
+                var overall: SummaryBlock?
+                var chunks: [SummaryBlock] = []
+                for summary in session.summaries {
+                    if summary.isOverall {
+                        overall = summary
+                    } else {
+                        chunks.append(summary)
+                    }
+                }
+                overallSummary = overall
+                chunkSummaries = chunks
+                sortedActionItems = session.actionItems.sorted { $0.createdAt < $1.createdAt }
+                hasAudioFiles = session.audioFileURLs.contains { FileManager.default.fileExists(atPath: $0.path) }
                 chatViewModel?.configure(sessionID: sessionID, segments: sortedSegments)
                 chatWindowController?.updateTitle(session.title)
             }

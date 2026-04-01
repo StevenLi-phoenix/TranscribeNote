@@ -11,8 +11,8 @@ nonisolated final class ChatService: @unchecked Sendable {
     private let lock = NSLock()
     private var _conversationHistory: [ChatMessage] = []
 
-    /// Maximum character count for transcript in system prompt (~15K tokens).
-    static let maxTranscriptCharacters = 60_000
+    /// Fallback maximum character count for transcript in system prompt (~15K tokens).
+    static let defaultMaxTranscriptCharacters = 60_000
     /// Maximum number of user/assistant message pairs to retain.
     static let maxConversationPairs = 10
 
@@ -34,13 +34,15 @@ nonisolated final class ChatService: @unchecked Sendable {
         let userMessage = ChatMessage(role: .user, content: userText)
         lock.withLock { _conversationHistory.append(userMessage) }
 
-        let llmMessages = buildMessages(segments: segments)
-        Self.logger.info("Chat request: \(llmMessages.count) messages, transcript segments: \(segments.count)")
+        let maxChars = llmConfig.provider.maxInputCharacters
+        let llmMessages = buildMessages(segments: segments, maxTranscriptCharacters: maxChars)
+        Self.logger.info("Chat request: \(llmMessages.count) messages, transcript segments: \(segments.count), maxChars: \(maxChars)")
 
         let response = try await engine.generate(messages: llmMessages, config: llmConfig)
 
         if let usage = response.usage {
             Self.logger.info("Chat tokens — input: \(usage.inputTokens), output: \(usage.outputTokens)")
+            LLMProfileStore.recordUsageForConfig(llmConfig, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens)
         }
 
         let assistantMessage = ChatMessage(role: .assistant, content: response.content.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -58,11 +60,11 @@ nonisolated final class ChatService: @unchecked Sendable {
     // MARK: - Internal
 
     /// Build the full LLMMessage array for the engine.
-    func buildMessages(segments: [TranscriptSegment]) -> [LLMMessage] {
+    func buildMessages(segments: [TranscriptSegment], maxTranscriptCharacters: Int = defaultMaxTranscriptCharacters) -> [LLMMessage] {
         var messages: [LLMMessage] = []
 
         // System prompt with transcript context (stable across conversation, cache candidate)
-        let transcript = Self.formatTranscript(segments: segments)
+        let transcript = Self.formatTranscript(segments: segments, maxCharacters: maxTranscriptCharacters)
         let systemPrompt = Self.buildSystemPrompt(transcript: transcript)
         messages.append(LLMMessage(role: .system, content: systemPrompt, cacheHint: true))
 
@@ -80,7 +82,7 @@ nonisolated final class ChatService: @unchecked Sendable {
     /// Format transcript segments as `[MM:SS] text`, with truncation for long transcripts.
     static func formatTranscript(
         segments: [TranscriptSegment],
-        maxCharacters: Int = maxTranscriptCharacters
+        maxCharacters: Int = defaultMaxTranscriptCharacters
     ) -> String {
         guard !segments.isEmpty else { return "" }
 

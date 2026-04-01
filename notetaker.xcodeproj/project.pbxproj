@@ -24,7 +24,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		B52291702F3D448F005D1EBC /* notetaker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = notetaker.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B52291702F3D448F005D1EBC /* notetaker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = notetaker.app; path = TranscribeNote.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B522917D2F3D4491005D1EBC /* notetakerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = notetakerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B52291872F3D4491005D1EBC /* notetakerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = notetakerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -424,20 +424,22 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = TranscribeNote;
+				INFOPLIST_KEY_CFBundleName = TranscribeNote;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-				INFOPLIST_KEY_NSCalendarsUsageDescription = "Notetaker reads your calendar to auto-schedule recordings for meetings.";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "TranscribeNote reads your calendar to auto-schedule recordings for meetings.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "notetaker needs microphone access to record and transcribe audio.";
-				INFOPLIST_KEY_NSRemindersUsageDescription = "Notetaker exports action items to Reminders so you can track follow-ups.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "notetaker uses speech recognition to transcribe audio in real time.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "TranscribeNote needs microphone access to record and transcribe audio.";
+				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "TranscribeNote exports action items to Reminders so you can track follow-ups.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "TranscribeNote uses speech recognition to transcribe audio in real time.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.stevenli.notetaker;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_MODULE_NAME = notetaker;
+				PRODUCT_NAME = TranscribeNote;
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -464,20 +466,22 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = TranscribeNote;
+				INFOPLIST_KEY_CFBundleName = TranscribeNote;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-				INFOPLIST_KEY_NSCalendarsUsageDescription = "Notetaker reads your calendar to auto-schedule recordings for meetings.";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "TranscribeNote reads your calendar to auto-schedule recordings for meetings.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "notetaker needs microphone access to record and transcribe audio.";
-				INFOPLIST_KEY_NSRemindersUsageDescription = "Notetaker exports action items to Reminders so you can track follow-ups.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "notetaker uses speech recognition to transcribe audio in real time.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "TranscribeNote needs microphone access to record and transcribe audio.";
+				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "TranscribeNote exports action items to Reminders so you can track follow-ups.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "TranscribeNote uses speech recognition to transcribe audio in real time.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.stevenli.notetaker;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_MODULE_NAME = notetaker;
+				PRODUCT_NAME = TranscribeNote;
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -505,7 +509,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/notetaker.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/notetaker";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TranscribeNote.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TranscribeNote";
 			};
 			name = Debug;
 		};
@@ -526,7 +530,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/notetaker.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/notetaker";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TranscribeNote.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TranscribeNote";
 			};
 			name = Release;
 		};

@@ -7,6 +7,16 @@ nonisolated struct LLMModelProfile: Codable, Identifiable, Sendable, Equatable {
     var id: UUID
     var name: String
     var config: LLMConfig
+    /// When the last connection test was run. nil = never tested.
+    var lastTestedAt: Date? = nil
+    /// Result of the last connection test. nil = never tested.
+    var lastTestPassed: Bool? = nil
+    /// Cumulative input tokens used across all LLM calls (prompts).
+    var totalInputTokens: Int = 0
+    /// Cumulative output tokens generated across all LLM calls (completions).
+    var totalOutputTokens: Int = 0
+    /// Total number of successful LLM requests made with this profile.
+    var totalRequests: Int = 0
 
     init(id: UUID = UUID(), name: String, config: LLMConfig = .default) {
         self.id = id
@@ -104,6 +114,33 @@ enum LLMProfileStore {
             saveProfiles(profiles, defaults: defaults)
             logger.info("Deleted profile '\(profile.name)' (\(id))")
         }
+    }
+
+    // MARK: - Usage & Test Recording
+
+    /// Persist the result of a connection test for a profile.
+    static func recordTestResult(profileID: UUID, passed: Bool, defaults: UserDefaults = .standard) {
+        var profiles = loadProfiles(defaults: defaults)
+        guard let index = profiles.firstIndex(where: { $0.id == profileID }) else { return }
+        profiles[index].lastTestedAt = Date()
+        profiles[index].lastTestPassed = passed
+        saveProfiles(profiles, defaults: defaults)
+        logger.debug("Recorded test result for profile \(profileID): \(passed ? "passed" : "failed")")
+    }
+
+    /// Accumulate token usage for whichever profile matches the given config.
+    /// Matches on provider + model + baseURL. No-op if no match found.
+    static func recordUsageForConfig(_ config: LLMConfig, inputTokens: Int, outputTokens: Int, defaults: UserDefaults = .standard) {
+        var profiles = loadProfiles(defaults: defaults)
+        guard let index = profiles.firstIndex(where: {
+            $0.config.provider == config.provider &&
+            $0.config.model == config.model &&
+            $0.config.baseURL == config.baseURL
+        }) else { return }
+        profiles[index].totalInputTokens += inputTokens
+        profiles[index].totalOutputTokens += outputTokens
+        profiles[index].totalRequests += 1
+        saveProfiles(profiles, defaults: defaults)
     }
 
     // MARK: - Role Assignment

@@ -354,4 +354,30 @@ nonisolated final class OpenAIEngine: LLMEngine, @unchecked Sendable {
         }
     }
 
+    func listModels(config: LLMConfig) async throws -> [String] {
+        let baseURL = try LLMHTTPHelpers.validateBaseURL(
+            config.baseURL.isEmpty ? "https://api.openai.com/v1" : config.baseURL
+        )
+        guard let url = URL(string: "\(baseURL)/models") else {
+            throw LLMEngineError.invalidURL("\(baseURL)/models")
+        }
+        var request = URLRequest(url: url)
+        if !config.apiKey.isEmpty {
+            request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+        }
+        let (data, response) = try await LLMHTTPHelpers.performRequest(request, session: session)
+        try LLMHTTPHelpers.validateHTTPResponse(response, data: data)
+        let modelsResponse = try LLMHTTPHelpers.decodeResponse(OpenAIModelsResponse.self, from: data)
+        let models = modelsResponse.data.map(\.id).sorted()
+        Self.logger.info("OpenAI-compatible listed \(models.count) models")
+        return models
+    }
+
+}
+
+private struct OpenAIModelsResponse: Decodable {
+    struct Model: Decodable {
+        let id: String
+    }
+    let data: [Model]
 }

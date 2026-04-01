@@ -4,6 +4,7 @@ struct PrivacyDisclosureView: View {
     static let privacyPolicyURL = URL(string: "https://github.com/StevenLi-phoenix/notetaker/blob/main/docs/PRIVACY_POLICY.md")!
 
     let onDismiss: () -> Void
+    var onDecline: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: DS.Spacing.xl) {
@@ -17,7 +18,7 @@ struct PrivacyDisclosureView: View {
 
             VStack(alignment: .leading, spacing: DS.Spacing.md) {
                 disclosureSection(
-                    title: "When you configure an external LLM provider, Notetaker will send:",
+                    title: "When you configure an external LLM provider, TranscribeNote will send:",
                     items: [
                         "Transcript text from your recordings",
                         "Optional context from previous summaries"
@@ -27,8 +28,8 @@ struct PrivacyDisclosureView: View {
                 disclosureSection(
                     title: "Data is sent to:",
                     items: [
-                        "The API endpoint you configure (OpenAI, Anthropic, or custom)",
-                        "Notetaker does not collect or store your data on any server"
+                        "The API endpoint you configure (your chosen provider)",
+                        "TranscribeNote does not collect or store your data on any server"
                     ]
                 )
 
@@ -46,11 +47,20 @@ struct PrivacyDisclosureView: View {
             .background(Color.secondary.opacity(0.1))
             .clipShape(RoundedRectangle(cornerRadius: DS.Radius.md))
 
-            Button("I Understand") {
-                onDismiss()
+            HStack(spacing: DS.Spacing.md) {
+                if let onDecline {
+                    Button("Decline") {
+                        onDecline()
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                Button("I Understand") {
+                    onDismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
             }
-            .buttonStyle(.borderedProminent)
-            .keyboardShortcut(.defaultAction)
 
             Link("View Full Privacy Policy",
                  destination: Self.privacyPolicyURL)

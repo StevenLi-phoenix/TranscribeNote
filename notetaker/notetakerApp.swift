@@ -11,6 +11,8 @@ extension Notification.Name {
     static let seekForwardLong = Notification.Name("notetaker.seekForwardLong")
     static let seekBackwardLong = Notification.Name("notetaker.seekBackwardLong")
     static let toggleCommandPalette = Notification.Name("notetaker.toggleCommandPalette")
+    static let showWelcomeGuide = Notification.Name("notetaker.showWelcomeGuide")
+    static let showPrivacyDisclosure = Notification.Name("notetaker.showPrivacyDisclosure")
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -118,6 +120,9 @@ struct notetakerApp: App {
                     .onAppear {
                         schedulerViewModel.load(context: sharedModelContainer.mainContext)
                     }
+                    .task {
+                        await LLMProvider.refreshStorefrontStatus()
+                    }
             } else {
                 VStack(spacing: DS.Spacing.md) {
                     Image(systemName: "exclamationmark.triangle")
@@ -145,6 +150,12 @@ struct notetakerApp: App {
             menuBarIcon
         }
 
+        Window("Models", id: "models") {
+            ModelsSettingsTab()
+                .frame(width: 600, height: 600)
+        }
+        .windowResizability(.contentSize)
+
         Settings {
             SettingsView()
         }
@@ -167,8 +178,11 @@ struct notetakerApp: App {
                 }
 
                 Button("Data Usage Information") {
-                    // Reset disclosure flag so the sheet re-appears on next Settings open
-                    UserDefaults.standard.set(false, forKey: "hasShownPrivacyDisclosure")
+                    NotificationCenter.default.post(name: .showPrivacyDisclosure, object: nil)
+                }
+
+                Button("Welcome Guide") {
+                    NotificationCenter.default.post(name: .showWelcomeGuide, object: nil)
                 }
             }
 

@@ -19,6 +19,7 @@ struct PlaybackControlView: View {
             Text((isSeeking ? seekValue : service.currentTime).mmss)
                 .font(ControlBarMetrics.timeFont)
                 .frame(minWidth: ControlBarMetrics.timeMinWidth, alignment: .trailing)
+                .accessibilityHidden(true)
 
             Slider(
                 value: Binding(
@@ -33,10 +34,13 @@ struct PlaybackControlView: View {
                     }
                 }
             )
+            .accessibilityLabel("Playback position")
+            .accessibilityValue("\(service.currentTime.mmss) of \(service.duration.mmss)")
 
             Text(service.duration.mmss)
                 .font(ControlBarMetrics.timeFont)
                 .frame(minWidth: ControlBarMetrics.timeMinWidth, alignment: .leading)
+                .accessibilityHidden(true)
         }
         .padding(.horizontal)
         .padding(.vertical, DS.Spacing.sm)

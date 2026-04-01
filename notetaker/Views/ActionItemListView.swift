@@ -31,6 +31,7 @@ struct ActionItemListView: View {
                     .padding(.vertical, DS.Spacing.xxs)
                     .background(.quaternary)
                     .clipShape(Capsule())
+                    .accessibilityHidden(true)
 
                 Spacer()
 
@@ -58,6 +59,7 @@ struct ActionItemListView: View {
                         .font(DS.Typography.caption)
                         .foregroundStyle(.secondary)
                 }
+                .accessibilityLabel("Export action items")
                 .menuStyle(.borderlessButton)
                 .frame(width: 20)
             }
@@ -111,6 +113,7 @@ struct ActionItemListView: View {
                     .font(DS.Typography.body)
             }
             .buttonStyle(.plain)
+            .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: DS.Spacing.xxs) {
                 Text(item.content)
@@ -136,6 +139,13 @@ struct ActionItemListView: View {
         }
         .padding(.vertical, DS.Spacing.xxs)
         .padding(.horizontal, DS.Spacing.sm)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(actionItemAccessibilityLabel(for: item))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(named: item.isCompleted ? "Mark as Incomplete" : "Mark as Complete") {
+            item.isCompleted.toggle()
+            modelContext.saveQuietly()
+        }
         .contextMenu {
             if item.dueDate == nil {
                 Button("Set Due Date to Tomorrow") {
@@ -158,6 +168,18 @@ struct ActionItemListView: View {
                 modelContext.saveQuietly()
             }
         }
+    }
+
+    private func actionItemAccessibilityLabel(for item: ActionItem) -> String {
+        var parts = [item.content]
+        if item.isCompleted { parts.append("Completed") }
+        if let assignee = item.assignee, !assignee.isEmpty { parts.append("Assigned to \(assignee)") }
+        if let dueDate = item.dueDate {
+            let formatted = dueDate.formatted(date: .abbreviated, time: .omitted)
+            let overdue = dueDate < Date() && !item.isCompleted
+            parts.append(overdue ? "Overdue, due \(formatted)" : "Due \(formatted)")
+        }
+        return parts.joined(separator: ". ")
     }
 
     private func copyAsMarkdown() {

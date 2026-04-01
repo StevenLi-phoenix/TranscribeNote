@@ -196,6 +196,9 @@ struct TranscriptExporterExtendedTests {
     // MARK: - copyToClipboard extended tests
 
     @Test func copyToClipboardWithNoTitle() {
+        let saved = NSPasteboard.general.string(forType: .string)
+        defer { restorePasteboard(saved) }
+
         let segments = [
             TranscriptSegment(startTime: 0.0, endTime: 5.0, text: "No title copy"),
         ]
@@ -206,7 +209,9 @@ struct TranscriptExporterExtendedTests {
     }
 
     @Test func copyToClipboardEmptySegments() {
-        // First set something so we can verify it gets replaced
+        let saved = NSPasteboard.general.string(forType: .string)
+        defer { restorePasteboard(saved) }
+
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString("previous content", forType: .string)
 
@@ -217,7 +222,9 @@ struct TranscriptExporterExtendedTests {
     }
 
     @Test func copyToClipboardOverwritesPreviousContent() {
-        // Set initial content
+        let saved = NSPasteboard.general.string(forType: .string)
+        defer { restorePasteboard(saved) }
+
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString("old content", forType: .string)
 
@@ -232,6 +239,9 @@ struct TranscriptExporterExtendedTests {
     }
 
     @Test func copyToClipboardMultipleSegmentsWithTitle() {
+        let saved = NSPasteboard.general.string(forType: .string)
+        defer { restorePasteboard(saved) }
+
         let segments = [
             TranscriptSegment(startTime: 0.0, endTime: 10.0, text: "First line"),
             TranscriptSegment(startTime: 10.0, endTime: 20.0, text: "Second line"),
@@ -261,5 +271,10 @@ struct TranscriptExporterExtendedTests {
         // Should preserve array order, not sort by time
         #expect(lines[0] == "[01:00] Later")
         #expect(lines[1] == "[00:00] Earlier")
+    }
+
+    private func restorePasteboard(_ saved: String?) {
+        NSPasteboard.general.clearContents()
+        if let saved { NSPasteboard.general.setString(saved, forType: .string) }
     }
 }

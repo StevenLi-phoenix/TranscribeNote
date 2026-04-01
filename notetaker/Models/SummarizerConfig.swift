@@ -18,7 +18,7 @@ nonisolated struct SummarizerConfig: Codable, Sendable, Equatable {
         summaryLanguage: "auto",
         summaryStyle: .bullets,
         includeContext: true,
-        maxContextTokens: 2000,
+        maxContextTokens: 4000,
         overallSummaryMode: .auto,
         actionItemExtractionEnabled: false
     )

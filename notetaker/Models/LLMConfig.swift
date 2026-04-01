@@ -3,6 +3,7 @@ import os
 
 extension Notification.Name {
     static let llmConfigDidSave = Notification.Name("notetaker.llmConfigDidSave")
+    static let summarizerConfigDidSave = Notification.Name("notetaker.summarizerConfigDidSave")
 }
 
 nonisolated struct LLMConfig: Codable, Sendable, Equatable {
