@@ -10,16 +10,23 @@ on:
       - 'CLAUDE.md'
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
+  actions: write
+  issues: write
+  id-token: write
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  # ──────────────────────────────────────────────
+  # Build & Test
+  # ──────────────────────────────────────────────
   build-and-test:
     runs-on: macos-26
     timeout-minutes: 20
@@ -66,3 +73,256 @@ jobs:
             tail -50 /tmp/test-output.txt
           fi
           exit $EXIT_CODE
+
+  # ──────────────────────────────────────────────
+  # Pre-cleanup: remove stale review comments
+  # ──────────────────────────────────────────────
+  pre-cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove outdated Claude review comments
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const botComments = comments.filter(
+              c => c.user.type === 'Bot' &&
+                   (c.body.includes('Claude Code Review') || c.body.includes('Auto-merge skipped'))
+            );
+            for (const c of botComments) {
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: c.id,
+              });
+            }
+            console.log(`Cleaned ${botComments.length} stale review comment(s)`);
+
+  # ──────────────────────────────────────────────
+  # Claude Code Review (runs in parallel with build)
+  # ──────────────────────────────────────────────
+  claude-review:
+    needs: pre-cleanup
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      decision: ${{ steps.parse.outputs.decision }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code Review
+        id: claude-review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            You are reviewing this PR to decide if it can be AUTO-MERGED.
+            Use the repository's CLAUDE.md for style and convention guidance.
+
+            Review the PR diff for:
+            1. Code quality and adherence to project patterns
+            2. Potential bugs, crashes, or logic errors
+            3. Security concerns (secrets in code, injection, unsafe operations)
+            4. Test coverage — are tests updated if behavior changed?
+            5. PR description matches actual changes
+            6. Duplicate implementation — check if the PR's core feature already exists on main
+               (use `gh pr diff` to see what files/symbols are added, then `gh search code` or
+               `Grep` to check if those symbols already exist on main). If the feature is already
+               implemented, REJECT and explain that the PR is obsolete.
+
+            After your review, you MUST post a comment using `gh pr comment` with this exact format:
+
+            ### <icon> Claude Code Review: **DECISION**
+            > reason
+
+            Where:
+            - DECISION is exactly "APPROVE" or "REJECT"
+            - icon is ✅ for APPROVE or ❌ for REJECT
+            - reason is a one-sentence explanation
+
+            APPROVE if changes are reasonable, safe, and follow project conventions.
+            REJECT if you find bugs, security issues, missing tests for behavior changes,
+            suspicious mismatches between description and actual changes, or if the feature
+            is already implemented on main (PR is obsolete).
+
+          claude_args: '--allowed-tools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh search:*),Read,Glob,Grep"'
+
+      - name: Parse decision from PR comments
+        id: parse
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          COMMENT=$(gh pr view ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --json comments \
+            --jq '[.comments[] | select(.body | test("Claude Code Review"))] | last | .body // ""')
+
+          if echo "$COMMENT" | grep -q '**APPROVE**'; then
+            echo "decision=APPROVE" >> "$GITHUB_OUTPUT"
+            echo "Claude review: APPROVE"
+          else
+            echo "decision=REJECT" >> "$GITHUB_OUTPUT"
+            echo "Claude review: REJECT"
+          fi
+
+  # ──────────────────────────────────────────────
+  # Auto-merge: after build passes + review approves
+  # ──────────────────────────────────────────────
+  auto-merge:
+    needs: [build-and-test, claude-review]
+    if: needs.claude-review.outputs.decision == 'APPROVE'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all checkboxes are completed
+        id: checkbox
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          PR_BODY=$(gh pr view ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} --json body --jq '.body')
+          UNCHECKED=$(echo "$PR_BODY" | grep -c '^\s*- \[ \]' || true)
+          CHECKED=$(echo "$PR_BODY" | grep -c '^\s*- \[x\]' || true)
+          echo "Checkboxes: $CHECKED checked, $UNCHECKED unchecked"
+          if [ "$UNCHECKED" -gt 0 ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "unchecked=$UNCHECKED" >> "$GITHUB_OUTPUT"
+            echo "::notice::$UNCHECKED unchecked checkbox(es). Skipping merge — PR stays open."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comment on incomplete checkboxes
+        if: steps.checkbox.outputs.ready == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `⏸️ **Auto-merge paused**: ${{ steps.checkbox.outputs.unchecked }} unchecked checkbox(es) in PR body. Merge will proceed automatically once all tasks are checked and a new push triggers the workflow.`,
+            });
+
+      - name: Resolve merge conflicts (update branch)
+        if: steps.checkbox.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          MERGEABLE=$(gh pr view ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} --json mergeable --jq '.mergeable')
+          if [ "$MERGEABLE" != "MERGEABLE" ]; then
+            echo "PR not mergeable ($MERGEABLE), attempting rebase..."
+            gh pr update-branch ${{ github.event.pull_request.number }} \
+              --repo ${{ github.repository }} --rebase || {
+              echo "::error::Failed to resolve merge conflicts. Manual rebase required."
+              exit 1
+            }
+            echo "Branch updated, waiting for CI re-run..."
+            sleep 30
+          fi
+
+      - name: Merge PR
+        if: steps.checkbox.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --merge \
+            --delete-branch
+
+      - name: Close linked issues
+        if: steps.checkbox.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          PR_BODY=$(gh pr view ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} --json body --jq '.body')
+          ISSUES=$(echo "$PR_BODY" | grep -ioE '(close[sd]?|fix(e[sd])?|resolve[sd]?) #[0-9]+' | \
+            grep -oE '[0-9]+' | sort -u || true)
+          for ISSUE in $ISSUES; do
+            echo "Closing issue #$ISSUE"
+            gh issue close "$ISSUE" --repo ${{ github.repository }} \
+              --comment "Closed by PR #${{ github.event.pull_request.number }} (auto-merged)." || true
+          done
+
+  # ──────────────────────────────────────────────
+  # Post-cleanup: runs after merge (or on failure)
+  # ──────────────────────────────────────────────
+  post-cleanup:
+    needs: [claude-review, auto-merge]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clean up old workflow runs (>30 days)
+        if: needs.auto-merge.result == 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            const { data: runs } = await github.rest.actions.listWorkflowRunsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100,
+              status: 'completed',
+            });
+            let deleted = 0;
+            for (const run of runs.workflow_runs) {
+              if (new Date(run.created_at) < thirtyDaysAgo) {
+                try {
+                  await github.rest.actions.deleteWorkflowRun({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    run_id: run.id,
+                  });
+                  deleted++;
+                } catch (e) { /* skip in-progress */ }
+              }
+            }
+            console.log(`Deleted ${deleted} old workflow run(s)`);
+
+      - name: Clean up stale merged branches
+        if: needs.auto-merge.result == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BRANCHES=$(gh api repos/${{ github.repository }}/branches --paginate -q '.[].name' || true)
+          for branch in $BRANCHES; do
+            case "$branch" in main|master|develop|release) continue ;; esac
+            MERGED=$(gh pr list --repo ${{ github.repository }} --head "$branch" --state merged --json number --jq 'length' || echo "0")
+            if [ "$MERGED" -gt 0 ]; then
+              echo "Deleting stale merged branch: $branch"
+              gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/$branch" 2>/dev/null || true
+            fi
+          done
+
+      - name: Post failure notice
+        if: needs.auto-merge.result == 'failure' || needs.auto-merge.result == 'skipped'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const decision = '${{ needs.claude-review.outputs.decision }}';
+            const reason = decision !== 'APPROVE'
+              ? 'Claude Code review did not approve'
+              : 'Tests, unchecked checkboxes, merge conflicts, or merge step failed';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `:warning: **Auto-merge skipped**: ${reason}. Manual review required.`,
+            });
