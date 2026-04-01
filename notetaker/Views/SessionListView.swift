@@ -7,10 +7,10 @@ enum DateFilter: CaseIterable {
 
     var label: String {
         switch self {
-        case .all: "All"
-        case .today: "Today"
-        case .thisWeek: "This Week"
-        case .thisMonth: "This Month"
+        case .all: String(localized: "All")
+        case .today: String(localized: "Today")
+        case .thisWeek: String(localized: "This Week")
+        case .thisMonth: String(localized: "This Month")
         }
     }
 
@@ -184,7 +184,7 @@ struct SessionListView: View {
 
     private func resummarizeButton(for ids: Set<UUID>) -> some View {
         let count = ids.count
-        let label = count == 1 ? "Re-summarize" : "Re-summarize \(count) Sessions"
+        let label = count == 1 ? String(localized: "Re-summarize") : String(localized: "Re-summarize \(count) Sessions")
         return Button {
             selectedSessionIDs = ids
             showBatchResummarize = true
@@ -194,7 +194,7 @@ struct SessionListView: View {
     }
 
     private func deleteButton(for ids: Set<UUID>) -> some View {
-        let label = ids.count == 1 ? "Delete" : "Delete \(ids.count) Sessions"
+        let label = ids.count == 1 ? String(localized: "Delete") : String(localized: "Delete \(ids.count) Sessions")
         return Button(label, role: .destructive) {
             deleteSessions(ids: ids)
         }
@@ -241,7 +241,7 @@ private struct SessionRowView: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(DS.Typography.caption2)
                         .foregroundStyle(DS.Colors.subtleError)
-                        .help("Incomplete — saved on quit")
+                        .help(String(localized: "Incomplete — saved on quit"))
                 }
             }
 

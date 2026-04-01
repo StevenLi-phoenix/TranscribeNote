@@ -38,21 +38,21 @@ nonisolated enum LLMRole: String, CaseIterable, Sendable {
 
     var displayName: String {
         switch self {
-        case .live: "Live Summarization"
-        case .overall: "Overall Summary"
-        case .title: "Title Generation"
-        case .chat: "Chat Q&A"
-        case .actionItems: "Action Items"
+        case .live: String(localized: "Live Summarization")
+        case .overall: String(localized: "Overall Summary")
+        case .title: String(localized: "Title Generation")
+        case .chat: String(localized: "Chat Q&A")
+        case .actionItems: String(localized: "Action Items")
         }
     }
 
     var subtitle: String {
         switch self {
-        case .live: "Periodic summarization during recording"
-        case .overall: "Post-recording complete summary"
-        case .title: "Auto-generate session titles after recording"
-        case .chat: "Ask questions about transcripts"
-        case .actionItems: "Extract action items from transcripts"
+        case .live: String(localized: "Periodic summarization during recording")
+        case .overall: String(localized: "Post-recording complete summary")
+        case .title: String(localized: "Auto-generate session titles after recording")
+        case .chat: String(localized: "Ask questions about transcripts")
+        case .actionItems: String(localized: "Extract action items from transcripts")
         }
     }
 

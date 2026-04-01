@@ -120,7 +120,7 @@ struct SessionDetailView: View {
                             if isExportingAudio {
                                 ProgressView()
                                     .controlSize(.small)
-                                    .help("Exporting audio…")
+                                    .help(String(localized: "Exporting audio…"))
                             } else {
                                 Button {
                                     exportAudio(session: session)
@@ -136,7 +136,7 @@ struct SessionDetailView: View {
                             } label: {
                                 Label("Action Items (\(sortedActionItems.count))", systemImage: "checklist.checked")
                             }
-                            .help("View extracted action items")
+                            .help(String(localized: "View extracted action items"))
                             .popover(isPresented: $showActionItemsPopover, arrowEdge: .bottom) {
                                 ActionItemListView(
                                     actionItems: sortedActionItems,
@@ -174,7 +174,7 @@ struct SessionDetailView: View {
                             toggleChat()
                         }
                         .disabled(sortedSegments.isEmpty)
-                        .help("Ask questions about this transcript")
+                        .help(String(localized: "Ask questions about this transcript"))
                     }
                 }
 

@@ -103,32 +103,32 @@ struct LLMAssignmentTab: View {
         SettingsGrid {
             SettingsRow("Live Model") {
                 profilePicker(selection: $liveProfileID)
-                    .help("Model used for periodic summarization during recording")
+                    .help(String(localized: "Model used for periodic summarization during recording"))
             }
 
             SettingsRow("Overall: Use Live") {
                 Toggle("", isOn: $overallInheritsLive)
                     .labelsHidden()
-                    .help("Reuse the live model for post-recording summary")
+                    .help(String(localized: "Reuse the live model for post-recording summary"))
             }
 
             if !overallInheritsLive {
                 SettingsRow("Overall Model") {
                     profilePicker(selection: $overallProfileID)
-                        .help("Model used for post-recording overall summary")
+                        .help(String(localized: "Model used for post-recording overall summary"))
                 }
             }
 
             SettingsRow("Title: Use Live") {
                 Toggle("", isOn: $titleInheritsLive)
                     .labelsHidden()
-                    .help("Reuse the live model for title generation")
+                    .help(String(localized: "Reuse the live model for title generation"))
             }
 
             if !titleInheritsLive {
                 SettingsRow("Title Model") {
                     profilePicker(selection: $titleProfileID)
-                        .help("Model used for automatic title generation")
+                        .help(String(localized: "Model used for automatic title generation"))
                 }
             }
 
@@ -224,7 +224,7 @@ struct SummarizationSettingsTab: View {
             SettingsRow("Live Summarization") {
                 Toggle("", isOn: $config.liveSummarizationEnabled)
                     .labelsHidden()
-                    .help("Periodically summarize transcript during recording.")
+                    .help(String(localized: "Periodically summarize transcript during recording."))
             }
 
             SettingsRow("Summary Interval") {
@@ -235,7 +235,7 @@ struct SummarizationSettingsTab: View {
                 }
                 .labelsHidden()
                 .disabled(!config.liveSummarizationEnabled)
-                .help("How often to generate a summary chunk during recording.")
+                .help(String(localized: "How often to generate a summary chunk during recording."))
             }
 
             SettingsRow("Min Transcript Length") {
@@ -245,7 +245,7 @@ struct SummarizationSettingsTab: View {
                     }
                 }
                 .labelsHidden()
-                .help("Minimum transcript characters required before triggering a summary.")
+                .help(String(localized: "Minimum transcript characters required before triggering a summary."))
             }
 
             SettingsRow("Summary Style") {
@@ -256,7 +256,7 @@ struct SummarizationSettingsTab: View {
                     Text("Lecture Notes").tag(SummaryStyle.lectureNotes)
                 }
                 .labelsHidden()
-                .help("Output format for generated summaries.")
+                .help(String(localized: "Output format for generated summaries."))
             }
 
             SettingsRow("Overall Summary Mode") {
@@ -266,7 +266,7 @@ struct SummarizationSettingsTab: View {
                     Text("Chunk Summaries Only").tag(OverallSummaryMode.chunkSummaries)
                 }
                 .labelsHidden()
-                .help("How the overall summary is built: from raw transcript, existing chunks, or auto-detect.")
+                .help(String(localized: "How the overall summary is built: from raw transcript, existing chunks, or auto-detect."))
             }
 
             SettingsRow("Language") {
@@ -276,7 +276,7 @@ struct SummarizationSettingsTab: View {
                     }
                 }
                 .labelsHidden()
-                .help("Language for summary output. Auto matches the transcript language.")
+                .help(String(localized: "Language for summary output. Auto matches the transcript language."))
                 .onChange(of: pickerSelection) { _, newValue in
                     if newValue == "custom" {
                         config.summaryLanguage = customLanguage.isEmpty ? "auto" : customLanguage
@@ -290,7 +290,7 @@ struct SummarizationSettingsTab: View {
                 SettingsRow("Custom Language") {
                     TextField("", text: $customLanguage)
                         .textFieldStyle(.roundedBorder)
-                        .help("Enter a language name, e.g. \"Portuguese\" or \"العربية\".")
+                        .help(String(localized: "Enter a language name, e.g. \"Portuguese\" or \"العربية\"."))
                         .onChange(of: customLanguage) { _, newValue in
                             config.summaryLanguage = newValue.isEmpty ? "auto" : newValue
                         }
@@ -300,13 +300,13 @@ struct SummarizationSettingsTab: View {
             SettingsRow("Auto-Extract Action Items") {
                 Toggle("", isOn: $config.actionItemExtractionEnabled)
                     .labelsHidden()
-                    .help("Automatically extract action items after recording ends.")
+                    .help(String(localized: "Automatically extract action items after recording ends."))
             }
 
             SettingsRow("Include Previous Context") {
                 Toggle("", isOn: $config.includeContext)
                     .labelsHidden()
-                    .help("Include previous chunk summaries as context for the next summary.")
+                    .help(String(localized: "Include previous chunk summaries as context for the next summary."))
             }
 
             if config.includeContext {
@@ -317,7 +317,7 @@ struct SummarizationSettingsTab: View {
                         }
                     }
                     .labelsHidden()
-                    .help("Max tokens of previous context to include in the prompt.")
+                    .help(String(localized: "Max tokens of previous context to include in the prompt."))
                 }
             }
         }
@@ -363,13 +363,13 @@ struct RecordingSettingsTab: View {
             SettingsRow("Sound Effects") {
                 Toggle("", isOn: $soundEffectsEnabled)
                     .labelsHidden()
-                    .help("Play subtle sounds on recording start, pause, resume, and stop.")
+                    .help(String(localized: "Play subtle sounds on recording start, pause, resume, and stop."))
             }
 
             SettingsRow("Voice Activity Detection") {
                 Toggle("", isOn: $config.vadEnabled)
                     .labelsHidden()
-                    .help("Skip feeding silence to ASR to save CPU. Audio is always recorded regardless.")
+                    .help(String(localized: "Skip feeding silence to ASR to save CPU. Audio is always recorded regardless."))
             }
 
             SettingsRow("Silence Threshold") {
@@ -387,7 +387,7 @@ struct RecordingSettingsTab: View {
                         .frame(width: 36, alignment: .trailing)
                 }
                 .disabled(!config.vadEnabled)
-                .help("Audio level below this value is treated as silence. Lower = more sensitive.")
+                .help(String(localized: "Audio level below this value is treated as silence. Lower = more sensitive."))
             }
 
             // VAD Test
@@ -406,7 +406,7 @@ struct RecordingSettingsTab: View {
                         )
                     }
                     .disabled(!config.vadEnabled)
-                    .help("Test VAD with your microphone to verify threshold settings.")
+                    .help(String(localized: "Test VAD with your microphone to verify threshold settings."))
 
                     if vadTest.isRunning {
                         VADTestView(
@@ -425,7 +425,7 @@ struct RecordingSettingsTab: View {
                 ))
                 .labelsHidden()
                 .disabled(!config.vadEnabled)
-                .help("Automatically stop recording after sustained silence.")
+                .help(String(localized: "Automatically stop recording after sustained silence."))
             }
 
             if config.silenceTimeoutSeconds != nil {
@@ -440,7 +440,7 @@ struct RecordingSettingsTab: View {
                     }
                     .labelsHidden()
                     .disabled(!config.vadEnabled)
-                    .help("How long silence must last before auto-stopping the recording.")
+                    .help(String(localized: "How long silence must last before auto-stopping the recording."))
                 }
             }
         }
@@ -512,7 +512,7 @@ struct VADTestView: View {
                     .fill(isSpeech ? DS.Colors.success : Color.secondary)
                     .frame(width: 8, height: 8)
                     .accessibilityHidden(true)
-                Text(isSpeech ? "Speech" : "Silence")
+                Text(isSpeech ? String(localized: "Speech") : String(localized: "Silence"))
                     .font(DS.Typography.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
