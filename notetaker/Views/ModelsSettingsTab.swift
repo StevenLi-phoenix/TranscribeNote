@@ -39,13 +39,13 @@ struct ModelsSettingsTab: View {
 
                 Divider()
 
-                HStack(spacing: 1) {
+                HStack(spacing: DS.Spacing.sm) {
                     Button {
                         addProfile()
                     } label: {
                         Image(systemName: "plus")
-                            .frame(width: 20, height: 16)
                     }
+                    .buttonStyle(.borderless)
 
                     Button {
                         if let id = selectedProfileID {
@@ -53,14 +53,14 @@ struct ModelsSettingsTab: View {
                         }
                     } label: {
                         Image(systemName: "minus")
-                            .frame(width: 20, height: 16)
                     }
+                    .buttonStyle(.borderless)
                     .disabled(selectedProfileID == nil || profiles.count <= 1)
 
                     Spacer()
                 }
-                .controlSize(.small)
-                .padding(DS.Spacing.xs)
+                .padding(.leading, DS.Spacing.sm)
+                .padding(.vertical, DS.Spacing.xxs)
             }
             .frame(minWidth: 140, maxWidth: 180)
 
