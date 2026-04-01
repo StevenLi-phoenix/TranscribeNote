@@ -130,6 +130,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Wait for CI to pass
+        id: wait-ci
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -141,14 +142,16 @@ jobs:
             RESULT=$(gh api "repos/$REPO/commits/$SHA/check-runs" \
               --jq '.check_runs[] | select(.name == "build-and-test") | .conclusion // .status')
             case "$RESULT" in
-              success) echo "CI passed"; exit 0 ;;
+              success) echo "CI passed"; echo "ci=passed" >> "$GITHUB_OUTPUT"; exit 0 ;;
               failure|cancelled|timed_out) echo "CI failed: $RESULT"; exit 1 ;;
               *) echo "CI status: ${RESULT:-pending} (attempt $i/60)"; sleep 15 ;;
             esac
           done
-          echo "Timed out waiting for CI"; exit 1
+          echo "::notice::Timed out waiting for CI. Skipping auto-merge — PR stays open."
+          echo "ci=timeout" >> "$GITHUB_OUTPUT"
 
       - name: Check all checkboxes are completed
+        if: steps.wait-ci.outputs.ci == 'passed'
         id: checkbox
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -168,7 +171,7 @@ jobs:
           fi
 
       - name: Comment on incomplete checkboxes
-        if: steps.checkbox.outputs.ready == 'false'
+        if: steps.wait-ci.outputs.ci == 'passed' && steps.checkbox.outputs.ready == 'false'
         uses: actions/github-script@v7
         with:
           script: |
@@ -180,7 +183,7 @@ jobs:
             });
 
       - name: Resolve merge conflicts (update branch)
-        if: steps.checkbox.outputs.ready == 'true'
+        if: steps.wait-ci.outputs.ci == 'passed' && steps.checkbox.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -199,7 +202,7 @@ jobs:
           fi
 
       - name: Merge PR
-        if: steps.checkbox.outputs.ready == 'true'
+        if: steps.wait-ci.outputs.ci == 'passed' && steps.checkbox.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -209,7 +212,7 @@ jobs:
             --delete-branch
 
       - name: Close linked issues
-        if: steps.checkbox.outputs.ready == 'true'
+        if: steps.wait-ci.outputs.ci == 'passed' && steps.checkbox.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
