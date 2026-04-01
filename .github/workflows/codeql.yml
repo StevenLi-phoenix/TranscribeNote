@@ -42,7 +42,7 @@ jobs:
       - name: Build
         run: |
           set -euo pipefail
-          xcodebuild -scheme notetaker -configuration Debug build \
+          xcodebuild -scheme TranscribeNote -configuration Debug build \
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO
 

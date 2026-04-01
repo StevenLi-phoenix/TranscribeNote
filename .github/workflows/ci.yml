@@ -35,22 +35,22 @@ jobs:
       - name: Cache DerivedData
         uses: actions/cache@v4
         with:
-          path: ~/Library/Developer/Xcode/DerivedData/notetaker-*
-          key: deriveddata-${{ runner.os }}-${{ hashFiles('notetaker.xcodeproj/**', 'notetaker/**/*.swift') }}
+          path: ~/Library/Developer/Xcode/DerivedData/TranscribeNote-*
+          key: deriveddata-${{ runner.os }}-${{ hashFiles('TranscribeNote.xcodeproj/**', 'TranscribeNote/**/*.swift') }}
           restore-keys: |
             deriveddata-${{ runner.os }}-
 
       - name: Build
         run: |
           set -euo pipefail
-          xcodebuild -scheme notetaker -configuration Debug build \
+          xcodebuild -scheme TranscribeNote -configuration Debug build \
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tail -5
 
       - name: Run Full Tests
         run: |
           set -uo pipefail
-          xcodebuild -scheme notetaker -configuration Debug \
+          xcodebuild -scheme TranscribeNote -configuration Debug \
             -testPlan FullTests \
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO \
