@@ -26,8 +26,8 @@ If Apple's review team asks about network requests, explain:
 
 Host `PRIVACY_POLICY.md` at a public URL. Options:
 
-1. **GitHub Pages** (recommended): `https://<username>.github.io/TranscribeNote/privacy`
-2. **GitHub raw**: `https://github.com/<username>/TranscribeNote/blob/main/docs/PRIVACY_POLICY.md`
+1. **GitHub Pages** (active): `https://stevenli-phoenix.github.io/TranscribeNote/PRIVACY_POLICY`
+2. **GitHub raw**: `https://github.com/StevenLi-phoenix/TranscribeNote/blob/main/docs/PRIVACY_POLICY.md`
 3. **Custom domain**: Your own website
 
 ### App Store Connect Configuration
