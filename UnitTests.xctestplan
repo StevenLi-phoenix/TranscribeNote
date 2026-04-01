@@ -13,9 +13,9 @@
   "testTargets" : [
     {
       "target" : {
-        "containerPath" : "container:notetaker.xcodeproj",
+        "containerPath" : "container:TranscribeNote.xcodeproj",
         "identifier" : "B522917C2F3D4491005D1EBC",
-        "name" : "notetakerTests"
+        "name" : "TranscribeNoteTests"
       }
     }
   ],

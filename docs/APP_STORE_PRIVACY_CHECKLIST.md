@@ -1,6 +1,6 @@
 # App Store Privacy & Submission Checklist
 
-Developer guide for preparing the Notetaker app for App Store Connect submission.
+Developer guide for preparing the TranscribeNote app for App Store Connect submission.
 
 ---
 
@@ -12,7 +12,7 @@ In **App Store Connect > App Privacy**:
 
 Select **"No, we do not collect data from this app"**.
 
-**Rationale:** Notetaker itself does not collect any data. The user may optionally configure a third-party LLM API, but the app acts as a conduit — similar to a web browser making requests to user-specified URLs. The data is sent directly from the user's device to their chosen API endpoint.
+**Rationale:** TranscribeNote itself does not collect any data. The user may optionally configure a third-party LLM API, but the app acts as a conduit — similar to a web browser making requests to user-specified URLs. The data is sent directly from the user's device to their chosen API endpoint.
 
 If Apple's review team asks about network requests, explain:
 
@@ -26,8 +26,8 @@ If Apple's review team asks about network requests, explain:
 
 Host `PRIVACY_POLICY.md` at a public URL. Options:
 
-1. **GitHub Pages** (recommended): `https://<username>.github.io/notetaker/privacy`
-2. **GitHub raw**: `https://github.com/<username>/notetaker/blob/main/docs/PRIVACY_POLICY.md`
+1. **GitHub Pages** (recommended): `https://<username>.github.io/TranscribeNote/privacy`
+2. **GitHub raw**: `https://github.com/<username>/TranscribeNote/blob/main/docs/PRIVACY_POLICY.md`
 3. **Custom domain**: Your own website
 
 ### App Store Connect Configuration
@@ -43,7 +43,7 @@ Copy and customize this template for **App Store Connect > App Review Informatio
 ```
 NETWORK USAGE:
 
-Notetaker makes network requests ONLY when the user explicitly configures
+TranscribeNote makes network requests ONLY when the user explicitly configures
 an LLM provider in Settings > Live LLM or Settings > Overall LLM. These
 requests send transcript text to the user's chosen API endpoint (OpenAI,
 Anthropic, or a custom OpenAI-compatible server) for AI-powered
@@ -90,7 +90,7 @@ prompted.
 
 ## 5. Third-Party Code Disclosure
 
-Currently, Notetaker uses **no third-party SDKs or frameworks**. All functionality is built on Apple frameworks:
+Currently, TranscribeNote uses **no third-party SDKs or frameworks**. All functionality is built on Apple frameworks:
 
 - SwiftUI (UI)
 - SwiftData (persistence)
@@ -127,4 +127,4 @@ This meets Apple's requirement for "just-in-time" disclosure before data collect
 - [ ] Help menu includes "Privacy Policy" and "Data Usage Information" items
 - [ ] All screenshots updated for App Store listing
 - [ ] App builds and runs on macOS 26.2+
-- [ ] All tests pass: `xcodebuild -scheme notetaker -configuration Debug test`
+- [ ] All tests pass: `xcodebuild -scheme TranscribeNote -configuration Debug test`
