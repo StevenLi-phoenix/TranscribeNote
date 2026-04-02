@@ -9,11 +9,15 @@ struct SettingsView: View {
             GeneralSettingsTab()
                 .tabItem { Label("General", systemImage: "gear") }
 
+            #if !APPSTORE && !CHINA_APPSTORE
             LLMAssignmentTab()
                 .tabItem { Label("LLM", systemImage: "brain") }
+            #endif
 
+            #if !CHINA_APPSTORE
             SummarizationSettingsTab()
                 .tabItem { Label("Summarization", systemImage: "text.badge.star") }
+            #endif
 
             RecordingSettingsTab()
                 .tabItem { Label("Recording", systemImage: "mic") }
