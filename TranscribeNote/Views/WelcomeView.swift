@@ -7,11 +7,32 @@ struct WelcomeView: View {
     let onDismiss: () -> Void
     @State private var currentPage = 0
 
-    /// Total page count: 3 info pages + 1 model config page
-    private let totalPages = 4
+    /// Total page count varies by build target.
+    private var totalPages: Int { infoPages.count + modelConfigPageCount }
+    private let modelConfigPageCount: Int = {
+        #if APPSTORE || CHINA_APPSTORE
+        return 0
+        #else
+        return 1
+        #endif
+    }()
 
-    private let infoPages: [WelcomePage] = [
-        WelcomePage(
+    private let infoPages: [WelcomePage] = {
+        var pages: [WelcomePage] = []
+
+        // Page 1: Welcome
+        #if CHINA_APPSTORE
+        pages.append(WelcomePage(
+            icon: "mic.badge.plus",
+            iconColor: .blue,
+            title: "Welcome to TranscribeNote",
+            subtitle: "Your intelligent meeting companion for macOS",
+            features: [
+                WelcomeFeature(icon: "waveform", text: "Record and transcribe meetings in real-time"),
+            ]
+        ))
+        #else
+        pages.append(WelcomePage(
             icon: "mic.badge.plus",
             iconColor: .blue,
             title: "Welcome to TranscribeNote",
@@ -21,8 +42,11 @@ struct WelcomeView: View {
                 WelcomeFeature(icon: "text.badge.star", text: "Get AI-powered summaries and action items"),
                 WelcomeFeature(icon: "bubble.left.and.bubble.right", text: "Chat with your transcripts to find key details"),
             ]
-        ),
-        WelcomePage(
+        ))
+        #endif
+
+        // Page 2: Start Recording (same for all builds)
+        pages.append(WelcomePage(
             icon: "record.circle",
             iconColor: .red,
             title: "Start Recording",
@@ -32,8 +56,34 @@ struct WelcomeView: View {
                 WelcomeFeature(icon: "pause.fill", text: "Pause and resume anytime without losing progress"),
                 WelcomeFeature(icon: "calendar.badge.plus", text: "Schedule recordings or import from Calendar"),
             ]
-        ),
-        WelcomePage(
+        ))
+
+        // Page 3: Powerful Features
+        #if CHINA_APPSTORE
+        pages.append(WelcomePage(
+            icon: "sparkles",
+            iconColor: .purple,
+            title: "Powerful Features",
+            subtitle: "Discover what TranscribeNote can do",
+            features: [
+                WelcomeFeature(icon: "command", text: "Press \u{2318}K to open the Command Palette"),
+                WelcomeFeature(icon: "arrow.left.arrow.right", text: "Use Space to play/pause, arrow keys to seek"),
+            ]
+        ))
+        #elseif APPSTORE
+        pages.append(WelcomePage(
+            icon: "sparkles",
+            iconColor: .purple,
+            title: "Powerful Features",
+            subtitle: "Discover what TranscribeNote can do",
+            features: [
+                WelcomeFeature(icon: "command", text: "Press \u{2318}K to open the Command Palette"),
+                WelcomeFeature(icon: "arrow.left.arrow.right", text: "Use Space to play/pause, arrow keys to seek"),
+                WelcomeFeature(icon: "apple.intelligence", text: "Summaries powered by Apple Intelligence on-device"),
+            ]
+        ))
+        #else
+        pages.append(WelcomePage(
             icon: "sparkles",
             iconColor: .purple,
             title: "Powerful Features",
@@ -43,8 +93,11 @@ struct WelcomeView: View {
                 WelcomeFeature(icon: "arrow.left.arrow.right", text: "Use Space to play/pause, arrow keys to seek"),
                 WelcomeFeature(icon: "gear", text: "You can always adjust models in Settings later"),
             ]
-        ),
-    ]
+        ))
+        #endif
+
+        return pages
+    }()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -53,7 +106,11 @@ struct WelcomeView: View {
                 if currentPage < infoPages.count {
                     infoPageContent(infoPages[currentPage])
                 } else {
+                    #if APPSTORE || CHINA_APPSTORE
+                    EmptyView()
+                    #else
                     WelcomeModelConfigPage()
+                    #endif
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

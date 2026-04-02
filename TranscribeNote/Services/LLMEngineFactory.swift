@@ -12,7 +12,22 @@ enum LLMEngineFactory {
         return URLSession(configuration: config)
     }()
 
+    /// Whether LLM features are available in this build.
+    static var isLLMAvailable: Bool {
+        #if CHINA_APPSTORE
+        false
+        #else
+        true
+        #endif
+    }
+
     static func create(from config: LLMConfig, session: URLSession = llmSession) -> any LLMEngine {
+        #if CHINA_APPSTORE
+        return NoopLLMEngine()
+        #elseif APPSTORE
+        // App Store build: only Apple Intelligence on-device model allowed
+        return FoundationModelsEngine()
+        #else
         switch config.provider {
         case .foundationModels: FoundationModelsEngine()
         case .ollama: OllamaEngine(session: session)
@@ -20,6 +35,7 @@ enum LLMEngineFactory {
         case .anthropic: AnthropicEngine(session: session)
         case .deepSeek, .moonshot, .zhipu, .minimax, .custom: OpenAIEngine(session: session)
         }
+        #endif
     }
 
     /// Create an engine with automatic fallback to Foundation Models when the primary is unavailable.

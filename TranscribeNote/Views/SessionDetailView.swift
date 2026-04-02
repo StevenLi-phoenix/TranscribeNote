@@ -90,6 +90,7 @@ struct SessionDetailView: View {
                         }
                         .disabled(sortedSegments.isEmpty)
 
+                        #if !CHINA_APPSTORE
                         if isGeneratingSummary {
                             ProgressView().controlSize(.small)
                         } else {
@@ -115,6 +116,7 @@ struct SessionDetailView: View {
                             }
                             .disabled(sortedSegments.isEmpty)
                         }
+                        #endif
 
                         if hasAudioFiles {
                             if isExportingAudio {
@@ -130,6 +132,7 @@ struct SessionDetailView: View {
                             }
                         }
 
+                        #if !CHINA_APPSTORE
                         if !sortedActionItems.isEmpty {
                             Button {
                                 showActionItemsPopover.toggle()
@@ -175,6 +178,7 @@ struct SessionDetailView: View {
                         }
                         .disabled(sortedSegments.isEmpty)
                         .help(String(localized: "Ask questions about this transcript"))
+                        #endif
                     }
                 }
 

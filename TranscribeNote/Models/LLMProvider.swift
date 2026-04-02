@@ -130,12 +130,20 @@ nonisolated enum LLMProvider: String, Codable, CaseIterable, Sendable {
     }
 
     /// Providers available in the current storefront region.
+    /// - `CHINA_APPSTORE`: empty — all LLM features disabled per Guidelines 3.1.1 & 5.
+    /// - `APPSTORE`: only Apple Intelligence (on-device) — third-party providers hidden.
     static var availableProviders: [LLMProvider] {
+        #if CHINA_APPSTORE
+        []
+        #elseif APPSTORE
+        FoundationModelsEngine.isModelAvailable ? [.foundationModels] : []
+        #else
         if isChineseStorefront {
             allCases.filter(\.isAvailableInChina)
         } else {
             allCases
         }
+        #endif
     }
 
     /// Detect if the device is configured for the Chinese storefront.
