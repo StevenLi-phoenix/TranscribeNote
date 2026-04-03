@@ -190,6 +190,9 @@ struct SessionDetailView: View {
 
                 // Subtab picker: Summary / Transcript
                 Divider()
+                #if CHINA_APPSTORE
+                transcriptTabContent
+                #else
                 Picker(selection: $selectedTab) {
                     Text("Summary").tag(0)
                     Text("Transcript").tag(1)
@@ -212,6 +215,7 @@ struct SessionDetailView: View {
                     }
                 }
                 .animation(.easeInOut(duration: 0.25), value: selectedTab)
+                #endif
 
             }
             .frame(minWidth: 50, maxWidth: .infinity)
