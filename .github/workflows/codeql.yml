@@ -1,10 +1,16 @@
 name: CodeQL
 
 on:
-  pull_request:
-    branches: [release]
+  # CodeQL builds the Xcode project on a macOS runner (10x billing weight), so
+  # keep it off the hot path. Every merge to main used to trigger a full
+  # ~26-min macOS analysis even though the PR already ran the macOS CI
+  # build+tests on the identical code — pure redundancy. Scan on release
+  # pushes + a weekly sweep + on demand instead.
   push:
-    branches: [main, release]
+    branches: [release]
+  schedule:
+    - cron: "0 6 * * 1"   # weekly, Monday 06:00 UTC (was daily)
+  workflow_dispatch:
 
 concurrency:
   group: codeql-${{ github.ref }}
